@@ -8,6 +8,8 @@ import { ctx, detectApp, newChat as adapterNewChat, pastChats } from './adapter'
 import { isGenerating } from './generation';
 
 const SWITCH_TIMEOUT_MS = 30_000;
+/** 切换函数返回（或等满上面的时间）之后，再等页面状态变成目标值的宽限期。重前端的卡会加载很多脚本和资源，5 秒不够。 */
+const SWITCH_SETTLE_MS = 30_000;
 
 /** createOrEditCharacter 自己会删掉再逐个追加的字段，允许多值。 */
 const MULTI_OK = new Set(['alternate_greetings']);
@@ -141,8 +143,11 @@ export async function selectCharacter(avatar: string): Promise<SwitchResult> {
   if (index < 0) throw new Error('找不到这个角色（可能已被删除或改名），请重新发送 /chars');
   if (currentIndex() === index && c.getCurrentChatId()) return { ...switchResult(), greeting: readGreeting() };
   await settle(c.selectCharacterById(index), SWITCH_TIMEOUT_MS);
-  const ok = await waitFor(() => currentIndex() === index && !!ctx().getCurrentChatId(), 5000);
-  if (!ok) throw new Error('切换角色超时');
+  const ok = await waitFor(() => currentIndex() === index && !!ctx().getCurrentChatId(), SWITCH_SETTLE_MS);
+  if (!ok) {
+    const where = currentIndex() === index ? '角色已选中，但聊天一直没加载出来' : '页面一直没切到这个角色';
+    throw new Error(`切换角色超时：${where}。这张卡可能前端很重，页面还在加载，等一会儿再点一次通常就好了`);
+  }
   await sleep(300); // 等开场白渲染
   return { ...switchResult(), greeting: readGreeting() };
 }
@@ -180,7 +185,7 @@ export async function openChat(fileName: string): Promise<SwitchResult> {
   if (c.getCurrentChatId() === fileName) return switchResult();
   assertCardSafe('打开聊天');
   await settle(c.openCharacterChat(fileName), SWITCH_TIMEOUT_MS);
-  if (!(await waitFor(() => ctx().getCurrentChatId() === fileName, 5000))) throw new Error('打开聊天超时');
+  if (!(await waitFor(() => ctx().getCurrentChatId() === fileName, SWITCH_SETTLE_MS))) throw new Error(`打开聊天超时：页面 ${SWITCH_SETTLE_MS / 1000} 秒内没切到这个聊天，可能还在加载，等一会儿再试`);
   return switchResult();
 }
 
@@ -190,7 +195,7 @@ export async function newChat(): Promise<SwitchResult> {
   const before = c.getCurrentChatId();
   assertCardSafe('新建聊天');
   await settle(adapterNewChat(), SWITCH_TIMEOUT_MS);
-  if (!(await waitFor(() => !!ctx().getCurrentChatId() && ctx().getCurrentChatId() !== before, 5000))) throw new Error('新建聊天超时');
+  if (!(await waitFor(() => !!ctx().getCurrentChatId() && ctx().getCurrentChatId() !== before, SWITCH_SETTLE_MS))) throw new Error(`新建聊天超时：页面 ${SWITCH_SETTLE_MS / 1000} 秒内没建好，可能还在加载，等一会儿再试`);
   await sleep(300); // 等开场白渲染
   return { ...switchResult(), greeting: readGreeting() };
 }

@@ -216,7 +216,7 @@ export function choicesText(choices: readonly string[], layout: 'numbers' | 'row
     const a = Array.from(s);
     return a.length > LINE_MAX ? `${a.slice(0, LINE_MAX - 1).join('')}…` : s;
   };
-  return `行动选项（点下面的${layout === 'rows' ? '按钮' : '数字'}选择）\n\n${choices.map((c, i) => `${i + 1}. ${cps(c)}`).join('\n')}`;
+  return `🎲 行动选项（点下面的${layout === 'rows' ? '按钮' : '数字'}选择）\n\n${choices.map((c, i) => `${i + 1}. ${cps(c)}`).join('\n')}`;
 }
 
 const BUTTON_TEXT_MAX = 26;
@@ -228,7 +228,7 @@ export function choicesKeyboard(
   layout: 'numbers' | 'rows' = 'numbers',
   choices: readonly string[] = [],
 ): Array<Array<{ text: string; callback_data: string }>> {
-  const regen = [{ text: '🔄', callback_data: encodeChoiceRegen(token) }];
+  const regen = [{ text: '🔄 重新生成', callback_data: encodeChoiceRegen(token) }];
   if (layout === 'rows') {
     return [...Array.from({ length: count }, (_, i) => {
       const a = Array.from(choices[i] ?? '');

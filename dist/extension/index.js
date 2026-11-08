@@ -200,6 +200,7 @@
 
   // src/extension/commands.ts
   var SWITCH_TIMEOUT_MS = 3e4;
+  var SWITCH_SETTLE_MS = 3e4;
   var MULTI_OK = /* @__PURE__ */ new Set(["alternate_greetings"]);
   function formDuplicates() {
     const form = document.getElementById("form_create");
@@ -303,8 +304,11 @@
     if (index < 0) throw new Error("\u627E\u4E0D\u5230\u8FD9\u4E2A\u89D2\u8272\uFF08\u53EF\u80FD\u5DF2\u88AB\u5220\u9664\u6216\u6539\u540D\uFF09\uFF0C\u8BF7\u91CD\u65B0\u53D1\u9001 /chars");
     if (currentIndex() === index && c.getCurrentChatId()) return { ...switchResult(), greeting: readGreeting() };
     await settle(c.selectCharacterById(index), SWITCH_TIMEOUT_MS);
-    const ok = await waitFor(() => currentIndex() === index && !!ctx().getCurrentChatId(), 5e3);
-    if (!ok) throw new Error("\u5207\u6362\u89D2\u8272\u8D85\u65F6");
+    const ok = await waitFor(() => currentIndex() === index && !!ctx().getCurrentChatId(), SWITCH_SETTLE_MS);
+    if (!ok) {
+      const where = currentIndex() === index ? "\u89D2\u8272\u5DF2\u9009\u4E2D\uFF0C\u4F46\u804A\u5929\u4E00\u76F4\u6CA1\u52A0\u8F7D\u51FA\u6765" : "\u9875\u9762\u4E00\u76F4\u6CA1\u5207\u5230\u8FD9\u4E2A\u89D2\u8272";
+      throw new Error(`\u5207\u6362\u89D2\u8272\u8D85\u65F6\uFF1A${where}\u3002\u8FD9\u5F20\u5361\u53EF\u80FD\u524D\u7AEF\u5F88\u91CD\uFF0C\u9875\u9762\u8FD8\u5728\u52A0\u8F7D\uFF0C\u7B49\u4E00\u4F1A\u513F\u518D\u70B9\u4E00\u6B21\u901A\u5E38\u5C31\u597D\u4E86`);
+    }
     await sleep(300);
     return { ...switchResult(), greeting: readGreeting() };
   }
@@ -338,7 +342,7 @@
     if (c.getCurrentChatId() === fileName) return switchResult();
     assertCardSafe("\u6253\u5F00\u804A\u5929");
     await settle(c.openCharacterChat(fileName), SWITCH_TIMEOUT_MS);
-    if (!await waitFor(() => ctx().getCurrentChatId() === fileName, 5e3)) throw new Error("\u6253\u5F00\u804A\u5929\u8D85\u65F6");
+    if (!await waitFor(() => ctx().getCurrentChatId() === fileName, SWITCH_SETTLE_MS)) throw new Error(`\u6253\u5F00\u804A\u5929\u8D85\u65F6\uFF1A\u9875\u9762 ${SWITCH_SETTLE_MS / 1e3} \u79D2\u5185\u6CA1\u5207\u5230\u8FD9\u4E2A\u804A\u5929\uFF0C\u53EF\u80FD\u8FD8\u5728\u52A0\u8F7D\uFF0C\u7B49\u4E00\u4F1A\u513F\u518D\u8BD5`);
     return switchResult();
   }
   async function newChat2() {
@@ -347,7 +351,7 @@
     const before = c.getCurrentChatId();
     assertCardSafe("\u65B0\u5EFA\u804A\u5929");
     await settle(newChat(), SWITCH_TIMEOUT_MS);
-    if (!await waitFor(() => !!ctx().getCurrentChatId() && ctx().getCurrentChatId() !== before, 5e3)) throw new Error("\u65B0\u5EFA\u804A\u5929\u8D85\u65F6");
+    if (!await waitFor(() => !!ctx().getCurrentChatId() && ctx().getCurrentChatId() !== before, SWITCH_SETTLE_MS)) throw new Error(`\u65B0\u5EFA\u804A\u5929\u8D85\u65F6\uFF1A\u9875\u9762 ${SWITCH_SETTLE_MS / 1e3} \u79D2\u5185\u6CA1\u5EFA\u597D\uFF0C\u53EF\u80FD\u8FD8\u5728\u52A0\u8F7D\uFF0C\u7B49\u4E00\u4F1A\u513F\u518D\u8BD5`);
     await sleep(300);
     return { ...switchResult(), greeting: readGreeting() };
   }

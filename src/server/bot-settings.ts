@@ -21,10 +21,10 @@ interface SettingDef {
 }
 
 export const SETTING_DEFS: readonly SettingDef[] = [
-  { key: 'dialogueStyle', label: '对话样式', values: [['bold', '加粗'], ['italic', '斜体'], ['mark', '高亮'], ['plain', '只保留引号']] },
-  { key: 'draftMode', label: '生成时预览', values: [['live', '逐步显示正文'], ['progress', '只显示进度']] },
-  { key: 'draftIntervalSeconds', label: '预览刷新间隔', values: [[0.5, '0.5 秒'], [1, '1 秒'], [2, '2 秒'], [3, '3 秒'], [5, '5 秒'], [10, '10 秒']] },
-  { key: 'choiceLayout', label: '行动选项按钮', values: [['numbers', '一排数字'], ['rows', '每项一行']] },
+  { key: 'dialogueStyle', label: '🗨️ 对话样式', values: [['bold', '加粗'], ['italic', '斜体'], ['mark', '高亮'], ['plain', '只保留引号']] },
+  { key: 'draftMode', label: '👀 生成时预览', values: [['live', '逐步显示正文'], ['progress', '只显示进度']] },
+  { key: 'draftIntervalSeconds', label: '⏱️ 预览刷新间隔', values: [[0.5, '0.5 秒'], [1, '1 秒'], [2, '2 秒'], [3, '3 秒'], [5, '5 秒'], [10, '10 秒']] },
+  { key: 'choiceLayout', label: '🎲 行动选项按钮', values: [['numbers', '一排数字'], ['rows', '每项一行']] },
 ];
 
 function valueLabel(def: SettingDef, current: string | number): string {
@@ -40,7 +40,7 @@ export function nextValue(def: SettingDef, current: string | number): string | n
 }
 
 export function settingsText(): string {
-  return '设置（点按钮切换到下一个值，立即生效并保存到 config.json）';
+  return '⚙️ 设置（点按钮切换到下一个值，立即生效并保存到 config.json）';
 }
 
 export function settingsKeyboard(values: BotSettingsValues): Array<Array<{ text: string; callback_data: string }>> {

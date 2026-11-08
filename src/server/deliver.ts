@@ -18,7 +18,7 @@ export interface DeliverTelegram {
   sendMessage(params: { chat_id: number; text: string; [k: string]: unknown }, opts?: CallOptions): Promise<TelegramMessage>;
 }
 
-export const STOPPED_SUFFIX = '（已停止生成）';
+export const STOPPED_SUFFIX = '（⏹️ 已停止生成）';
 
 export interface DeliverResult {
   /** 发出的每一段消息的 message_id，按发送顺序。步骤 10 的消息映射用。 */

@@ -76,21 +76,22 @@ export function chatLabel(c: ChatInfo): string {
 export function itemLabel(l: Listing, i: number): string {
   if (l.kind === 'chars') {
     const c = (l.items as CharacterInfo[])[i];
-    return truncate(`${c.avatar === l.current ? '[当前] ' : ''}${c.name}`);
+    return truncate(`${c.avatar === l.current ? '✅ ' : ''}${c.name}`);
   }
   if (l.kind === 'presets') {
     const n = (l.items as string[])[i];
-    return truncate(`${n === l.current ? '[当前] ' : ''}${n}`);
+    return truncate(`${n === l.current ? '✅ ' : ''}${n}`);
   }
   const c = (l.items as ChatInfo[])[i];
-  return truncate(`${c.fileName === l.current ? '[当前] ' : ''}${chatLabel(c)}`);
+  return truncate(`${c.fileName === l.current ? '✅ ' : ''}${chatLabel(c)}`);
 }
 
 export function listTitle(l: Listing, page: number): string {
   const what = l.kind === 'chars' ? '角色' : l.kind === 'presets' ? '预设' : '聊天';
   const total = l.items.length;
-  if (total === 0) return l.kind === 'chars' ? 'ST 里还没有角色。' : l.kind === 'presets' ? '当前 API 还没有预设。' : '当前角色还没有聊天记录。';
-  return `选择${what}（共 ${total} 个，第 ${page + 1}/${pageCount(total)} 页）`;
+  if (total === 0) return l.kind === 'chars' ? '📭 ST 里还没有角色。' : l.kind === 'presets' ? '📭 当前 API 还没有预设。' : '📭 当前角色还没有聊天记录。';
+  const icon = l.kind === 'chars' ? '🎭' : l.kind === 'presets' ? '🎛️' : '💬';
+  return `${icon} 选择${what}（共 ${total} 个，第 ${page + 1}/${pageCount(total)} 页）${l.current ? '\n✅ 表示当前正在用的' : ''}`;
 }
 
 /** 某一页的内联键盘：每项一行，最后一行是翻页。 */
@@ -103,8 +104,8 @@ export function listKeyboard(l: Listing, token: string, page: number): InlineBut
   }
   if (pageCount(total) > 1) {
     const nav: InlineButton[] = [];
-    if (p > 0) nav.push({ text: '‹ 上一页', callback_data: encodeCallback({ op: 'page', kind: l.kind, token, n: p - 1 }) });
-    if (p < pageCount(total) - 1) nav.push({ text: '下一页 ›', callback_data: encodeCallback({ op: 'page', kind: l.kind, token, n: p + 1 }) });
+    if (p > 0) nav.push({ text: '⬅️ 上一页', callback_data: encodeCallback({ op: 'page', kind: l.kind, token, n: p - 1 }) });
+    if (p < pageCount(total) - 1) nav.push({ text: '下一页 ➡️', callback_data: encodeCallback({ op: 'page', kind: l.kind, token, n: p + 1 }) });
     rows.push(nav);
   }
   return rows;

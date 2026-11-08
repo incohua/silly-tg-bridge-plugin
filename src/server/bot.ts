@@ -14,6 +14,7 @@ import { clampPage, decodeCallback, listKeyboard, listTitle, PAGE_SIZE, type Lis
 import type { BrowserState } from './browser';
 import { choicesKeyboard, choicesText, decodeChoiceCallback, decodeChoiceRegen, DEFAULT_RULES, compileRules, parseChoices, type CompiledChoiceRule } from './choices';
 import { deliverFinal } from './deliver';
+import { HostChannelError } from './host-channel';
 import type { Logger } from './logger';
 import type { ReplyRecord, SessionRecord } from './message-map';
 import type { PluginStatus } from './plugin';
@@ -111,38 +112,38 @@ export interface DeliveredReply {
 }
 
 export const HELP_TEXT = [
-  '在这里和 SillyTavern 里当前打开的角色聊天。直接发文字即可。',
+  '👋 在这里和 SillyTavern 里当前打开的角色聊天，直接发文字即可。',
   '',
-  '/stop 停止生成（也可以点流式预览上的停止按钮），已生成的部分会保留',
-  '/regen 重新生成上一条回复',
-  '/chars 选择角色',
-  '/chats 选择当前角色的聊天',
-  '/preset 切换预设',
-  '/new 为当前角色新建聊天',
-  '/menu 打开主菜单（角色、聊天、预设等一键入口）',
-  '/settings 设置（对话样式、生成预览、选项按钮排版）',
-  '/status 查看无头浏览器、ST 页面和当前角色',
-  '/help 显示这段说明',
+  '📋 /menu 主菜单（角色、聊天、预设等一键入口）',
+  '🎭 /chars 选择角色',
+  '💬 /chats 选择当前角色的聊天',
+  '🎛️ /preset 切换预设',
+  '✨ /new 为当前角色新建聊天',
+  '🔄 /regen 重新生成上一条回复',
+  '⏹️ /stop 停止生成（也可以点流式预览上的停止按钮），已生成的部分会保留',
+  '⚙️ /settings 设置（对话样式、生成预览、选项按钮排版）',
+  '📊 /status 查看无头浏览器、ST 页面和当前角色',
+  '📖 /help 显示这段说明',
 ].join('\n');
 
 /** 注册到 Telegram 命令菜单的命令（setMyCommands），顺序即显示顺序。 */
 export const BOT_COMMANDS: ReadonlyArray<{ command: string; description: string }> = [
-  { command: 'menu', description: '主菜单：角色、聊天、预设等一键入口' },
-  { command: 'chars', description: '选择角色' },
-  { command: 'chats', description: '选择当前角色的聊天' },
-  { command: 'preset', description: '切换预设' },
-  { command: 'new', description: '为当前角色新建聊天' },
-  { command: 'regen', description: '重新生成上一条回复' },
-  { command: 'settings', description: '设置：对话样式、生成预览等' },
-  { command: 'stop', description: '停止生成' },
-  { command: 'status', description: '查看运行状态' },
-  { command: 'help', description: '显示命令说明' },
+  { command: 'menu', description: '📋 主菜单：角色、聊天、预设等一键入口' },
+  { command: 'chars', description: '🎭 选择角色' },
+  { command: 'chats', description: '💬 选择当前角色的聊天' },
+  { command: 'preset', description: '🎛️ 切换预设' },
+  { command: 'new', description: '✨ 为当前角色新建聊天' },
+  { command: 'regen', description: '🔄 重新生成上一条回复' },
+  { command: 'settings', description: '⚙️ 设置：对话样式、生成预览等' },
+  { command: 'stop', description: '⏹️ 停止生成' },
+  { command: 'status', description: '📊 查看运行状态' },
+  { command: 'help', description: '📖 显示命令说明' },
 ];
 
 /** /menu 的按钮：callback_data 为 m|<动作>，动作对应同名命令。 */
 export const MENU_ACTIONS = ['chars', 'chats', 'preset', 'new', 'regen', 'status', 'settings'] as const;
 export type MenuAction = (typeof MENU_ACTIONS)[number];
-const MENU_LABELS: Record<MenuAction, string> = { chars: '角色', chats: '聊天', preset: '预设', new: '新建聊天', regen: '重新生成', status: '状态', settings: '设置' };
+const MENU_LABELS: Record<MenuAction, string> = { chars: '🎭 角色', chats: '💬 聊天', preset: '🎛️ 预设', new: '✨ 新建聊天', regen: '🔄 重新生成', status: '📊 状态', settings: '⚙️ 设置' };
 
 export function menuKeyboard(): Array<Array<{ text: string; callback_data: string }>> {
   const btn = (a: MenuAction) => ({ text: MENU_LABELS[a], callback_data: `m|${a}` });
@@ -154,12 +155,12 @@ export function decodeMenuCallback(data: string | undefined): MenuAction | null 
   return m && (MENU_ACTIONS as readonly string[]).includes(m[1]) ? (m[1] as MenuAction) : null;
 }
 
-export const BUSY_TEXT = '上一条消息还在生成回复，请等它完成后再发。这条消息没有发送给角色。';
-export const BUSY_COMMAND_TEXT = '正在生成回复或切换中，请等它完成（或先 /stop）再执行这个命令。';
-export const COLD_START_TEXT = '正在启动无头浏览器，稍候…';
-export const NOTHING_TO_STOP_TEXT = '当前没有正在生成的回复。';
-export const NOTHING_TO_REGEN_TEXT = '没有可以重新生成的回复。只能重新生成 bot 在这里发出的上一条回复。';
-export const REGENERATED_NOTE = '（这条回复已重新生成，新的回复在下面）';
+export const BUSY_TEXT = '⏳ 上一条消息还在生成回复，请等它完成后再发。这条消息没有发送给角色。';
+export const BUSY_COMMAND_TEXT = '⏳ 正在生成回复或切换中，请等它完成（或先 /stop）再执行这个命令。';
+export const COLD_START_TEXT = '🚀 正在启动无头浏览器，稍候…';
+export const NOTHING_TO_STOP_TEXT = 'ℹ️ 当前没有正在生成的回复。';
+export const NOTHING_TO_REGEN_TEXT = 'ℹ️ 没有可以重新生成的回复。只能重新生成 bot 在这里发出的上一条回复。';
+export const REGENERATED_NOTE = '🔄（这条回复已重新生成，新的回复在下面）';
 
 /** Telegram 只允许 bot 删除 48 小时内的消息。 */
 const DELETE_WINDOW_MS = 48 * 3600_000;
@@ -195,6 +196,16 @@ interface Turn {
 
 const short = (id: string): string => id.slice(0, 8);
 const errMsg = (e: unknown): string => (e instanceof Error ? e.message : String(e));
+
+/** 给用户看的报错：页面通道的超时、断开换成能照着做的说明，其余原样展示。 */
+export function explainError(e: unknown): string {
+  if (e instanceof HostChannelError) {
+    if (e.code === 'timeout') return `页面长时间没有响应（${e.message}）。可能卡住了，或正在加载很重的角色卡。稍等一会儿再试，一直不行就发 /status 看看`;
+    if (e.code === 'not-connected') return '无头浏览器页面还没连上，稍等几秒再试';
+    if (e.code === 'disconnected') return '与无头浏览器页面的连接断了，再试一次会自动重连';
+  }
+  return errMsg(e);
+}
 
 export class Bot {
   private turn: Turn | null = null;
@@ -245,7 +256,7 @@ export class Bot {
     const chatId = msg.chat.id;
     if (typeof msg.text !== 'string' || msg.text.trim() === '') {
       log.info(`收到非文字消息 update=${update.update_id}，已提示`);
-      await this.reply(chatId, '目前只支持文字消息。');
+      await this.reply(chatId, 'ℹ️ 目前只支持文字消息，图片、语音等暂时发不出去。');
       return;
     }
     const cmd = parseCommand(msg.text);
@@ -257,7 +268,7 @@ export class Bot {
     log.info(`收到消息 update=${update.update_id} 长度=${msg.text.length}`);
     if (msg.text.trimStart().startsWith('/')) {
       // ST 会把以 / 开头的输入当作 slash 命令执行，不能转发
-      await this.reply(chatId, '以 / 开头的文字会被当作命令。发 /help 查看可用命令；想发给角色的话，开头别用 /。');
+      await this.reply(chatId, 'ℹ️ 以 / 开头的文字会被当作命令。发 /help 查看可用命令；想发给角色的话，开头别用 /。');
       return;
     }
     if (this.busy) {
@@ -287,7 +298,7 @@ export class Bot {
         return;
     }
     if (!['regen', 'chars', 'chats', 'preset', 'new'].includes(name)) {
-      await this.reply(chatId, `未知命令 /${name}，发 /help 查看可用命令。`);
+      await this.reply(chatId, `❓ 未知命令 /${name}，发 /help 查看可用命令。`);
       return;
     }
     if (this.busy) {
@@ -314,7 +325,7 @@ export class Bot {
       const r = await this.opts.host.request<SwitchResult>({ type: 'newChat' }, this.opts.switchRpcTimeoutMs ?? 90_000);
       this.saveSession(r);
       this.opts.log.info('/new：已新建聊天');
-      await this.reply(chatId, `已新建聊天：${r.chatId ?? '（未知）'}。之后的消息会发到这个聊天。`);
+      await this.reply(chatId, `✨ 已新建聊天：${r.chatId ?? '（未知）'}\n之后的消息会发到这个聊天。`);
       await this.sendGreeting(chatId, r, r.greeting);
     });
   }
@@ -331,7 +342,7 @@ export class Bot {
         // 速览拿不到不影响菜单
       }
     }
-    await this.reply(chatId, summary ? `主菜单\n${summary}` : '主菜单', { reply_markup: { inline_keyboard: menuKeyboard() } });
+    await this.reply(chatId, summary ? `📋 主菜单\n${summary}` : '📋 主菜单', { reply_markup: { inline_keyboard: menuKeyboard() } });
   }
 
   private async reply(chatId: number, text: string, extra: Record<string, unknown> = {}): Promise<TelegramMessage | undefined> {
@@ -386,7 +397,7 @@ export class Bot {
       await fn();
     } catch (e) {
       log.warn(`${label} 失败：${errMsg(e)}`);
-      await this.reply(chatId, `${label} 失败：${errMsg(e)}`);
+      await this.reply(chatId, `❌ ${label} 失败：${explainError(e)}`);
     } finally {
       release();
       this.op = null;
@@ -455,11 +466,11 @@ export class Bot {
     const set = this.choiceSet;
     const item = set && set.token === token ? set.items[n] : undefined;
     if (!set || item === undefined) {
-      await answer('这组选项已过期（只有最新一条回复的选项有效）');
+      await answer('⌛ 这组选项已过期（只有最新一条回复的选项有效）');
       return;
     }
     if (this.busy) {
-      await answer('正在生成回复或切换中，稍后再试');
+      await answer('⏳ 正在生成回复或切换中，稍后再试');
       return;
     }
     await answer();
@@ -475,7 +486,7 @@ export class Bot {
     this.startTurn(chatId, { kind: 'send', text: item });
     // 按钮消息改成“已选择”并去掉键盘
     if (q.message) {
-      const text = `已选择 ${n + 1}：${item.length > 200 ? `${item.slice(0, 199)}…` : item}`;
+      const text = `✅ 已选择 ${n + 1}：${item.length > 200 ? `${item.slice(0, 199)}…` : item}`;
       await telegram.editMessageText({ chat_id: chatId, message_id: q.message.message_id, text }).catch((e) => log.debug(`更新选项消息失败：${errMsg(e)}`));
     }
   }
@@ -485,11 +496,11 @@ export class Bot {
     const { telegram, log, store } = this.opts;
     const chatId = q.message?.chat.id ?? q.from.id;
     if (!this.choiceSet || this.choiceSet.token !== token) {
-      await answer('这组选项已过期（只有最新一条回复的选项有效）');
+      await answer('⌛ 这组选项已过期（只有最新一条回复的选项有效）');
       return;
     }
     if (this.busy) {
-      await answer('正在处理上一条，请稍后再试');
+      await answer('⏳ 正在处理上一条，请稍后再试');
       return;
     }
     const previous = store.lastReply(chatId);
@@ -501,14 +512,14 @@ export class Bot {
     log.info('选项消息：重新生成');
     this.startTurn(chatId, { kind: 'regenerate', previous });
     if (q.message) {
-      await telegram.editMessageText({ chat_id: chatId, message_id: q.message.message_id, text: '已重新生成上一条回复' }).catch((e) => log.debug(`更新选项消息失败：${errMsg(e)}`));
+      await telegram.editMessageText({ chat_id: chatId, message_id: q.message.message_id, text: '🔄 已重新生成上一条回复' }).catch((e) => log.debug(`更新选项消息失败：${errMsg(e)}`));
     }
   }
 
   private async sendSettings(chatId: number): Promise<void> {
     const s = this.opts.settings;
     if (!s) {
-      await this.reply(chatId, '当前版本没有启用设置功能。');
+      await this.reply(chatId, 'ℹ️ 当前版本没有启用设置功能。');
       return;
     }
     await this.reply(chatId, settingsText(), { reply_markup: { inline_keyboard: settingsKeyboard(s.get()) } });
@@ -519,17 +530,17 @@ export class Bot {
     const s = this.opts.settings;
     const def = SETTING_DEFS[index];
     if (!s || !def) {
-      await answer('设置不可用');
+      await answer('⚠️ 设置不可用');
       return;
     }
     try {
       const next = nextValue(def, s.get()[def.key]);
       s.set({ [def.key]: next });
       log.info(`/settings：${def.key} -> ${String(next)}`);
-      await answer('已保存');
+      await answer('✅ 已保存');
     } catch (e) {
       log.warn(`/settings 保存失败：${errMsg(e)}`);
-      await answer(`保存失败：${errMsg(e)}`.slice(0, 190));
+      await answer(`❌ 保存失败：${errMsg(e)}`.slice(0, 190));
       return;
     }
     if (q.message) {
@@ -569,7 +580,7 @@ export class Bot {
     log.info(`收到按钮 ${action ? `${action.kind}/${action.op}` : '（无法识别）'}`);
     const listing = action ? this.lists.get(action.token) : undefined;
     if (!action || !listing || listing.kind !== action.kind) {
-      await answer('这个列表已过期，请重新发送 /chars、/chats 或 /preset');
+      await answer('⌛ 这个列表已过期，请重新发送 /chars、/chats 或 /preset');
       return;
     }
     if (action.op === 'page') {
@@ -582,15 +593,15 @@ export class Bot {
       return;
     }
     if (this.busy) {
-      await answer('正在生成回复或切换中，稍后再试');
+      await answer('⏳ 正在生成回复或切换中，稍后再试');
       return;
     }
     const item = listing.items[action.n];
     if (!item) {
-      await answer('这个列表已过期，请重新发送');
+      await answer('⌛ 这个列表已过期，请重新发送');
       return;
     }
-    await answer('正在切换…');
+    await answer('⏳ 正在切换，重前端的卡可能要等一会儿…');
     const timeout = this.opts.switchRpcTimeoutMs ?? 90_000;
     const label = action.kind === 'chars' ? '切换角色' : action.kind === 'chats' ? '切换聊天' : '切换预设';
     await this.withHost(chatId, label, async () => {
@@ -600,7 +611,7 @@ export class Bot {
       if (action.kind !== 'presets') this.choiceSet = null; // 换角色/聊天后旧选项不再适用；换预设不影响
       if (action.kind === 'presets') {
         const r = await this.opts.host.request<{ presetName: string }>({ type: 'selectPreset', name: item as string }, timeout);
-        text = `已切换到预设：${r.presetName}\n之后的回复使用这个预设。`;
+        text = `✅ 已切换到预设：${r.presetName}\n之后的回复使用这个预设。`;
       } else {
         const r =
           action.kind === 'chars'
@@ -609,7 +620,7 @@ export class Bot {
         this.saveSession(r);
         switched = r;
         greeting = r.greeting;
-        text = `已切换到角色：${r.characterName ?? '（未知）'}\n当前聊天：${r.chatId ?? '（未知）'}\n之后的消息会发到这个聊天。`;
+        text = `✅ 已切换到角色：${r.characterName ?? '（未知）'}\n💬 当前聊天：${r.chatId ?? '（未知）'}\n之后的消息会发到这个聊天。`;
       }
       // 列表里的“当前”标注已过时，作废这个列表
       this.lists.delete(action.token);
@@ -669,7 +680,7 @@ export class Bot {
       await host.request({ type: 'stop' }, 10_000);
     } catch (e) {
       log.warn(`停止失败：${errMsg(e)}`);
-      await this.reply(chatId, `停止失败：${errMsg(e)}`);
+      await this.reply(chatId, `❌ 停止失败：${explainError(e)}`);
     }
   }
 
@@ -677,9 +688,9 @@ export class Bot {
 
   async statusText(chatId?: number): Promise<string> {
     const { status, browser, host } = this.opts;
-    const lines = ['silly-tg 状态'];
-    lines.push(`Telegram：${status.telegram === 'ok' ? `已连接${status.botUsername ? ` @${status.botUsername}` : ''}` : status.telegram === 'error' ? '连接失败' : '未连接（离线模式）'}`);
-    if (!status.chromium.path) lines.push('Chromium：未找到 Chrome/Chromium');
+    const lines = ['📊 silly-tg 状态'];
+    lines.push(`${status.telegram === 'ok' ? '🟢' : status.telegram === 'error' ? '🔴' : '⚪'} Telegram：${status.telegram === 'ok' ? `已连接${status.botUsername ? ` @${status.botUsername}` : ''}` : status.telegram === 'error' ? '连接失败' : '未连接（离线模式）'}`);
+    if (!status.chromium.path) lines.push('🔴 Chromium：未找到 Chrome/Chromium');
     else {
       const up = browser.startedAt ? `，已运行 ${Math.max(0, Math.round((this.now() - browser.startedAt) / 60_000))} 分钟` : '';
       const s: Record<BrowserState, string> = {
@@ -688,35 +699,35 @@ export class Bot {
         stopping: '正在关闭',
         stopped: browser.lastError ? `已关闭，上次启动失败：${browser.lastError}` : '已关闭（收到消息时自动启动）',
       };
-      lines.push(`Chromium：${s[browser.state]}`);
+      lines.push(`${browser.state === 'running' ? '🟢' : browser.state === 'stopped' && browser.lastError ? '🔴' : browser.state === 'stopped' ? '⚪' : '🟡'} Chromium：${s[browser.state]}`);
     }
     const idle = this.opts.idleShutdownMinutes ?? 0;
-    lines.push(`空闲关闭：${idle > 0 ? `空闲 ${idle} 分钟后关闭` : '未启用'}`);
+    lines.push(`💤 空闲关闭：${idle > 0 ? `空闲 ${idle} 分钟后关闭` : '未启用'}`);
     const wd = this.opts.watchdogStatus?.();
-    if (wd) lines.push(`看门狗：${wd}`);
+    if (wd) lines.push(`🐕 看门狗：${wd}`);
     if (host.connected && host.hello) {
-      lines.push(`ST 页面：已连接（${host.hello.stVersion}，酒馆助手${host.hello.hasTavernHelper ? '已加载' : '未加载'}）`);
+      lines.push(`🟢 ST 页面：已连接（${host.hello.stVersion}，酒馆助手${host.hello.hasTavernHelper ? '已加载' : '未加载'}）`);
       try {
         const st = await host.request<HostStatus>({ type: 'getStatus' }, 5000);
-        lines.push(`当前角色：${st.characterName ?? '未选择'}`);
-        lines.push(`当前聊天：${st.chatId ?? '无'}${st.messageCount !== undefined ? `（${st.messageCount} 条消息）` : ''}`);
-        if (st.presetName) lines.push(`预设：${st.presetName}`);
-        lines.push(`API：${st.mainApi ?? '未知'}（${st.onlineStatus && st.onlineStatus !== 'no_connection' ? '已连接' : '未连接'}）`);
-        if (st.generating) lines.push('正在生成回复');
-        if (st.formDuplicates?.length) lines.push(`警告：ST 角色编辑表单有重复字段（${st.formDuplicates.slice(0, 6).join('、')}），/chats 和 /new 已暂停，重启 ST 可恢复`);
+        lines.push(`🎭 当前角色：${st.characterName ?? '未选择'}`);
+        lines.push(`💬 当前聊天：${st.chatId ?? '无'}${st.messageCount !== undefined ? `（${st.messageCount} 条消息）` : ''}`);
+        if (st.presetName) lines.push(`🎛️ 预设：${st.presetName}`);
+        lines.push(`${st.onlineStatus && st.onlineStatus !== 'no_connection' ? '🟢' : '🔴'} API：${st.mainApi ?? '未知'}（${st.onlineStatus && st.onlineStatus !== 'no_connection' ? '已连接' : '未连接'}）`);
+        if (st.generating) lines.push('✍️ 正在生成回复');
+        if (st.formDuplicates?.length) lines.push(`⚠️ 警告：ST 角色编辑表单有重复字段（${st.formDuplicates.slice(0, 6).join('、')}），/chats 和 /new 已暂停，重启 ST 可恢复`);
       } catch (e) {
-        lines.push(`读取 ST 状态失败：${errMsg(e)}`);
+        lines.push(`🔴 读取 ST 状态失败：${explainError(e)}`);
       }
     } else {
-      lines.push('ST 页面：未连接');
+      lines.push('⚪ ST 页面：未连接（发条消息会自动启动）');
     }
-    if (chatId !== undefined) lines.push(`可重新生成上一条：${this.opts.store.lastReply(chatId) ? '是' : '否'}`);
+    if (chatId !== undefined) lines.push(`🔄 可重新生成上一条：${this.opts.store.lastReply(chatId) ? '是' : '否'}`);
     const failed = status.hostChecks.filter((c) => !c.ok);
     if (status.hostChecks.length > 0) {
-      lines.push(failed.length === 0 ? '页面自检：全部通过' : '页面自检：');
-      for (const c of failed) lines.push(`- ${c.name} 未通过：${c.detail ?? ''}`);
+      lines.push(failed.length === 0 ? '✅ 页面自检：全部通过' : '🩺 页面自检：');
+      for (const c of failed) lines.push(`  ⚠️ ${c.name} 未通过：${c.detail ?? ''}`);
     }
-    if (status.lastHostError) lines.push(`最近页面错误：${status.lastHostError.slice(0, 300)}`);
+    if (status.lastHostError) lines.push(`🐞 最近页面错误：${status.lastHostError.slice(0, 300)}`);
     return lines.join('\n');
   }
 
@@ -818,7 +829,7 @@ export class Bot {
       if (this.draftsDisabled) return;
       let preview = streamPreview(raw);
       if (!preview) return;
-      if ((this.opts.draftMode ?? 'live') === 'progress') preview = `正在生成… 已写 ${Array.from(preview).length} 字`;
+      if ((this.opts.draftMode ?? 'live') === 'progress') preview = `✍️ 正在生成… 已写 ${Array.from(preview).length} 字`;
       stopTyping();
       pendingPreview = preview;
       if (draftTimer) return;
@@ -865,13 +876,13 @@ export class Bot {
         await browser.ensureRunning();
       } catch (e) {
         log.warn(`无头浏览器启动失败 gen=${gen}：${errMsg(e)}`);
-        await this.reply(chatId, `无头浏览器启动失败：${errMsg(e)}`);
+        await this.reply(chatId, `❌ 无头浏览器启动失败：${errMsg(e)}\n可以发 /status 查看详情，修好后直接再发消息即可重试`);
         return;
       }
       await this.ensureSession();
       if (turn.cancelled) {
         log.info(`已取消 gen=${gen}（启动期间收到停止）`);
-        await this.reply(chatId, '已取消，这条消息没有发给角色。');
+        await this.reply(chatId, '⏹️ 已取消，这条消息没有发给角色。');
         return;
       }
       watchConnection();
@@ -886,7 +897,7 @@ export class Bot {
         await host.request(cmd, this.opts.sendRpcTimeoutMs ?? 120_000);
       } catch (e) {
         log.warn(`页面拒绝了${turn.kind === 'send' ? '发送' : '重新生成'} gen=${gen}：${errMsg(e)}`);
-        await this.reply(chatId, `${turn.kind === 'send' ? '发送到 ST 失败' : '重新生成失败'}：${errMsg(e)}`);
+        await this.reply(chatId, `❌ ${turn.kind === 'send' ? '发送到 ST 失败' : '重新生成失败'}：${explainError(e)}`);
         return;
       }
       turn.phase = 'running';
@@ -916,7 +927,7 @@ export class Bot {
             dialogueStyle: this.opts.dialogueStyle,
           });
           log.info(`正式消息已发出 ${sent.messageIds.length} 段，方式=${sent.via}${sent.via === 'plain' || sent.via === 'text' || sent.via === 'mixed' ? '（回退了纯文本）' : ''}${sent.incomplete ? '，有内容未发出' : ''}`);
-          if (sent.incomplete) await this.reply(chatId, '回复的一部分没能发出，完整内容保存在 ST 聊天记录中。');
+          if (sent.incomplete) await this.reply(chatId, '⚠️ 回复的一部分没能发出，完整内容保存在 ST 聊天记录中。');
           if (sent.messageIds.length > 0) {
             store.recordReply({ telegramChatId: chatId, telegramMessageIds: sent.messageIds, stChatId: r.stChatId, stMessageId: r.stMessageId, sentAt: this.now() });
             if (store.session?.chatId !== r.stChatId) store.setSession({ ...store.session, chatId: r.stChatId });
@@ -931,15 +942,15 @@ export class Bot {
         }
         case 'stopped':
           log.info(`生成已停止，没有内容 gen=${gen} 用时 ${secs} 秒`);
-          await this.reply(chatId, '已停止生成，没有生成内容。');
+          await this.reply(chatId, '⏹️ 已停止生成，没有生成内容。');
           break;
         case 'failed':
           log.warn(`生成失败 gen=${gen} 用时 ${secs} 秒：${r.reason}`);
-          await this.reply(chatId, `生成失败：${r.reason}`);
+          await this.reply(chatId, `❌ 生成失败：${r.reason}`);
           break;
         case 'lost':
           log.warn(`生成中断 gen=${gen} 用时 ${secs} 秒：${r.reason}`);
-          await this.reply(chatId, `这一轮回复没有完成：${r.reason}。ST 聊天记录中可能已有部分内容。`);
+          await this.reply(chatId, `⚠️ 这一轮回复没有完成：${r.reason}。ST 聊天记录中可能已有部分内容。`);
           break;
       }
     } finally {

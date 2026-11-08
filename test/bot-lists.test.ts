@@ -18,20 +18,20 @@ describe('bot-lists', () => {
     const l = chars(20);
     const p0 = listKeyboard(l, 't', 0);
     expect(p0).toHaveLength(PAGE_SIZE + 1);
-    expect(p0.at(-1)!.map((b) => b.text)).toEqual(['下一页 ›']);
+    expect(p0.at(-1)!.map((b) => b.text)).toEqual(['下一页 ➡️']);
     const p1 = listKeyboard(l, 't', 1);
-    expect(p1.at(-1)!.map((b) => b.text)).toEqual(['‹ 上一页', '下一页 ›']);
+    expect(p1.at(-1)!.map((b) => b.text)).toEqual(['⬅️ 上一页', '下一页 ➡️']);
     const last = listKeyboard(l, 't', 99);
-    expect(last.map((r) => r[0].text)).toEqual(['名16', '名17', '名18', '名19', '‹ 上一页']);
+    expect(last.map((r) => r[0].text)).toEqual(['名16', '名17', '名18', '名19', '⬅️ 上一页']);
     expect(listKeyboard(chars(3), 't', 0)).toHaveLength(3);
-    expect(listTitle(l, 1)).toBe('选择角色（共 20 个，第 2/3 页）');
+    expect(listTitle(l, 1)).toBe('🎭 选择角色（共 20 个，第 2/3 页）');
     expect(listTitle(chars(0), 0)).toMatch(/还没有角色/);
   });
   it('按钮文字过长时截断', () => {
     const l: Listing = { kind: 'chars', items: [{ avatar: 'a', name: '长'.repeat(100) }], current: 'a', createdAt: 0 };
     const label = listKeyboard(l, 't', 0)[0][0].text;
     expect(Array.from(label).length).toBeLessThanOrEqual(48);
-    expect(label.startsWith('[当前] ')).toBe(true);
+    expect(label.startsWith('✅ ')).toBe(true);
     expect(label.endsWith('…')).toBe(true);
   });
   it('聊天标签：日期 · 条数 · 预览；没有预览时用文件名', () => {
