@@ -1,0 +1,14 @@
+{
+  "botToken": "123456789:从 @BotFather 获取的 token",
+  "allowedUserIds": [123456789],
+  "stBaseUrl": "http://127.0.0.1:8000",
+  "telegramProxy": "",
+  "chromiumPath": "",
+  "basicAuth": null,
+  "miniAppPort": 8788,
+  "publicBaseUrl": "",
+  "idleShutdownMinutes": 0,
+  "lowMemory": true,
+  "dialogueStyle": "bold",
+  "logLevel": "info"
+}

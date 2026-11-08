@@ -1,0 +1,28 @@
+node_modules/
+.env
+config.json
+# 插件运行数据（消息映射、会话），含 Telegram 用户 id
+/data/
+spike/.env
+spike/**/.env
+spike/**/local-cards/
+spike/**/measurements-raw/
+
+# 注意：dist/ 必须提交（ST 的插件自动更新只做 git pull，不跑构建）
+.DS_Store
+*.log
+coverage/
+
+# 本地联调文件（ST/Luker 配置副本、启动脚本），不提交
+/.local/
+
+# vitest 输出
+.vitest/
+
+# AI 助手与工作流工具的本地配置，不公开
+/.claude/
+/.cursor/
+/.trellis/
+/AGENTS.md
+# 早期实验代码，结论已沉淀到 README 和源码注释
+/spike/

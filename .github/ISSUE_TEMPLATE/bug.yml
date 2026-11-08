@@ -1,0 +1,27 @@
+name: Bug 反馈
+description: 插件行为不对
+labels: [bug]
+body:
+  - type: input
+    id: versions
+    attributes:
+      label: 版本
+      description: ST 或 Luker 的版本，插件版本（package.json 里的 version）
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: 发生了什么，期望是什么
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: 复现步骤
+  - type: textarea
+    id: logs
+    attributes:
+      label: 日志和 /status 输出
+      description: 把 logLevel 改成 debug 后复现。**贴之前确认里面没有 bot token。**
+      render: text

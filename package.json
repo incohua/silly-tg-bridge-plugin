@@ -1,0 +1,53 @@
+{
+  "name": "silly-tg-bridge-plugin",
+  "version": "0.1.0",
+  "description": "SillyTavern / Luker 的 Telegram 桥接插件：服务端插件 + 无头页面 UI 扩展",
+  "license": "AGPL-3.0-only",
+  "author": "incohua",
+  "homepage": "https://github.com/incohua/silly-tg-bridge-plugin#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/incohua/silly-tg-bridge-plugin.git"
+  },
+  "bugs": {
+    "url": "https://github.com/incohua/silly-tg-bridge-plugin/issues"
+  },
+  "keywords": [
+    "sillytavern",
+    "luker",
+    "telegram",
+    "telegram-bot",
+    "plugin"
+  ],
+  "private": true,
+  "type": "module",
+  "main": "dist/server.mjs",
+  "engines": {
+    "node": ">=20"
+  },
+  "packageManager": "pnpm@11.28.6",
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "lint": "eslint .",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "node build.mjs"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/express": "^5.0.6",
+    "@types/node": "^20.19.43",
+    "esbuild": "^0.28.2",
+    "eslint": "^10.14.0",
+    "express": "^5.3.0",
+    "globals": "^17.14.0",
+    "puppeteer-core": "^25.16.0",
+    "typescript": "6.0.3",
+    "typescript-eslint": "^8.72.1",
+    "undici": "^7.30.2",
+    "vitest": "^5.1.0"
+  },
+  "dependencies": {
+    "htmlparser2": "^12.0.0"
+  }
+}
