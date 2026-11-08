@@ -9,6 +9,7 @@ import { HostChannel } from './host-channel';
 import { createFetch, type FetchLike } from './http';
 import { createLogger, type Logger } from './logger';
 import { redactError } from './redact';
+import { registerSettingsRoutes } from './settings-api';
 import { pollUpdates, TelegramClient, type TelegramUpdate } from './telegram';
 
 /** 启动自检的汇总，供 /status 展示（bot 命令在后续步骤接入）。 */
@@ -25,6 +26,8 @@ export interface PluginStatus {
 
 export interface PluginRuntime {
   config: Config;
+  /** 配置文件路径（choice-rules.json 与它同目录）。 */
+  configPath: string;
   /** 插件数据目录（state.json 等）。默认 <pluginDir>/data，可用环境变量 SILLY_TG_DATA_DIR 覆盖。 */
   dataDir: string;
   log: Logger;
@@ -60,6 +63,25 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
   const configPath = env.SILLY_TG_CONFIG || join(opts.pluginDir, 'config.json');
 
   const loaded = loadConfigFile(configPath);
+  // 配置面板的接口在配置有误或还没有配置文件时也要可用，否则没法用面板修好它。
+  const liveConfig: Config | null = loaded.ok ? loaded.config : null;
+  let runtimeLog: Logger = bootLog;
+  registerSettingsRoutes(opts.router, {
+    configPath,
+    log: bootLog,
+    live: () => liveConfig,
+    startErrors: () => (loaded.ok ? [] : loaded.errors),
+    secrets: () => (liveConfig ? configSecrets(liveConfig) : []),
+    applyHot: (c) => {
+      if (!liveConfig) return;
+      // 只更新热生效字段；其余字段要重启才生效，运行中的值保持不变
+      liveConfig.dialogueStyle = c.dialogueStyle;
+      liveConfig.logLevel = c.logLevel;
+      liveConfig.idleShutdownMinutes = c.idleShutdownMinutes;
+      liveConfig.lowMemory = c.lowMemory;
+      runtimeLog.setLevel?.(c.logLevel);
+    },
+  });
   if (!loaded.ok) {
     for (const e of loaded.errors) bootLog.error(`配置错误 [${e.field}]：${e.message}`);
     bootLog.error('silly-tg 未启动（SillyTavern 的其余功能不受影响）。修正配置后重启 ST。');
@@ -68,6 +90,7 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
   const config = loaded.config;
   const secrets = configSecrets(config);
   const log = opts.log ?? createLogger({ level: config.logLevel, secrets });
+  runtimeLog = log;
   for (const w of loaded.warnings) log.warn(`配置提示 [${w.field}]：${w.message}`);
 
   const channel = new HostChannel({ log });
@@ -149,6 +172,7 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
   let stopped: Promise<void> | undefined;
   return {
     config,
+    configPath,
     dataDir: env.SILLY_TG_DATA_DIR || join(opts.pluginDir, 'data'),
     log,
     channel,

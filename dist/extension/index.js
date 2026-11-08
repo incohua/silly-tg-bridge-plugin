@@ -16,7 +16,10 @@
       case "newChat":
       case "listCharacters":
       case "listChats":
+      case "listPresets":
         return { id, type: v.type };
+      case "selectPreset":
+        return isStr(v.name) ? { id, type: "selectPreset", name: v.name } : null;
       case "selectCharacter":
         return isStr(v.characterId) ? { id, type: "selectCharacter", characterId: v.characterId } : null;
       case "openChat":
@@ -180,6 +183,7 @@
         messageId: index,
         html: node?.innerHTML ?? "",
         text: node ? node.innerText : msg.mes ?? "",
+        raw: msg.mes ?? "",
         stopped,
         cards: []
       });
@@ -243,6 +247,21 @@
     const ch = i === void 0 ? void 0 : c.characters[i];
     return { characterName: ch?.name, characterAvatar: ch?.avatar, chatId: c.getCurrentChatId() };
   }
+  function isGreetingOnly(chat) {
+    return chat.length === 1 && !chat[0].is_user && !chat[0].is_system;
+  }
+  function readGreeting() {
+    const c = ctx();
+    if (!isGreetingOnly(c.chat)) return void 0;
+    const node = document.querySelector('#chat .mes[mesid="0"] .mes_text');
+    const html = node?.innerHTML ?? "";
+    const text = node ? node.innerText : c.chat[0].mes ?? "";
+    return html || text ? { html, text } : void 0;
+  }
+  function presetManager() {
+    const c = ctx();
+    return typeof c.getPresetManager === "function" ? c.getPresetManager() : null;
+  }
   function hostStatus() {
     const c = ctx();
     const r = switchResult();
@@ -255,8 +274,24 @@
       formDuplicates: formDuplicates(),
       mainApi: c.mainApi,
       onlineStatus: c.onlineStatus,
-      generating: isGenerating()
+      generating: isGenerating(),
+      presetName: presetManager()?.getSelectedPresetName() || void 0
     };
+  }
+  function listPresets() {
+    const m = presetManager();
+    if (!m) throw new Error("\u5F53\u524D API \u6CA1\u6709\u53EF\u5207\u6362\u7684\u9884\u8BBE");
+    const presets = m.getAllPresets().filter((n) => typeof n === "string" && n);
+    return { api: ctx().mainApi ?? "", current: m.getSelectedPresetName() || void 0, presets };
+  }
+  async function selectPreset(name) {
+    const m = presetManager();
+    if (!m) throw new Error("\u5F53\u524D API \u6CA1\u6709\u53EF\u5207\u6362\u7684\u9884\u8BBE");
+    const value = m.findPreset(name);
+    if (value === void 0 || value === null) throw new Error("\u627E\u4E0D\u5230\u8FD9\u4E2A\u9884\u8BBE\uFF08\u53EF\u80FD\u5DF2\u88AB\u5220\u9664\u6216\u6539\u540D\uFF09\uFF0C\u8BF7\u91CD\u65B0\u53D1\u9001 /preset");
+    if (m.getSelectedPresetName() !== name) await m.selectPreset(value);
+    if (!await waitFor(() => presetManager()?.getSelectedPresetName() === name, 5e3)) throw new Error("\u5207\u6362\u9884\u8BBE\u8D85\u65F6");
+    return { presetName: name };
   }
   function listCharacters() {
     return ctx().characters.filter((ch) => typeof ch.avatar === "string" && ch.avatar).map((ch) => ({ avatar: ch.avatar, name: ch.name || ch.avatar }));
@@ -265,11 +300,12 @@
     const c = ctx();
     const index = c.characters.findIndex((ch) => ch.avatar === avatar);
     if (index < 0) throw new Error("\u627E\u4E0D\u5230\u8FD9\u4E2A\u89D2\u8272\uFF08\u53EF\u80FD\u5DF2\u88AB\u5220\u9664\u6216\u6539\u540D\uFF09\uFF0C\u8BF7\u91CD\u65B0\u53D1\u9001 /chars");
-    if (currentIndex() === index && c.getCurrentChatId()) return switchResult();
+    if (currentIndex() === index && c.getCurrentChatId()) return { ...switchResult(), greeting: readGreeting() };
     await settle(c.selectCharacterById(index), SWITCH_TIMEOUT_MS);
     const ok = await waitFor(() => currentIndex() === index && !!ctx().getCurrentChatId(), 5e3);
     if (!ok) throw new Error("\u5207\u6362\u89D2\u8272\u8D85\u65F6");
-    return switchResult();
+    await sleep(300);
+    return { ...switchResult(), greeting: readGreeting() };
   }
   function normalizeChats(raw) {
     const out = [];
@@ -311,7 +347,8 @@
     assertCardSafe("\u65B0\u5EFA\u804A\u5929");
     await settle(newChat(), SWITCH_TIMEOUT_MS);
     if (!await waitFor(() => !!ctx().getCurrentChatId() && ctx().getCurrentChatId() !== before, 5e3)) throw new Error("\u65B0\u5EFA\u804A\u5929\u8D85\u65F6");
-    return switchResult();
+    await sleep(300);
+    return { ...switchResult(), greeting: readGreeting() };
   }
 
   // src/extension/api-connect.ts
@@ -484,6 +521,57 @@
     return { restored: false, reason: `\u6253\u5F00\u89D2\u8272 ${key} \u8D85\u65F6` };
   }
 
+  // src/extension/settings-model.ts
+  function parseUserIds(text) {
+    const parts = text.split(/[\s,，、;；]+/).filter(Boolean);
+    const ids = [];
+    for (const p of parts) {
+      if (!/^\d+$/.test(p) || !Number.isSafeInteger(Number(p)) || Number(p) <= 0) {
+        return { ok: false, message: `\u201C${p}\u201D\u4E0D\u662F\u7528\u6237\u6570\u5B57 ID\uFF08\u5E94\u4E3A\u7EAF\u6570\u5B57\uFF0C\u53EF\u5411 @userinfobot \u67E5\u8BE2\uFF0C\u4E0D\u662F\u7528\u6237\u540D\uFF09\u3002` };
+      }
+      ids.push(Number(p));
+    }
+    return { ok: true, ids: [...new Set(ids)] };
+  }
+  function buildPatch(form, original) {
+    const errors = [];
+    const patch = {};
+    if (form.botToken.trim()) patch.botToken = form.botToken.trim();
+    const ids = parseUserIds(form.allowedUserIds);
+    if (ids.ok) patch.allowedUserIds = ids.ids;
+    else errors.push({ field: "allowedUserIds", message: ids.message });
+    patch.telegramProxy = form.telegramProxy.trim();
+    patch.stBaseUrl = form.stBaseUrl.trim();
+    if (form.basicAuthUser.trim()) patch.basicAuth = { username: form.basicAuthUser.trim(), password: form.basicAuthPassword };
+    else if (original?.basicAuth) patch.basicAuth = null;
+    const idle = form.idleShutdownMinutes.trim() === "" ? 0 : Number(form.idleShutdownMinutes);
+    if (!Number.isFinite(idle)) errors.push({ field: "idleShutdownMinutes", message: "\u7A7A\u95F2\u5173\u95ED\u65F6\u95F4\u5FC5\u987B\u662F\u6570\u5B57\uFF08\u5206\u949F\uFF09\uFF0C0 \u8868\u793A\u4E0D\u5173\u95ED\u3002" });
+    else patch.idleShutdownMinutes = idle;
+    patch.lowMemory = form.lowMemory;
+    patch.dialogueStyle = form.dialogueStyle;
+    patch.logLevel = form.logLevel;
+    return errors.length > 0 ? { ok: false, errors } : { ok: true, patch };
+  }
+  function saveSummary(r) {
+    if (!r.changed || r.changed.length === 0) return "\u6CA1\u6709\u6539\u52A8\u3002";
+    const parts = ["\u5DF2\u4FDD\u5B58\u3002"];
+    if (r.hot && r.hot.length > 0) parts.push(`\u5DF2\u7ACB\u5373\u751F\u6548\uFF1A${r.hot.map(fieldLabel).join("\u3001")}\u3002`);
+    if (r.restart && r.restart.length > 0) parts.push(`\u9700\u8981\u91CD\u542F ST \u624D\u751F\u6548\uFF1A${r.restart.map(fieldLabel).join("\u3001")}\u3002`);
+    return parts.join("");
+  }
+  var FIELD_LABELS = {
+    botToken: "Bot Token",
+    allowedUserIds: "\u5141\u8BB8\u7684\u7528\u6237 ID",
+    telegramProxy: "Telegram \u4EE3\u7406",
+    stBaseUrl: "ST \u5730\u5740",
+    basicAuth: "ST \u767B\u5F55\u8D26\u53F7",
+    idleShutdownMinutes: "\u7A7A\u95F2\u5173\u95ED\u65F6\u95F4",
+    lowMemory: "\u4F4E\u5185\u5B58\u6A21\u5F0F",
+    dialogueStyle: "\u5BF9\u8BDD\u6837\u5F0F",
+    logLevel: "\u65E5\u5FD7\u7EA7\u522B"
+  };
+  var fieldLabel = (k) => FIELD_LABELS[k] ?? k;
+
   // src/extension/uplink.ts
   var PLUGIN_BASE = "/api/plugins/silly-tg";
   var Uplink = class {
@@ -529,6 +617,205 @@
     }
   };
 
+  // src/extension/settings-ui.ts
+  var CONTAINER_ID = "extensions_settings2";
+  var ROOT_ID = "silly_tg_settings";
+  function el(tag, attrs = {}, text) {
+    const e = document.createElement(tag);
+    for (const [k, v] of Object.entries(attrs)) e.setAttribute(k, v);
+    if (text !== void 0) e.textContent = text;
+    return e;
+  }
+  function row(label, effect, control, hint) {
+    const root = el("div", { class: "silly-tg-row", style: "margin-bottom:10px" });
+    const head = el("div", { style: "display:flex;justify-content:space-between;gap:8px;align-items:baseline" });
+    head.append(el("label", {}, label), el("small", { style: "opacity:.65" }, effect));
+    root.append(head, control);
+    if (hint) root.append(el("small", { style: "opacity:.65;display:block" }, hint));
+    const error = el("small", { style: "color:var(--SmartThemeQuoteColor,#e66);display:block" });
+    root.append(error);
+    return { root, error };
+  }
+  var input = (type, placeholder = "") => el("input", { type, class: "text_pole", placeholder, autocomplete: "off", style: "width:100%" });
+  function select(options) {
+    const s = el("select", { class: "text_pole", style: "width:100%" });
+    for (const [v, t] of options) s.append(el("option", { value: v }, t));
+    return s;
+  }
+  function mountSettings() {
+    const mount = () => {
+      const container = document.getElementById(CONTAINER_ID);
+      if (!container || document.getElementById(ROOT_ID)) return !!container;
+      buildDrawer(container);
+      return true;
+    };
+    if (mount()) return;
+    try {
+      const c = ctx();
+      c.eventSource.once(c.eventTypes.APP_READY, () => void mount());
+    } catch {
+    }
+    let tries = 0;
+    const t = setInterval(() => {
+      if (mount() || ++tries > 20) clearInterval(t);
+    }, 500);
+  }
+  function buildDrawer(container) {
+    const root = el("div", { id: ROOT_ID });
+    const drawer = el("div", { class: "inline-drawer" });
+    const header = el("div", { class: "inline-drawer-toggle inline-drawer-header" });
+    header.append(el("b", {}, "Silly TG\uFF08Telegram \u6865\u63A5\uFF09"), el("div", { class: "inline-drawer-icon fa-solid fa-circle-chevron-down down" }));
+    const content = el("div", { class: "inline-drawer-content" });
+    drawer.append(header, content);
+    root.append(drawer);
+    container.append(root);
+    const banner = el("div", { style: "margin-bottom:10px" });
+    const form = el("div");
+    content.append(banner, form);
+    const f = {
+      botToken: input("password", ""),
+      allowedUserIds: input("text", "\u4F8B\u5982 123456789\uFF0C\u591A\u4E2A\u7528\u9017\u53F7\u5206\u9694"),
+      telegramProxy: input("text", "\u4F8B\u5982 http://127.0.0.1:7890\uFF0C\u4E0D\u9700\u8981\u7559\u7A7A"),
+      stBaseUrl: input("text", "http://127.0.0.1:8000"),
+      basicAuthUser: input("text", "ST \u5F00\u542F\u4E86 basic auth \u65F6\u586B"),
+      basicAuthPassword: input("password", ""),
+      idleShutdownMinutes: input("number", "0"),
+      lowMemory: el("input", { type: "checkbox" }),
+      dialogueStyle: select([
+        ["bold", "\u52A0\u7C97"],
+        ["italic", "\u659C\u4F53"],
+        ["mark", "\u9AD8\u4EAE"],
+        ["plain", "\u53EA\u4FDD\u7559\u5F15\u53F7"]
+      ]),
+      logLevel: select([
+        ["info", "info"],
+        ["debug", "debug"],
+        ["warn", "warn"],
+        ["error", "error"]
+      ])
+    };
+    const rows = {
+      botToken: row("Bot Token", "\u91CD\u542F ST \u540E\u751F\u6548", f.botToken),
+      allowedUserIds: row("\u5141\u8BB8\u7684\u7528\u6237 ID", "\u91CD\u542F ST \u540E\u751F\u6548", f.allowedUserIds, "\u53EA\u6709\u8FD9\u4E9B Telegram \u8D26\u53F7\u80FD\u4F7F\u7528 bot\u3002"),
+      telegramProxy: row("Telegram \u4EE3\u7406", "\u91CD\u542F ST \u540E\u751F\u6548", f.telegramProxy),
+      stBaseUrl: row("ST \u5730\u5740", "\u91CD\u542F ST \u540E\u751F\u6548", f.stBaseUrl, "\u65E0\u5934\u6D4F\u89C8\u5668\u8BBF\u95EE ST \u7528\u7684\u5730\u5740\u3002"),
+      basicAuth: row("ST \u767B\u5F55\u8D26\u53F7", "\u91CD\u542F ST \u540E\u751F\u6548", f.basicAuthUser),
+      idleShutdownMinutes: row("\u7A7A\u95F2\u5173\u95ED\uFF08\u5206\u949F\uFF09", "\u7ACB\u5373\u751F\u6548", f.idleShutdownMinutes, "0 \u8868\u793A\u4E0D\u81EA\u52A8\u5173\u95ED\u65E0\u5934\u6D4F\u89C8\u5668\u3002"),
+      lowMemory: row("\u4F4E\u5185\u5B58\u6A21\u5F0F", "\u4E0B\u6B21\u542F\u52A8\u6D4F\u89C8\u5668\u65F6\u751F\u6548", f.lowMemory),
+      dialogueStyle: row("\u5BF9\u8BDD\u6837\u5F0F", "\u7ACB\u5373\u751F\u6548", f.dialogueStyle),
+      logLevel: row("\u65E5\u5FD7\u7EA7\u522B", "\u7ACB\u5373\u751F\u6548", f.logLevel)
+    };
+    rows.basicAuth.root.insertBefore(f.basicAuthPassword, rows.basicAuth.error);
+    f.basicAuthPassword.style.marginTop = "4px";
+    for (const r of Object.values(rows)) form.append(r.root);
+    const save = el("input", { type: "button", class: "menu_button", value: "\u4FDD\u5B58" });
+    const status = el("small", { style: "margin-left:8px" });
+    const foot = el("div", { style: "margin-top:6px" });
+    foot.append(save, status);
+    form.append(foot);
+    form.append(el("small", { style: "opacity:.65;display:block;margin-top:8px" }, "Chromium \u8DEF\u5F84\u7B49\u672A\u5728\u6B64\u5217\u51FA\u7684\u9009\u9879\u53EA\u80FD\u5728 config.json \u91CC\u4FEE\u6539\u3002\u884C\u52A8\u9009\u9879\u89C4\u5219\u89C1\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 choice-rules.json\uFF08\u6539\u5B8C\u65E0\u9700\u91CD\u542F\uFF09\u3002"));
+    let original;
+    const clearErrors = () => {
+      for (const r of Object.values(rows)) r.error.textContent = "";
+    };
+    const showErrors = (errs) => {
+      for (const e of errs) {
+        const r = rows[e.field] ?? rows[e.field === "basicAuth" ? "basicAuth" : ""];
+        if (r) r.error.textContent = `${fieldLabel(e.field)}\uFF1A${e.message}`;
+        else status.textContent = `${fieldLabel(e.field)}\uFF1A${e.message}`;
+      }
+    };
+    const fill = (v) => {
+      original = v;
+      f.botToken.value = "";
+      f.botToken.placeholder = v.botToken.set ? "\u5DF2\u8BBE\u7F6E\uFF0C\u7559\u7A7A\u8868\u793A\u4E0D\u4FEE\u6539" : "123456789:AA...\uFF08\u4ECE @BotFather \u83B7\u53D6\uFF09";
+      f.allowedUserIds.value = v.allowedUserIds.join(", ");
+      f.telegramProxy.value = v.telegramProxy;
+      f.stBaseUrl.value = v.stBaseUrl;
+      f.basicAuthUser.value = v.basicAuth?.username ?? "";
+      f.basicAuthPassword.value = "";
+      f.basicAuthPassword.placeholder = v.basicAuth?.passwordSet ? "\u5DF2\u8BBE\u7F6E\uFF0C\u7559\u7A7A\u8868\u793A\u4E0D\u4FEE\u6539" : "\u5BC6\u7801";
+      f.idleShutdownMinutes.value = String(v.idleShutdownMinutes);
+      f.lowMemory.checked = v.lowMemory;
+      f.dialogueStyle.value = v.dialogueStyle;
+      f.logLevel.value = v.logLevel;
+    };
+    const showBanner = (r) => {
+      banner.textContent = "";
+      if (r.exists === false) banner.append(el("div", {}, "\u8FD8\u6CA1\u6709 config.json\uFF1A\u586B\u597D Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID \u540E\u4FDD\u5B58\uFF0C\u7136\u540E\u91CD\u542F ST\u3002"));
+      else if (r.running === false) {
+        banner.append(el("div", {}, "\u63D2\u4EF6\u5F53\u524D\u6CA1\u6709\u542F\u52A8\uFF08\u914D\u7F6E\u6709\u8BEF\uFF09\u3002\u4FEE\u6B63\u540E\u4FDD\u5B58\u5E76\u91CD\u542F ST\uFF1A"));
+        for (const e of r.startErrors ?? []) banner.append(el("div", { style: "opacity:.8" }, `\xB7 ${e.field}\uFF1A${e.message}`));
+      }
+    };
+    const request = async (method, body) => {
+      const headers = ctx().getRequestHeaders();
+      const res = await fetch(`${PLUGIN_BASE}/config`, { method, headers, body: body === void 0 ? void 0 : JSON.stringify(body) });
+      let json;
+      try {
+        json = await res.json();
+      } catch {
+        return { ok: false, error: `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u65E0\u6CD5\u89E3\u6790\u7684\u5185\u5BB9\uFF08HTTP ${res.status}\uFF09\u3002\u63D2\u4EF6\u53EF\u80FD\u6CA1\u6709\u52A0\u8F7D\uFF0C\u68C0\u67E5 ST \u7684 enableServerPlugins\u3002` };
+      }
+      return res.ok ? json : { ...json, ok: false, error: json.error ?? `HTTP ${res.status}` };
+    };
+    const load = async () => {
+      status.textContent = "\u8BFB\u53D6\u4E2D\u2026";
+      try {
+        const r = await request("GET");
+        if (!r.ok || !r.values) {
+          status.textContent = r.error ?? "\u8BFB\u53D6\u914D\u7F6E\u5931\u8D25";
+          return;
+        }
+        showBanner(r);
+        fill(r.values);
+        status.textContent = "";
+      } catch (e) {
+        status.textContent = `\u8BFB\u53D6\u914D\u7F6E\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`;
+      }
+    };
+    save.addEventListener("click", () => {
+      void (async () => {
+        clearErrors();
+        const form2 = {
+          botToken: f.botToken.value,
+          allowedUserIds: f.allowedUserIds.value,
+          telegramProxy: f.telegramProxy.value,
+          stBaseUrl: f.stBaseUrl.value,
+          basicAuthUser: f.basicAuthUser.value,
+          basicAuthPassword: f.basicAuthPassword.value,
+          idleShutdownMinutes: f.idleShutdownMinutes.value,
+          lowMemory: f.lowMemory.checked,
+          dialogueStyle: f.dialogueStyle.value,
+          logLevel: f.logLevel.value
+        };
+        const built = buildPatch(form2, original);
+        if (!built.ok) {
+          showErrors(built.errors);
+          status.textContent = "\u6709\u8F93\u5165\u9700\u8981\u4FEE\u6B63\u3002";
+          return;
+        }
+        status.textContent = "\u4FDD\u5B58\u4E2D\u2026";
+        try {
+          const r = await request("POST", { settings: built.patch });
+          if (!r.ok) {
+            if (r.errors) {
+              showErrors(r.errors);
+              status.textContent = "\u6CA1\u6709\u4FDD\u5B58\uFF1A\u6709\u8F93\u5165\u9700\u8981\u4FEE\u6B63\u3002";
+            } else status.textContent = r.error ?? "\u4FDD\u5B58\u5931\u8D25";
+            return;
+          }
+          status.textContent = saveSummary(r);
+          if (r.values) fill(r.values);
+          showBanner({ ...r, running: void 0, exists: true });
+        } catch (e) {
+          status.textContent = `\u4FDD\u5B58\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`;
+        }
+      })();
+    });
+    void load();
+  }
+
   // src/extension/index.ts
   var HEARTBEAT_MS = 15e3;
   var READY_TIMEOUT_MS = 18e4;
@@ -557,7 +844,11 @@
   async function main() {
     const nonce = parseHostNonce(location.hash);
     const testFlags = parseHostTestFlags(location.hash);
-    if (!nonce || !getHostApi()) return;
+    if (!getHostApi()) return;
+    if (!nonce) {
+      mountSettings();
+      return;
+    }
     let alive = true;
     const cleanups = [];
     const shutdown = (reason) => {
@@ -713,6 +1004,12 @@
             return;
           case "newChat":
             queued(newChat2);
+            return;
+          case "listPresets":
+            queued(listPresets);
+            return;
+          case "selectPreset":
+            queued(() => selectPreset(cmd.name));
             return;
           // 不进队列：生成进行中也要立即执行
           case "stop":

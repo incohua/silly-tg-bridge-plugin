@@ -18,6 +18,14 @@ export interface StCharacter {
   avatar?: string;
 }
 
+/** ST / Luker 的预设管理器（getContext().getPresetManager）。 */
+export interface StPresetManager {
+  getAllPresets(): string[];
+  findPreset(name: string): unknown;
+  getSelectedPresetName(): string;
+  selectPreset(value: unknown): Promise<void> | void;
+}
+
 export interface StContext {
   chat: StChatMessage[];
   characters: StCharacter[];
@@ -25,6 +33,8 @@ export interface StContext {
   groupId?: string | null;
   name2?: string;
   mainApi?: string;
+  /** 无参取当前 main_api 的预设管理器；该 API 没有预设时返回 null。 */
+  getPresetManager?: (apiId?: string) => StPresetManager | null;
   onlineStatus?: string;
   eventSource: StEventSource;
   eventTypes: Record<string, string>;

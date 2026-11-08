@@ -1,6 +1,8 @@
 node_modules/
 .env
 config.json
+# 用户自己的选项规则（示例见 choice-rules.example.json）
+choice-rules.json
 # 插件运行数据（消息映射、会话），含 Telegram 用户 id
 /data/
 spike/.env

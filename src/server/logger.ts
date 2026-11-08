@@ -9,6 +9,8 @@ export interface Logger {
   info(msg: string, ...extra: unknown[]): void;
   warn(msg: string, ...extra: unknown[]): void;
   error(msg: string, ...extra: unknown[]): void;
+  /** 运行时调整日志级别（配置面板保存后用）。 */
+  setLevel?(level: LogLevel): void;
 }
 
 export interface LoggerOptions {
@@ -29,7 +31,7 @@ const defaultSink = (level: LogLevel, line: string): void => {
 
 /** 所有输出（消息和附加参数，含 Error）都先脱敏。 */
 export function createLogger(opts: LoggerOptions = {}): Logger {
-  const min = ORDER[opts.level ?? 'info'];
+  let min = ORDER[opts.level ?? 'info'];
   const secrets = opts.secrets ?? [];
   const sink = opts.sink ?? defaultSink;
   const fmt = (v: unknown): string => (typeof v === 'string' ? redact(v, secrets) : redactError(v, secrets));
@@ -40,5 +42,11 @@ export function createLogger(opts: LoggerOptions = {}): Logger {
       const line = [`${PREFIX} ${level === 'info' ? '' : `${level.toUpperCase()} `}${fmt(msg)}`, ...extra.map(fmt)].join(' ');
       sink(level, line);
     };
-  return { debug: emit('debug'), info: emit('info'), warn: emit('warn'), error: emit('error') };
+  return {
+    debug: emit('debug'),
+    info: emit('info'),
+    warn: emit('warn'),
+    error: emit('error'),
+    setLevel: (level) => void (min = ORDER[level]),
+  };
 }

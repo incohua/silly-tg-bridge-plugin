@@ -25,9 +25,12 @@ interface StateFile {
   version: 1;
   replies: ReplyRecord[];
   session?: SessionRecord;
+  /** 已发过开场白的 ST 聊天名。 */
+  greeted?: string[];
 }
 
 const MAX_REPLIES = 100;
+const MAX_GREETED = 200;
 
 const isNum = (v: unknown): v is number => typeof v === 'number' && Number.isFinite(v);
 
@@ -57,6 +60,7 @@ function decodeSession(v: unknown): SessionRecord | undefined {
 export class BridgeStore {
   private replies: ReplyRecord[] = [];
   private sessionValue: SessionRecord | undefined;
+  private greeted: string[] = [];
 
   constructor(
     private readonly file: string,
@@ -88,6 +92,15 @@ export class BridgeStore {
     this.save();
   }
 
+  /** 标记这个聊天已发过开场白。第一次标记返回 true，之后返回 false。 */
+  markGreeted(stChatId: string): boolean {
+    if (this.greeted.includes(stChatId)) return false;
+    this.greeted.push(stChatId);
+    if (this.greeted.length > MAX_GREETED) this.greeted = this.greeted.slice(-MAX_GREETED);
+    this.save();
+    return true;
+  }
+
   setSession(s: SessionRecord): void {
     this.sessionValue = decodeSession(s);
     this.save();
@@ -105,13 +118,14 @@ export class BridgeStore {
       const j = JSON.parse(text) as Partial<StateFile>;
       this.replies = Array.isArray(j.replies) ? j.replies.map(decodeReply).filter((r): r is ReplyRecord => r !== null) : [];
       this.sessionValue = decodeSession(j.session);
+      this.greeted = Array.isArray(j.greeted) ? j.greeted.filter((x): x is string => typeof x === 'string') : [];
     } catch {
       this.log.warn(`${this.file} 不是合法的 JSON，消息映射从空开始（原文件会在下次写入时被覆盖）`);
     }
   }
 
   private save(): void {
-    const data: StateFile = { version: 1, replies: this.replies, session: this.sessionValue };
+    const data: StateFile = { version: 1, replies: this.replies, session: this.sessionValue, greeted: this.greeted };
     try {
       mkdirSync(dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;

@@ -51680,7 +51680,7 @@ var init_ProgressBar = __esm({
 // node_modules/.pnpm/@puppeteer+browsers@3.2.6/node_modules/@puppeteer/browsers/lib/install.js
 import assert3 from "node:assert";
 import { spawnSync as spawnSync2 } from "node:child_process";
-import { existsSync, readFileSync as readFileSync2 } from "node:fs";
+import { existsSync, readFileSync as readFileSync3 } from "node:fs";
 import { mkdir as mkdir3, unlink } from "node:fs/promises";
 import os5 from "node:os";
 import path10 from "node:path";
@@ -51777,7 +51777,7 @@ async function installDeps(installedBrowser, logger) {
     logger?.(DEBUG_PREFIXES2.install)?.(`deb.deps file was not found at ${depsPath}`);
     return;
   }
-  const data = readFileSync2(depsPath, "utf-8").split("\n").join(",");
+  const data = readFileSync3(depsPath, "utf-8").split("\n").join(",");
   if (process.getuid?.() !== 0) {
     throw new Error("Installing system dependencies requires root privileges");
   }
@@ -52815,10 +52815,10 @@ var init_cliui = __esm({
 
 // node_modules/.pnpm/escalade@3.2.0/node_modules/escalade/sync/index.mjs
 import { dirname as dirname4, resolve as resolve3 } from "path";
-import { readdirSync, statSync } from "fs";
+import { readdirSync, statSync as statSync2 } from "fs";
 function sync_default(start, callback) {
   let dir = resolve3(".", start);
-  let tmp, stats = statSync(dir);
+  let tmp, stats = statSync2(dir);
   if (!stats.isDirectory()) {
     dir = dirname4(dir);
   }
@@ -53791,7 +53791,7 @@ var init_yargs_parser = __esm({
 // node_modules/.pnpm/yargs-parser@22.0.0/node_modules/yargs-parser/build/lib/index.js
 import { format } from "util";
 import { normalize as normalize2, resolve as resolve4 } from "path";
-import { readFileSync as readFileSync3 } from "fs";
+import { readFileSync as readFileSync4 } from "fs";
 import { createRequire } from "node:module";
 var _a8, _b, _c, minNodeVersion, nodeVersion, env, require2, parser, yargsParser, lib_default;
 var init_lib2 = __esm({
@@ -53820,7 +53820,7 @@ var init_lib2 = __esm({
         if (typeof require2 !== "undefined") {
           return require2(path14);
         } else if (path14.match(/\.json$/)) {
-          return JSON.parse(readFileSync3(path14, "utf8"));
+          return JSON.parse(readFileSync4(path14, "utf8"));
         } else {
           throw Error("only .json config files are supported in ESM");
         }
@@ -53994,7 +53994,7 @@ var init_string_width2 = __esm({
 });
 
 // node_modules/.pnpm/y18n@5.0.8/node_modules/y18n/build/lib/platform-shims/node.js
-import { readFileSync as readFileSync4, statSync as statSync2, writeFile } from "fs";
+import { readFileSync as readFileSync5, statSync as statSync3, writeFile } from "fs";
 import { format as format2 } from "util";
 import { resolve as resolve5 } from "path";
 var node_default;
@@ -54002,14 +54002,14 @@ var init_node = __esm({
   "node_modules/.pnpm/y18n@5.0.8/node_modules/y18n/build/lib/platform-shims/node.js"() {
     node_default = {
       fs: {
-        readFileSync: readFileSync4,
+        readFileSync: readFileSync5,
         writeFile
       },
       format: format2,
       resolve: resolve5,
       exists: (file) => {
         try {
-          return statSync2(file).isFile();
+          return statSync3(file).isFile();
         } catch (err) {
           return false;
         }
@@ -54226,7 +54226,7 @@ import { inspect } from "util";
 import { fileURLToPath } from "url";
 import { basename as basename2, dirname as dirname5, extname, relative as relative2, resolve as resolve6, join as join4 } from "path";
 import { createRequire as createRequire2 } from "node:module";
-import { readFileSync as readFileSync5, readdirSync as readdirSync2 } from "node:fs";
+import { readFileSync as readFileSync6, readdirSync as readdirSync2 } from "node:fs";
 var import_get_caller_file, __dirname, mainFilename, require3, esm_default;
 var init_esm = __esm({
   "node_modules/.pnpm/yargs@18.2.0/node_modules/yargs/lib/platform-shims/esm.mjs"() {
@@ -54274,7 +54274,7 @@ var init_esm = __esm({
         nextTick: process.nextTick,
         stdColumns: typeof process.stdout.columns !== "undefined" ? process.stdout.columns : null
       },
-      readFileSync: readFileSync5,
+      readFileSync: readFileSync6,
       readdirSync: readdirSync2,
       require: require3,
       getCallerFile: () => {
@@ -71313,7 +71313,7 @@ var require_mock_utils = __commonJS({
       }
       return normalizedQp;
     }
-    function safeUrl2(path14) {
+    function safeUrl3(path14) {
       if (typeof path14 !== "string") {
         return path14;
       }
@@ -71349,10 +71349,10 @@ var require_mock_utils = __commonJS({
     }
     function getMockDispatch(mockDispatches, key) {
       const basePath = key.query ? serializePathWithQuery(key.path, key.query) : key.path;
-      const resolvedPath = typeof basePath === "string" ? safeUrl2(basePath) : basePath;
+      const resolvedPath = typeof basePath === "string" ? safeUrl3(basePath) : basePath;
       const resolvedPathWithoutTrailingSlash = removeTrailingSlash(resolvedPath);
       let matchedMockDispatches = mockDispatches.filter(({ consumed }) => !consumed).filter(({ path: path14, ignoreTrailingSlash }) => {
-        return ignoreTrailingSlash ? matchValue(removeTrailingSlash(safeUrl2(path14)), resolvedPathWithoutTrailingSlash) : matchValue(safeUrl2(path14), resolvedPath);
+        return ignoreTrailingSlash ? matchValue(removeTrailingSlash(safeUrl3(path14)), resolvedPathWithoutTrailingSlash) : matchValue(safeUrl3(path14), resolvedPath);
       });
       if (matchedMockDispatches.length === 0) {
         throw new MockNotMatchedError(`Mock dispatch not matched for path '${resolvedPath}'`);
@@ -72385,7 +72385,7 @@ var require_snapshot_recorder = __commonJS({
   "node_modules/.pnpm/undici@7.30.2/node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
     var { writeFile: writeFile2, readFile: readFile2, mkdir: mkdir4 } = __require("node:fs/promises");
-    var { dirname: dirname7, resolve: resolve9 } = __require("node:path");
+    var { dirname: dirname9, resolve: resolve9 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError, UndiciError } = require_errors();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -72616,7 +72616,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError("Snapshot path is required");
         }
         const resolvedPath = resolve9(path14);
-        await mkdir4(dirname7(resolvedPath), { recursive: true });
+        await mkdir4(dirname9(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash, snapshot]) => ({
           hash,
           snapshot
@@ -85096,7 +85096,7 @@ ${captureLines}` : capture.stack;
 });
 
 // src/server/index.ts
-import { dirname as dirname6, resolve as resolve8 } from "node:path";
+import { dirname as dirname8, resolve as resolve8 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/server/redact.ts
@@ -85142,7 +85142,7 @@ var defaultSink = (level, line) => {
   else console.log(line);
 };
 function createLogger(opts = {}) {
-  const min = ORDER[opts.level ?? "info"];
+  let min = ORDER[opts.level ?? "info"];
   const secrets = opts.secrets ?? [];
   const sink = opts.sink ?? defaultSink;
   const fmt = (v2) => typeof v2 === "string" ? redact(v2, secrets) : redactError(v2, secrets);
@@ -85151,11 +85151,17 @@ function createLogger(opts = {}) {
     const line = [`${PREFIX} ${level === "info" ? "" : `${level.toUpperCase()} `}${fmt(msg)}`, ...extra.map(fmt)].join(" ");
     sink(level, line);
   };
-  return { debug: emit("debug"), info: emit("info"), warn: emit("warn"), error: emit("error") };
+  return {
+    debug: emit("debug"),
+    info: emit("info"),
+    warn: emit("warn"),
+    error: emit("error"),
+    setLevel: (level) => void (min = ORDER[level])
+  };
 }
 
 // src/server/bridge.ts
-import { join as join6 } from "node:path";
+import { dirname as dirname6, join as join6 } from "node:path";
 
 // src/server/bot.ts
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
@@ -85167,7 +85173,9 @@ var OPS = {
   c: { op: "select", kind: "chars" },
   cp: { op: "page", kind: "chars" },
   h: { op: "select", kind: "chats" },
-  hp: { op: "page", kind: "chats" }
+  hp: { op: "page", kind: "chats" },
+  p: { op: "select", kind: "presets" },
+  pp: { op: "page", kind: "presets" }
 };
 function encodeCallback(a2) {
   const code = Object.entries(OPS).find(([, v2]) => v2.op === a2.op && v2.kind === a2.kind)[0];
@@ -85175,7 +85183,7 @@ function encodeCallback(a2) {
 }
 function decodeCallback(data) {
   if (!data) return null;
-  const m = /^(c|cp|h|hp)\|([0-9a-f]{1,16})\|(\d{1,6})$/.exec(data);
+  const m = /^(c|cp|h|hp|p|pp)\|([0-9a-f]{1,16})\|(\d{1,6})$/.exec(data);
   if (!m) return null;
   return { ...OPS[m[1]], token: m[2], n: Number(m[3]) };
 }
@@ -85207,13 +85215,17 @@ function itemLabel(l, i) {
     const c2 = l.items[i];
     return truncate(`${c2.avatar === l.current ? "[\u5F53\u524D] " : ""}${c2.name}`);
   }
+  if (l.kind === "presets") {
+    const n = l.items[i];
+    return truncate(`${n === l.current ? "[\u5F53\u524D] " : ""}${n}`);
+  }
   const c = l.items[i];
   return truncate(`${c.fileName === l.current ? "[\u5F53\u524D] " : ""}${chatLabel(c)}`);
 }
 function listTitle(l, page) {
-  const what = l.kind === "chars" ? "\u89D2\u8272" : "\u804A\u5929";
+  const what = l.kind === "chars" ? "\u89D2\u8272" : l.kind === "presets" ? "\u9884\u8BBE" : "\u804A\u5929";
   const total = l.items.length;
-  if (total === 0) return l.kind === "chars" ? "ST \u91CC\u8FD8\u6CA1\u6709\u89D2\u8272\u3002" : "\u5F53\u524D\u89D2\u8272\u8FD8\u6CA1\u6709\u804A\u5929\u8BB0\u5F55\u3002";
+  if (total === 0) return l.kind === "chars" ? "ST \u91CC\u8FD8\u6CA1\u6709\u89D2\u8272\u3002" : l.kind === "presets" ? "\u5F53\u524D API \u8FD8\u6CA1\u6709\u9884\u8BBE\u3002" : "\u5F53\u524D\u89D2\u8272\u8FD8\u6CA1\u6709\u804A\u5929\u8BB0\u5F55\u3002";
   return `\u9009\u62E9${what}\uFF08\u5171 ${total} \u4E2A\uFF0C\u7B2C ${page + 1}/${pageCount(total)} \u9875\uFF09`;
 }
 function listKeyboard(l, token, page) {
@@ -85231,6 +85243,194 @@ function listKeyboard(l, token, page) {
   }
   return rows;
 }
+
+// src/server/choices.ts
+import { readFileSync, statSync } from "node:fs";
+var MAX_CHOICES = 12;
+var NUMBERED_ITEM = "^\\s*[\uFF08(]?(?:\\d{1,2}|[A-Za-z])[.\u3001)\uFF09:\uFF1A]\\s*(.+?)\\s*$";
+var DEFAULT_RULES = [
+  { name: "SUOT", block: "<SUOT>([\\s\\S]*?)</SUOT>", item: NUMBERED_ITEM, htmlSelector: "suot" },
+  {
+    name: "\u6807\u9898+\u7F16\u53F7\u5217\u8868",
+    block: "(?:^|\\n)[ \\t]*(?:\u3010[^\u3011\\n]{0,12}\u9009\u9879[^\u3011\\n]{0,12}\u3011|[^\\n]{0,12}\u9009\u9879[:\uFF1A])[ \\t]*\\n((?:[ \\t]*[\uFF08(]?(?:\\d{1,2}|[A-Za-z])[.\u3001)\uFF09:\uFF1A][^\\n]+(?:\\n|$))+)\\s*$",
+    item: NUMBERED_ITEM
+  }
+];
+function compileRules(rules) {
+  const out = [];
+  const issues = [];
+  for (const r of rules) {
+    try {
+      out.push({ name: r.name, block: new RegExp(r.block, "i"), item: new RegExp(r.item), htmlSelector: r.htmlSelector });
+    } catch (e) {
+      issues.push({ rule: r.name, message: `\u6B63\u5219\u65E0\u6CD5\u7F16\u8BD1\uFF1A${e.message}` });
+    }
+  }
+  return { rules: out, issues };
+}
+function validateRules(raw) {
+  const issues = [];
+  if (!Array.isArray(raw)) return { rules: [], issues: [{ rule: "(root)", message: "\u89C4\u5219\u6587\u4EF6\u5FC5\u987B\u662F JSON \u6570\u7EC4\uFF0C\u53C2\u8003 choice-rules.example.json\u3002" }] };
+  const rules = [];
+  raw.forEach((r, i) => {
+    const o = r;
+    const name = typeof o?.name === "string" && o.name ? o.name : `#${i + 1}`;
+    if (!o || typeof o !== "object" || typeof o.block !== "string" || typeof o.item !== "string" || !o.block || !o.item) {
+      issues.push({ rule: name, message: "\u6BCF\u6761\u89C4\u5219\u9700\u8981\u5B57\u7B26\u4E32\u5B57\u6BB5 block \u548C item\u3002" });
+      return;
+    }
+    if (o.htmlSelector !== void 0 && (typeof o.htmlSelector !== "string" || !/^[A-Za-z][\w-]*$/.test(o.htmlSelector))) {
+      issues.push({ rule: name, message: 'htmlSelector \u5FC5\u987B\u662F\u6807\u7B7E\u540D\uFF0C\u4F8B\u5982 "suot"\u3002' });
+      return;
+    }
+    rules.push({ name, block: o.block, item: o.item, htmlSelector: o.htmlSelector });
+  });
+  return { rules, issues };
+}
+function extractChoices(raw, rule) {
+  const m = rule.block.exec(raw);
+  if (!m || m[1] === void 0) return null;
+  const choices = [];
+  for (const line of m[1].split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const im = rule.item.exec(line);
+    if (im && im[1] !== void 0 && im[1].trim()) choices.push(im[1].trim());
+    else if (choices.length > 0) choices[choices.length - 1] += ` ${line.trim()}`;
+  }
+  return choices.length >= 1 && choices.length <= MAX_CHOICES ? choices : null;
+}
+var norm = (s) => s.replace(/\s+/g, "").replace(/[“”"'‘’*_~`]/g, "");
+var plain = (html) => html.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#0?39;/g, "'");
+var heads = (choices) => choices.map((c) => norm(c).slice(0, 8)).filter(Boolean);
+var OPT_PREFIX = /^\s*[（(]?(?:\d{1,2}[.、)）:：]?|[A-Za-z][.、)）:：])\s*/;
+function isOptionLine(line, hs) {
+  const l = norm(line.replace(OPT_PREFIX, ""));
+  return l !== "" && hs.some((h) => l.startsWith(h) || l.length >= 2 && h.startsWith(l));
+}
+function stripHtml(html, selector, choices) {
+  const tail = (h) => h.replace(/(?:<br\s*\/?>|\s)+$/i, "");
+  const dropEmptyTailP = (h) => h.replace(/(?:<p(?:\s[^>]*)?>\s*(?:<br\s*\/?>\s*)*<\/p>\s*)+$/i, "");
+  if (selector) {
+    const tag = selector.replace(/[^\w-]/g, "");
+    const out = html.replace(new RegExp(`(?:<|&lt;)${tag}(?:\\s[^>]*?)?(?:>|&gt;)[\\s\\S]*?(?:<|&lt;)/${tag}(?:>|&gt;)`, "gi"), "");
+    if (out !== html) return tail(dropEmptyTailP(tail(out)));
+  }
+  const hs = heads(choices);
+  const trimmed = tail(html);
+  if (hs.length === 0) return html;
+  for (const t of ["ol", "ul", "p"]) {
+    if (!new RegExp(`</${t}>$`, "i").test(trimmed)) continue;
+    const i = trimmed.toLowerCase().lastIndexOf(`<${t}`);
+    if (i < 0) continue;
+    const frag = trimmed.slice(i);
+    if (!hs.every((h) => norm(plain(frag)).includes(h))) continue;
+    if (t !== "p") return tail(trimmed.slice(0, i));
+    const open3 = /^<p(?:\s[^>]*)?>/i.exec(frag)?.[0];
+    if (!open3) continue;
+    const lines = frag.slice(open3.length, -"</p>".length).split(/<br\s*\/?>/i);
+    let removed = 0;
+    while (lines.length > 0) {
+      const line = plain(lines[lines.length - 1]);
+      if (!norm(line)) lines.pop();
+      else if (isOptionLine(line, hs)) {
+        lines.pop();
+        removed++;
+      } else break;
+    }
+    if (removed < choices.length) continue;
+    const keep2 = lines.length > 0 ? `${open3}${lines.join("<br>")}</p>` : "";
+    return tail(`${trimmed.slice(0, i)}${keep2}`);
+  }
+  return html;
+}
+function stripText(text2, rule, choices) {
+  const viaBlock = text2.replace(rule.block, "");
+  if (viaBlock !== text2) return viaBlock.replace(/\s+$/, "");
+  const hs = heads(choices);
+  const lines = text2.replace(/\s+$/, "").split("\n");
+  let removed = 0;
+  while (lines.length > 0) {
+    const line = lines[lines.length - 1];
+    if (!norm(line)) lines.pop();
+    else if (isOptionLine(line, hs)) {
+      lines.pop();
+      removed++;
+    } else break;
+  }
+  return removed >= choices.length ? lines.join("\n").replace(/\s+$/, "") : text2;
+}
+function parseChoices(raw, html, text2, rules) {
+  if (!raw) return null;
+  for (const rule of rules) {
+    const choices = extractChoices(raw, rule);
+    if (!choices) continue;
+    return { rule: rule.name, choices, text: stripText(text2, rule, choices), html: stripHtml(html, rule.htmlSelector, choices) };
+  }
+  return null;
+}
+var encodeChoiceCallback = (token, n) => `o|${token}|${n}`;
+function decodeChoiceCallback(data) {
+  const m = /^o\|([0-9a-f]{1,16})\|(\d{1,2})$/.exec(data ?? "");
+  return m ? { token: m[1], n: Number(m[2]) } : null;
+}
+var LINE_MAX = 300;
+function choicesText(choices) {
+  const cps = (s) => {
+    const a2 = Array.from(s);
+    return a2.length > LINE_MAX ? `${a2.slice(0, LINE_MAX - 1).join("")}\u2026` : s;
+  };
+  return `\u884C\u52A8\u9009\u9879\uFF08\u70B9\u4E0B\u9762\u7684\u6570\u5B57\u9009\u62E9\uFF09
+
+${choices.map((c, i) => `${i + 1}. ${cps(c)}`).join("\n")}`;
+}
+function choicesKeyboard(token, count) {
+  const rows = [];
+  for (let i = 0; i < count; i += 4) {
+    rows.push(Array.from({ length: Math.min(4, count - i) }, (_2, k) => ({ text: String(i + k + 1), callback_data: encodeChoiceCallback(token, i + k) })));
+  }
+  return rows;
+}
+var ChoiceRuleStore = class {
+  constructor(file, log) {
+    this.file = file;
+    this.log = log;
+    this.cached = compileRules(DEFAULT_RULES).rules;
+  }
+  file;
+  log;
+  cached;
+  mtime = -1;
+  warned = "";
+  get() {
+    if (!this.file) return this.cached;
+    let mtime;
+    try {
+      mtime = statSync(this.file).mtimeMs;
+    } catch {
+      mtime = 0;
+    }
+    if (mtime === this.mtime) return this.cached;
+    this.mtime = mtime;
+    const issues = [];
+    let user = [];
+    if (mtime > 0) {
+      try {
+        const v2 = validateRules(JSON.parse(readFileSync(this.file, "utf8")));
+        user = v2.rules;
+        issues.push(...v2.issues);
+      } catch (e) {
+        issues.push({ rule: "(file)", message: `${this.file} \u65E0\u6CD5\u8BFB\u53D6\u6216\u4E0D\u662F\u5408\u6CD5\u7684 JSON\uFF1A${e.message.slice(0, 120)}` });
+      }
+    }
+    const c = compileRules([...user, ...DEFAULT_RULES]);
+    issues.push(...c.issues);
+    this.cached = c.rules;
+    const sig = JSON.stringify(issues);
+    if (issues.length > 0 && sig !== this.warned) for (const i of issues) this.log.warn(`\u9009\u9879\u89C4\u5219 [${i.rule}]\uFF1A${i.message}`);
+    this.warned = sig;
+    return this.cached;
+  }
+};
 
 // node_modules/.pnpm/entities@8.1.0/node_modules/entities/dist/decode-codepoint.js
 var c1 = [
@@ -88442,6 +88642,10 @@ var TelegramClient = class {
   answerCallbackQuery(params, opts) {
     return this.call("answerCallbackQuery", params, opts);
   }
+  /** 注册命令菜单（用户在输入框输入 / 时显示）。 */
+  setMyCommands(commands, opts) {
+    return this.call("setMyCommands", { commands }, opts);
+  }
 };
 async function pollUpdates(opts) {
   const { client, onUpdate, signal, log } = opts;
@@ -88490,10 +88694,33 @@ var HELP_TEXT = [
   "/regen \u91CD\u65B0\u751F\u6210\u4E0A\u4E00\u6761\u56DE\u590D",
   "/chars \u9009\u62E9\u89D2\u8272",
   "/chats \u9009\u62E9\u5F53\u524D\u89D2\u8272\u7684\u804A\u5929",
+  "/preset \u5207\u6362\u9884\u8BBE",
   "/new \u4E3A\u5F53\u524D\u89D2\u8272\u65B0\u5EFA\u804A\u5929",
+  "/menu \u6253\u5F00\u4E3B\u83DC\u5355\uFF08\u89D2\u8272\u3001\u804A\u5929\u3001\u9884\u8BBE\u7B49\u4E00\u952E\u5165\u53E3\uFF09",
   "/status \u67E5\u770B\u65E0\u5934\u6D4F\u89C8\u5668\u3001ST \u9875\u9762\u548C\u5F53\u524D\u89D2\u8272",
   "/help \u663E\u793A\u8FD9\u6BB5\u8BF4\u660E"
 ].join("\n");
+var BOT_COMMANDS = [
+  { command: "menu", description: "\u4E3B\u83DC\u5355\uFF1A\u89D2\u8272\u3001\u804A\u5929\u3001\u9884\u8BBE\u7B49\u4E00\u952E\u5165\u53E3" },
+  { command: "chars", description: "\u9009\u62E9\u89D2\u8272" },
+  { command: "chats", description: "\u9009\u62E9\u5F53\u524D\u89D2\u8272\u7684\u804A\u5929" },
+  { command: "preset", description: "\u5207\u6362\u9884\u8BBE" },
+  { command: "new", description: "\u4E3A\u5F53\u524D\u89D2\u8272\u65B0\u5EFA\u804A\u5929" },
+  { command: "regen", description: "\u91CD\u65B0\u751F\u6210\u4E0A\u4E00\u6761\u56DE\u590D" },
+  { command: "stop", description: "\u505C\u6B62\u751F\u6210" },
+  { command: "status", description: "\u67E5\u770B\u8FD0\u884C\u72B6\u6001" },
+  { command: "help", description: "\u663E\u793A\u547D\u4EE4\u8BF4\u660E" }
+];
+var MENU_ACTIONS = ["chars", "chats", "preset", "new", "regen", "status"];
+var MENU_LABELS = { chars: "\u89D2\u8272", chats: "\u804A\u5929", preset: "\u9884\u8BBE", new: "\u65B0\u5EFA\u804A\u5929", regen: "\u91CD\u65B0\u751F\u6210", status: "\u72B6\u6001" };
+function menuKeyboard() {
+  const btn = (a2) => ({ text: MENU_LABELS[a2], callback_data: `m|${a2}` });
+  return [[btn("chars"), btn("chats"), btn("preset")], [btn("new"), btn("regen"), btn("status")]];
+}
+function decodeMenuCallback(data) {
+  const m = /^m\|([a-z]+)$/.exec(data ?? "");
+  return m && MENU_ACTIONS.includes(m[1]) ? m[1] : null;
+}
 var BUSY_TEXT = "\u4E0A\u4E00\u6761\u6D88\u606F\u8FD8\u5728\u751F\u6210\u56DE\u590D\uFF0C\u8BF7\u7B49\u5B83\u5B8C\u6210\u540E\u518D\u53D1\u3002\u8FD9\u6761\u6D88\u606F\u6CA1\u6709\u53D1\u9001\u7ED9\u89D2\u8272\u3002";
 var BUSY_COMMAND_TEXT = "\u6B63\u5728\u751F\u6210\u56DE\u590D\u6216\u5207\u6362\u4E2D\uFF0C\u8BF7\u7B49\u5B83\u5B8C\u6210\uFF08\u6216\u5148 /stop\uFF09\u518D\u6267\u884C\u8FD9\u4E2A\u547D\u4EE4\u3002";
 var COLD_START_TEXT = "\u6B63\u5728\u542F\u52A8\u65E0\u5934\u6D4F\u89C8\u5668\uFF0C\u7A0D\u5019\u2026";
@@ -88520,6 +88747,9 @@ var Bot = class {
   nextDraftId = randomInt(1, 1e9);
   draftsDisabled = false;
   lists = /* @__PURE__ */ new Map();
+  /** 最新一条回复的行动选项；新消息、重新生成、切换角色/聊天后作废。 */
+  choiceSet = null;
+  defaultRules = compileRules(DEFAULT_RULES).rules;
   sessionKey;
   sessionPromise = Promise.resolve();
   now;
@@ -88583,8 +88813,11 @@ var Bot = class {
         return;
       case "stop":
         return this.requestStop(chatId, "command");
+      case "menu":
+        await this.sendMenu(chatId);
+        return;
     }
-    if (!["regen", "chars", "chats", "new"].includes(name)) {
+    if (!["regen", "chars", "chats", "preset", "new"].includes(name)) {
       await this.reply(chatId, `\u672A\u77E5\u547D\u4EE4 /${name}\uFF0C\u53D1 /help \u67E5\u770B\u53EF\u7528\u547D\u4EE4\u3002`);
       return;
     }
@@ -88602,16 +88835,33 @@ var Bot = class {
       this.startTurn(chatId, { kind: "regenerate", previous });
       return;
     }
-    if (name === "chars" || name === "chats") {
-      await this.withHost(chatId, `/${name}`, () => this.sendList(chatId, name));
+    if (name === "chars" || name === "chats" || name === "preset") {
+      const kind = name === "preset" ? "presets" : name;
+      await this.withHost(chatId, `/${name}`, () => this.sendList(chatId, kind));
       return;
     }
     await this.withHost(chatId, "/new", async () => {
+      this.choiceSet = null;
       const r = await this.opts.host.request({ type: "newChat" }, this.opts.switchRpcTimeoutMs ?? 9e4);
       this.saveSession(r);
       this.opts.log.info("/new\uFF1A\u5DF2\u65B0\u5EFA\u804A\u5929");
       await this.reply(chatId, `\u5DF2\u65B0\u5EFA\u804A\u5929\uFF1A${r.chatId ?? "\uFF08\u672A\u77E5\uFF09"}\u3002\u4E4B\u540E\u7684\u6D88\u606F\u4F1A\u53D1\u5230\u8FD9\u4E2A\u804A\u5929\u3002`);
+      await this.sendGreeting(chatId, r, r.greeting);
     });
+  }
+  /** 主菜单：一行“角色 · 聊天 · 预设”速览加按钮。不唤醒浏览器，页面没连上时只有标题。 */
+  async sendMenu(chatId) {
+    const { host } = this.opts;
+    let summary = "";
+    if (host.connected) {
+      try {
+        const st = await host.request({ type: "getStatus" }, 5e3);
+        summary = [st.characterName, st.chatId, st.presetName].filter(Boolean).join(" \xB7 ");
+      } catch {
+      }
+    }
+    await this.reply(chatId, summary ? `\u4E3B\u83DC\u5355
+${summary}` : "\u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard: menuKeyboard() } });
   }
   async reply(chatId, text2, extra = {}) {
     try {
@@ -88672,26 +88922,75 @@ var Bot = class {
     const { host, log } = this.opts;
     const timeout2 = this.opts.switchRpcTimeoutMs ?? 9e4;
     const st = await host.request({ type: "getStatus" }, 1e4);
-    const items = kind === "chars" ? await host.request({ type: "listCharacters" }, timeout2) : await host.request({ type: "listChats" }, timeout2);
-    const listing = { kind, items, current: kind === "chars" ? st.characterAvatar : st.chatId, createdAt: this.now() };
+    let items;
+    let current;
+    if (kind === "chars") {
+      items = await host.request({ type: "listCharacters" }, timeout2);
+      current = st.characterAvatar;
+    } else if (kind === "chats") {
+      items = await host.request({ type: "listChats" }, timeout2);
+      current = st.chatId;
+    } else {
+      const r = await host.request({ type: "listPresets" }, timeout2);
+      items = r.presets;
+      current = r.current;
+    }
+    const listing = { kind, items, current, createdAt: this.now() };
     const token = randomBytes(4).toString("hex");
     this.lists.set(token, listing);
     while (this.lists.size > MAX_LISTINGS) this.lists.delete(this.lists.keys().next().value);
     log.info(`/${kind}\uFF1A\u5217\u51FA ${items.length} \u9879`);
-    const currentIndex = kind === "chars" ? items.findIndex((c) => c.avatar === listing.current) : 0;
+    const currentIndex = kind === "chars" ? items.findIndex((c) => c.avatar === listing.current) : kind === "presets" ? items.indexOf(listing.current ?? "") : 0;
     const page = currentIndex > 0 ? Math.floor(currentIndex / PAGE_SIZE) : 0;
     await this.reply(chatId, listTitle(listing, page), { reply_markup: { inline_keyboard: listKeyboard(listing, token, page) } });
+  }
+  async handleChoice(q2, token, n, answer) {
+    const { telegram, log } = this.opts;
+    const set = this.choiceSet;
+    const item = set && set.token === token ? set.items[n] : void 0;
+    if (!set || item === void 0) {
+      await answer("\u8FD9\u7EC4\u9009\u9879\u5DF2\u8FC7\u671F\uFF08\u53EA\u6709\u6700\u65B0\u4E00\u6761\u56DE\u590D\u7684\u9009\u9879\u6709\u6548\uFF09");
+      return;
+    }
+    if (this.busy) {
+      await answer("\u6B63\u5728\u751F\u6210\u56DE\u590D\u6216\u5207\u6362\u4E2D\uFF0C\u7A0D\u540E\u518D\u8BD5");
+      return;
+    }
+    await answer();
+    if (this.choiceSet !== set) return;
+    const chatId = q2.message?.chat.id ?? q2.from.id;
+    if (this.busy) {
+      await this.reply(chatId, BUSY_COMMAND_TEXT);
+      return;
+    }
+    log.info(`\u9009\u62E9\u884C\u52A8\u9009\u9879 ${n + 1}/${set.items.length}`);
+    this.startTurn(chatId, { kind: "send", text: item });
+    if (q2.message) {
+      const text2 = `\u5DF2\u9009\u62E9 ${n + 1}\uFF1A${item.length > 200 ? `${item.slice(0, 199)}\u2026` : item}`;
+      await telegram.editMessageText({ chat_id: chatId, message_id: q2.message.message_id, text: text2 }).catch((e) => log.debug(`\u66F4\u65B0\u9009\u9879\u6D88\u606F\u5931\u8D25\uFF1A${errMsg(e)}`));
+    }
   }
   async handleCallback(q2) {
     const { telegram, log } = this.opts;
     const answer = (text2) => telegram.answerCallbackQuery({ callback_query_id: q2.id, text: text2 }).catch(() => void 0);
+    const menu = decodeMenuCallback(q2.data);
+    if (menu) {
+      await answer();
+      await this.handleCommand(q2.message?.chat.id ?? q2.from.id, menu);
+      return;
+    }
+    const choice = decodeChoiceCallback(q2.data);
+    if (choice) {
+      await this.handleChoice(q2, choice.token, choice.n, answer);
+      return;
+    }
     const action = decodeCallback(q2.data);
     const chatId = q2.message?.chat.id ?? q2.from.id;
     const messageId = q2.message?.message_id;
     log.info(`\u6536\u5230\u6309\u94AE ${action ? `${action.kind}/${action.op}` : "\uFF08\u65E0\u6CD5\u8BC6\u522B\uFF09"}`);
     const listing = action ? this.lists.get(action.token) : void 0;
     if (!action || !listing || listing.kind !== action.kind) {
-      await answer("\u8FD9\u4E2A\u5217\u8868\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u53D1\u9001 /chars \u6216 /chats");
+      await answer("\u8FD9\u4E2A\u5217\u8868\u5DF2\u8FC7\u671F\uFF0C\u8BF7\u91CD\u65B0\u53D1\u9001 /chars\u3001/chats \u6216 /preset");
       return;
     }
     if (action.op === "page") {
@@ -88711,20 +89010,56 @@ var Bot = class {
       return;
     }
     await answer("\u6B63\u5728\u5207\u6362\u2026");
-    await this.withHost(chatId, action.kind === "chars" ? "\u5207\u6362\u89D2\u8272" : "\u5207\u6362\u804A\u5929", async () => {
-      const r = action.kind === "chars" ? await this.opts.host.request({ type: "selectCharacter", characterId: item.avatar }, this.opts.switchRpcTimeoutMs ?? 9e4) : await this.opts.host.request({ type: "openChat", fileName: item.fileName }, this.opts.switchRpcTimeoutMs ?? 9e4);
-      this.saveSession(r);
-      this.lists.delete(action.token);
-      log.info(`${action.kind === "chars" ? "\u5207\u6362\u89D2\u8272" : "\u5207\u6362\u804A\u5929"}\uFF1A\u6210\u529F`);
-      const text2 = `\u5DF2\u5207\u6362\u5230\u89D2\u8272\uFF1A${r.characterName ?? "\uFF08\u672A\u77E5\uFF09"}
+    const timeout2 = this.opts.switchRpcTimeoutMs ?? 9e4;
+    const label = action.kind === "chars" ? "\u5207\u6362\u89D2\u8272" : action.kind === "chats" ? "\u5207\u6362\u804A\u5929" : "\u5207\u6362\u9884\u8BBE";
+    await this.withHost(chatId, label, async () => {
+      let text2;
+      let greeting;
+      let switched;
+      if (action.kind !== "presets") this.choiceSet = null;
+      if (action.kind === "presets") {
+        const r = await this.opts.host.request({ type: "selectPreset", name: item }, timeout2);
+        text2 = `\u5DF2\u5207\u6362\u5230\u9884\u8BBE\uFF1A${r.presetName}
+\u4E4B\u540E\u7684\u56DE\u590D\u4F7F\u7528\u8FD9\u4E2A\u9884\u8BBE\u3002`;
+      } else {
+        const r = action.kind === "chars" ? await this.opts.host.request({ type: "selectCharacter", characterId: item.avatar }, timeout2) : await this.opts.host.request({ type: "openChat", fileName: item.fileName }, timeout2);
+        this.saveSession(r);
+        switched = r;
+        greeting = r.greeting;
+        text2 = `\u5DF2\u5207\u6362\u5230\u89D2\u8272\uFF1A${r.characterName ?? "\uFF08\u672A\u77E5\uFF09"}
 \u5F53\u524D\u804A\u5929\uFF1A${r.chatId ?? "\uFF08\u672A\u77E5\uFF09"}
 \u4E4B\u540E\u7684\u6D88\u606F\u4F1A\u53D1\u5230\u8FD9\u4E2A\u804A\u5929\u3002`;
+      }
+      this.lists.delete(action.token);
+      log.info(`${label}\uFF1A\u6210\u529F`);
       if (messageId !== void 0) {
         await telegram.editMessageText({ chat_id: chatId, message_id: messageId, text: text2 }).catch(() => this.reply(chatId, text2));
       } else {
         await this.reply(chatId, text2);
       }
+      if (switched) await this.sendGreeting(chatId, switched, greeting);
     });
+  }
+  /** 行动选项：一条带数字按钮的消息，列出完整选项。 */
+  async sendChoices(chatId, choices) {
+    const token = randomBytes(4).toString("hex");
+    this.choiceSet = { token, items: choices };
+    const m = await this.reply(chatId, choicesText(choices), { reply_markup: { inline_keyboard: choicesKeyboard(token, choices.length) } });
+    if (!m) this.choiceSet = null;
+  }
+  /** 新聊天只有开场白时，把开场白作为正式消息发出；同一聊天只发一次。 */
+  async sendGreeting(chatId, r, greeting) {
+    if (!greeting || !r.chatId || !this.opts.store.markGreeted(r.chatId)) return;
+    const sent = await deliverFinal({
+      telegram: this.opts.telegram,
+      log: this.opts.log,
+      chatId,
+      html: greeting.html,
+      text: greeting.text,
+      stopped: false,
+      dialogueStyle: this.opts.dialogueStyle
+    });
+    this.opts.log.info(`\u5F00\u573A\u767D\uFF1A\u5DF2\u53D1\u9001 ${sent.messageIds.length} \u6761`);
   }
   // ───────────── 停止 ─────────────
   async requestStop(chatId, source2) {
@@ -88776,6 +89111,7 @@ var Bot = class {
         const st = await host.request({ type: "getStatus" }, 5e3);
         lines.push(`\u5F53\u524D\u89D2\u8272\uFF1A${st.characterName ?? "\u672A\u9009\u62E9"}`);
         lines.push(`\u5F53\u524D\u804A\u5929\uFF1A${st.chatId ?? "\u65E0"}${st.messageCount !== void 0 ? `\uFF08${st.messageCount} \u6761\u6D88\u606F\uFF09` : ""}`);
+        if (st.presetName) lines.push(`\u9884\u8BBE\uFF1A${st.presetName}`);
         lines.push(`API\uFF1A${st.mainApi ?? "\u672A\u77E5"}\uFF08${st.onlineStatus && st.onlineStatus !== "no_connection" ? "\u5DF2\u8FDE\u63A5" : "\u672A\u8FDE\u63A5"}\uFF09`);
         if (st.generating) lines.push("\u6B63\u5728\u751F\u6210\u56DE\u590D");
         if (st.formDuplicates?.length) lines.push(`\u8B66\u544A\uFF1AST \u89D2\u8272\u7F16\u8F91\u8868\u5355\u6709\u91CD\u590D\u5B57\u6BB5\uFF08${st.formDuplicates.slice(0, 6).join("\u3001")}\uFF09\uFF0C/chats \u548C /new \u5DF2\u6682\u505C\uFF0C\u91CD\u542F ST \u53EF\u6062\u590D`);
@@ -88796,6 +89132,7 @@ var Bot = class {
   }
   // ───────────── 生成 ─────────────
   startTurn(chatId, request3) {
+    this.choiceSet = null;
     const turn = {
       chatId,
       generationId: randomUUID(),
@@ -88900,7 +89237,7 @@ var Bot = class {
       bump();
       if (e.type === "streamText") onStream(e.text);
       else if (e.type === "messageFinal")
-        resolveResult({ kind: "final", html: e.html, text: e.text, stopped: e.stopped, stChatId: e.chatId, stMessageId: e.messageId });
+        resolveResult({ kind: "final", html: e.html, text: e.text, raw: e.raw, stopped: e.stopped, stChatId: e.chatId, stMessageId: e.messageId });
       else if (e.type === "generationStopped") resolveResult({ kind: "stopped" });
       else if (e.type === "generationFailed") resolveResult({ kind: "failed", reason: e.reason ?? "\u672A\u77E5\u539F\u56E0" });
     });
@@ -88956,7 +89293,17 @@ var Bot = class {
       switch (r.kind) {
         case "final": {
           log.info(`\u751F\u6210${r.stopped ? "\u5DF2\u505C\u6B62\uFF08\u4FDD\u7559\u5DF2\u751F\u6210\u90E8\u5206\uFF09" : "\u5B8C\u6210"} gen=${gen} \u7528\u65F6 ${secs} \u79D2\uFF0C\u56DE\u590D ${r.text.length} \u5B57\u7B26\uFF0C\u8349\u7A3F ${draftCount} \u6B21`);
-          const sent = await deliverFinal({ telegram, log, chatId, html: r.html, text: r.text, stopped: r.stopped, dialogueStyle: this.opts.dialogueStyle });
+          const parsed = r.stopped ? null : parseChoices(r.raw, r.html, r.text, (this.opts.choiceRules ?? (() => this.defaultRules))());
+          if (parsed) log.info(`\u89E3\u6790\u5230\u884C\u52A8\u9009\u9879 ${parsed.choices.length} \u4E2A\uFF08\u89C4\u5219 ${parsed.rule}\uFF09`);
+          const sent = await deliverFinal({
+            telegram,
+            log,
+            chatId,
+            html: parsed?.html ?? r.html,
+            text: parsed?.text ?? r.text,
+            stopped: r.stopped,
+            dialogueStyle: this.opts.dialogueStyle
+          });
           log.info(`\u6B63\u5F0F\u6D88\u606F\u5DF2\u53D1\u51FA ${sent.messageIds.length} \u6BB5\uFF0C\u65B9\u5F0F=${sent.via}${sent.via === "plain" || sent.via === "text" || sent.via === "mixed" ? "\uFF08\u56DE\u9000\u4E86\u7EAF\u6587\u672C\uFF09" : ""}${sent.incomplete ? "\uFF0C\u6709\u5185\u5BB9\u672A\u53D1\u51FA" : ""}`);
           if (sent.incomplete) await this.reply(chatId, "\u56DE\u590D\u7684\u4E00\u90E8\u5206\u6CA1\u80FD\u53D1\u51FA\uFF0C\u5B8C\u6574\u5185\u5BB9\u4FDD\u5B58\u5728 ST \u804A\u5929\u8BB0\u5F55\u4E2D\u3002");
           if (sent.messageIds.length > 0) {
@@ -88967,6 +89314,7 @@ var Bot = class {
             } catch (e) {
               log.error(`onDelivered \u56DE\u8C03\u51FA\u9519\uFF1A${errMsg(e)}`);
             }
+            if (parsed) await this.sendChoices(chatId, parsed.choices);
           }
           break;
         }
@@ -89334,9 +89682,10 @@ var BrowserManager = class {
 };
 
 // src/server/message-map.ts
-import { mkdirSync, readFileSync, renameSync, writeFileSync } from "node:fs";
+import { mkdirSync, readFileSync as readFileSync2, renameSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 var MAX_REPLIES = 100;
+var MAX_GREETED = 200;
 var isNum = (v2) => typeof v2 === "number" && Number.isFinite(v2);
 function decodeReply(v2) {
   if (typeof v2 !== "object" || v2 === null) return null;
@@ -89369,6 +89718,7 @@ var BridgeStore = class {
   log;
   replies = [];
   sessionValue;
+  greeted = [];
   get session() {
     return this.sessionValue;
   }
@@ -89388,6 +89738,14 @@ var BridgeStore = class {
     this.replies = this.replies.filter((x2) => x2 !== r);
     this.save();
   }
+  /** 标记这个聊天已发过开场白。第一次标记返回 true，之后返回 false。 */
+  markGreeted(stChatId) {
+    if (this.greeted.includes(stChatId)) return false;
+    this.greeted.push(stChatId);
+    if (this.greeted.length > MAX_GREETED) this.greeted = this.greeted.slice(-MAX_GREETED);
+    this.save();
+    return true;
+  }
   setSession(s) {
     this.sessionValue = decodeSession(s);
     this.save();
@@ -89395,7 +89753,7 @@ var BridgeStore = class {
   load() {
     let text2;
     try {
-      text2 = readFileSync(this.file, "utf8");
+      text2 = readFileSync2(this.file, "utf8");
     } catch (e) {
       if (e.code !== "ENOENT") this.log.warn(`\u8BFB\u53D6 ${this.file} \u5931\u8D25\uFF0C\u6D88\u606F\u6620\u5C04\u4ECE\u7A7A\u5F00\u59CB\uFF1A${e.message}`);
       return;
@@ -89404,12 +89762,13 @@ var BridgeStore = class {
       const j2 = JSON.parse(text2);
       this.replies = Array.isArray(j2.replies) ? j2.replies.map(decodeReply).filter((r) => r !== null) : [];
       this.sessionValue = decodeSession(j2.session);
+      this.greeted = Array.isArray(j2.greeted) ? j2.greeted.filter((x2) => typeof x2 === "string") : [];
     } catch {
       this.log.warn(`${this.file} \u4E0D\u662F\u5408\u6CD5\u7684 JSON\uFF0C\u6D88\u606F\u6620\u5C04\u4ECE\u7A7A\u5F00\u59CB\uFF08\u539F\u6587\u4EF6\u4F1A\u5728\u4E0B\u6B21\u5199\u5165\u65F6\u88AB\u8986\u76D6\uFF09`);
     }
   }
   save() {
-    const data = { version: 1, replies: this.replies, session: this.sessionValue };
+    const data = { version: 1, replies: this.replies, session: this.sessionValue, greeted: this.greeted };
     try {
       mkdirSync(dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;
@@ -91073,8 +91432,13 @@ function attachBridge(rt, opts = {}) {
     missingHint: status.chromium.hint,
     stBaseUrl: config2.stBaseUrl,
     basicAuth: config2.basicAuth,
-    lowMemory: config2.lowMemory,
-    idleShutdownMs: config2.idleShutdownMinutes * 6e4,
+    // 配置面板保存后热生效，所以用 getter 每次读最新值
+    get lowMemory() {
+      return config2.lowMemory;
+    },
+    get idleShutdownMs() {
+      return config2.idleShutdownMinutes * 6e4;
+    },
     testSkipCsrfPatch: process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === "1"
   });
   if (process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === "1") log.warn("SILLY_TG_TEST_SKIP_CSRF_PATCH=1\uFF1A\u9875\u9762\u4E0D\u5B89\u88C5 CSRF \u8865\u4E01\uFF08\u4EC5\u7528\u4E8E\u6D4B\u8BD5\uFF09\u3002");
@@ -91085,6 +91449,7 @@ function attachBridge(rt, opts = {}) {
     }
   };
   const watchdog = new Watchdog({ browser, host: channel, log, notify });
+  const choiceRules = new ChoiceRuleStore(join6(dirname6(rt.configPath), "choice-rules.json"), log);
   const bot = new Bot({
     telegram,
     host: channel,
@@ -91092,11 +91457,19 @@ function attachBridge(rt, opts = {}) {
     store,
     status,
     log,
-    idleShutdownMinutes: config2.idleShutdownMinutes,
-    dialogueStyle: config2.dialogueStyle,
-    watchdogStatus: () => watchdog.status()
+    get idleShutdownMinutes() {
+      return config2.idleShutdownMinutes;
+    },
+    get dialogueStyle() {
+      return config2.dialogueStyle;
+    },
+    watchdogStatus: () => watchdog.status(),
+    choiceRules: () => choiceRules.get()
   });
   rt.setUpdateHandler((u) => bot.handleUpdate(u));
+  if (process.env.SILLY_TG_OFFLINE !== "1") {
+    telegram.setMyCommands([...BOT_COMMANDS]).catch((e) => log.warn(`\u6CE8\u518C\u547D\u4EE4\u83DC\u5355\u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u4F7F\u7528\uFF09\uFF1A${e.message}`));
+  }
   rt.onShutdown(() => browser.dispose());
   rt.onShutdown(() => watchdog.dispose());
   if (status.chromium.path) {
@@ -91172,7 +91545,7 @@ function findChromium(configured, env2 = defaultEnv()) {
 }
 
 // src/server/config.ts
-import { readFileSync as readFileSync6 } from "node:fs";
+import { readFileSync as readFileSync7 } from "node:fs";
 var KNOWN_KEYS = /* @__PURE__ */ new Set([
   "botToken",
   "allowedUserIds",
@@ -91318,7 +91691,7 @@ function validateConfig(raw, source2 = "config.json") {
     config: { botToken, allowedUserIds, stBaseUrl, telegramProxy, chromiumPath, basicAuth, miniAppPort, publicBaseUrl, idleShutdownMinutes, lowMemory, dialogueStyle, logLevel, telegramApiBase }
   };
 }
-function loadConfigFile(path14, read = (p) => readFileSync6(p, "utf8")) {
+function loadConfigFile(path14, read = (p) => readFileSync7(p, "utf8")) {
   let text2;
   try {
     text2 = read(path14);
@@ -91410,13 +91783,14 @@ function decodeHostEvent(v2) {
     case "streamText":
       return isStr(v2.generationId) && isStr(v2.text) ? { type: "streamText", generationId: v2.generationId, text: v2.text } : null;
     case "messageFinal":
-      return isStr(v2.generationId) && isStr(v2.chatId) && typeof v2.messageId === "number" && isStr(v2.html) && isStr(v2.text) && typeof v2.stopped === "boolean" && Array.isArray(v2.cards) && v2.cards.every(isCardSource) ? {
+      return isStr(v2.generationId) && isStr(v2.chatId) && typeof v2.messageId === "number" && isStr(v2.html) && isStr(v2.text) && isOptStr(v2.raw) && typeof v2.stopped === "boolean" && Array.isArray(v2.cards) && v2.cards.every(isCardSource) ? {
         type: "messageFinal",
         generationId: v2.generationId,
         chatId: v2.chatId,
         messageId: v2.messageId,
         html: v2.html,
         text: v2.text,
+        raw: typeof v2.raw === "string" ? v2.raw : void 0,
         stopped: v2.stopped,
         cards: v2.cards.map((c) => ({ source: c.source }))
       } : null;
@@ -91626,12 +92000,213 @@ function createFetch(proxyUrl) {
   return (input2, init2) => (0, import_undici.fetch)(input2, { ...init2, dispatcher });
 }
 
+// src/server/settings-api.ts
+import { chmodSync, existsSync as existsSync4, mkdirSync as mkdirSync2, readFileSync as readFileSync8, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { dirname as dirname7 } from "node:path";
+var MASK = "********";
+var HOT_FIELDS = ["dialogueStyle", "logLevel", "idleShutdownMinutes", "lowMemory"];
+var RESTART_FIELDS = ["botToken", "allowedUserIds", "telegramProxy", "basicAuth", "stBaseUrl"];
+var MANAGED_FIELDS = [...RESTART_FIELDS, ...HOT_FIELDS];
+var FIELD_EFFECTS = {
+  ...Object.fromEntries(HOT_FIELDS.map((f) => [f, "hot"])),
+  ...Object.fromEntries(RESTART_FIELDS.map((f) => [f, "restart"]))
+  // lowMemory 的新值在下次启动 Chromium 时才会用上，界面上单独说明
+};
+var isRecord3 = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
+function maskProxy(url) {
+  try {
+    const u = new URL(url);
+    if (!u.password) return url;
+    u.password = MASK;
+    return url.endsWith("/") ? u.toString() : u.toString().replace(/\/$/, "");
+  } catch {
+    return url;
+  }
+}
+function viewSettings(raw, exists) {
+  const ba = raw.basicAuth;
+  return {
+    exists,
+    values: {
+      botToken: { set: typeof raw.botToken === "string" && raw.botToken.trim() !== "" },
+      allowedUserIds: Array.isArray(raw.allowedUserIds) ? raw.allowedUserIds.filter((x2) => typeof x2 === "number") : [],
+      telegramProxy: typeof raw.telegramProxy === "string" ? maskProxy(raw.telegramProxy) : "",
+      stBaseUrl: typeof raw.stBaseUrl === "string" && raw.stBaseUrl ? raw.stBaseUrl : "http://127.0.0.1:8000",
+      basicAuth: isRecord3(ba) && typeof ba.username === "string" ? { username: ba.username, passwordSet: typeof ba.password === "string" && ba.password !== "" } : null,
+      idleShutdownMinutes: typeof raw.idleShutdownMinutes === "number" ? raw.idleShutdownMinutes : 0,
+      lowMemory: typeof raw.lowMemory === "boolean" ? raw.lowMemory : true,
+      dialogueStyle: typeof raw.dialogueStyle === "string" && raw.dialogueStyle ? raw.dialogueStyle : "bold",
+      logLevel: typeof raw.logLevel === "string" && raw.logLevel ? raw.logLevel : "info"
+    }
+  };
+}
+var same = (a2, b2) => JSON.stringify(a2 ?? null) === JSON.stringify(b2 ?? null);
+var keep = (v2) => v2 === void 0 || v2 === "" || v2 === MASK;
+function applySettings(existing, patch) {
+  if (!isRecord3(patch)) return { ok: false, errors: [{ field: "(root)", message: "\u63D0\u4EA4\u7684\u5185\u5BB9\u4E0D\u662F\u5BF9\u8C61\u3002" }] };
+  const next = { ...existing };
+  for (const key of MANAGED_FIELDS) {
+    if (!(key in patch)) continue;
+    const v2 = patch[key];
+    switch (key) {
+      case "botToken":
+        if (!keep(v2)) next.botToken = typeof v2 === "string" ? v2.trim() : v2;
+        break;
+      case "telegramProxy":
+        if (typeof v2 === "string" && v2 === maskProxy(String(existing.telegramProxy ?? ""))) break;
+        if (typeof v2 === "string" && v2.includes(MASK)) {
+          const old = typeof existing.telegramProxy === "string" ? safeUrl2(existing.telegramProxy) : null;
+          const cur = safeUrl2(v2.replace(MASK, "x"));
+          if (old?.password && cur) {
+            cur.password = old.password;
+            next.telegramProxy = v2.endsWith("/") ? cur.toString() : cur.toString().replace(/\/$/, "");
+            break;
+          }
+        }
+        next.telegramProxy = typeof v2 === "string" ? v2.trim() : v2;
+        break;
+      case "basicAuth": {
+        if (v2 === null) {
+          next.basicAuth = null;
+          break;
+        }
+        if (!isRecord3(v2)) {
+          next.basicAuth = v2;
+          break;
+        }
+        const old = isRecord3(existing.basicAuth) ? existing.basicAuth : {};
+        const password = keep(v2.password) ? typeof old.password === "string" ? old.password : "" : v2.password;
+        next.basicAuth = { username: v2.username, password };
+        break;
+      }
+      default:
+        next[key] = v2;
+    }
+  }
+  const result = validateConfig(next, "config.json");
+  if (!result.ok) return { ok: false, errors: result.errors };
+  const changed = MANAGED_FIELDS.filter((k) => !same(existing[k], next[k]));
+  return {
+    ok: true,
+    raw: next,
+    config: result.config,
+    changed,
+    hot: changed.filter((k) => FIELD_EFFECTS[k] === "hot"),
+    restart: changed.filter((k) => FIELD_EFFECTS[k] === "restart"),
+    warnings: result.warnings
+  };
+}
+function safeUrl2(s) {
+  try {
+    return new URL(s);
+  } catch {
+    return null;
+  }
+}
+function readRawConfig(path14) {
+  if (!existsSync4(path14)) return { raw: {}, exists: false };
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync8(path14, "utf8"));
+  } catch {
+    throw new Error("config.json \u4E0D\u662F\u5408\u6CD5\u7684 JSON\uFF0C\u8BF7\u5148\u624B\u52A8\u4FEE\u6B63\uFF08\u9762\u677F\u4E0D\u4F1A\u8986\u76D6\u5B83\uFF09\u3002");
+  }
+  if (!isRecord3(parsed)) throw new Error("config.json \u7684\u5185\u5BB9\u5FC5\u987B\u662F JSON \u5BF9\u8C61\u3002");
+  return { raw: parsed, exists: true };
+}
+function writeRawConfig(path14, raw) {
+  mkdirSync2(dirname7(path14), { recursive: true });
+  const tmp = `${path14}.tmp`;
+  writeFileSync2(tmp, `${JSON.stringify(raw, null, 2)}
+`, { mode: 384 });
+  try {
+    chmodSync(tmp, 384);
+  } catch {
+  }
+  renameSync2(tmp, path14);
+}
+function isAdmin(req) {
+  const user = req.user;
+  return !user || user.profile?.admin === true;
+}
+function registerSettingsRoutes(router, opts) {
+  const { configPath, log } = opts;
+  const fail = (res, status, error) => void res.status(status).json({ ok: false, error });
+  router.get("/config", (req, res) => {
+    if (!isAdmin(req)) {
+      fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
+      return;
+    }
+    try {
+      const { raw, exists } = readRawConfig(configPath);
+      res.json({
+        ok: true,
+        running: opts.live() !== null,
+        startErrors: opts.live() ? [] : opts.startErrors(),
+        effects: FIELD_EFFECTS,
+        ...viewSettings(raw, exists)
+      });
+    } catch (e) {
+      fail(res, 500, e.message);
+    }
+  });
+  router.post("/config", (req, res) => {
+    if (!isAdmin(req)) {
+      fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
+      return;
+    }
+    let existing;
+    try {
+      existing = readRawConfig(configPath);
+    } catch (e) {
+      fail(res, 409, e.message);
+      return;
+    }
+    const body = req.body;
+    const r = applySettings(existing.raw, body?.settings);
+    if (!r.ok) {
+      res.status(422).json({ ok: false, errors: r.errors });
+      return;
+    }
+    try {
+      writeRawConfig(configPath, r.raw);
+    } catch (e) {
+      log.error(`\u4FDD\u5B58\u914D\u7F6E\u5931\u8D25\uFF1A${redactError(e, opts.secrets?.() ?? [])}`);
+      fail(res, 500, "\u5199\u5165 config.json \u5931\u8D25\uFF0C\u8BE6\u60C5\u89C1 ST \u65E5\u5FD7\u3002");
+      return;
+    }
+    const live = opts.live();
+    const hot = live ? r.hot : [];
+    const restart = live ? r.restart : r.changed;
+    if (live && hot.length > 0) opts.applyHot(r.config);
+    log.info(`\u914D\u7F6E\u5DF2\u901A\u8FC7\u9762\u677F\u4FDD\u5B58\uFF1A${r.changed.length ? r.changed.join("\u3001") : "\u65E0\u53D8\u5316"}${hot.length ? `\uFF08\u7ACB\u5373\u751F\u6548\uFF1A${hot.join("\u3001")}\uFF09` : ""}${restart.length ? `\uFF08\u9700\u91CD\u542F ST\uFF1A${restart.join("\u3001")}\uFF09` : ""}`);
+    res.json({ ok: true, changed: r.changed, hot, restart, lowMemoryNote: r.changed.includes("lowMemory"), warnings: r.warnings, ...viewSettings(r.raw, true) });
+  });
+}
+
 // src/server/plugin.ts
 async function startPlugin(opts) {
   const env2 = opts.env ?? process.env;
   const bootLog = opts.log ?? createLogger();
   const configPath = env2.SILLY_TG_CONFIG || join9(opts.pluginDir, "config.json");
   const loaded = loadConfigFile(configPath);
+  const liveConfig = loaded.ok ? loaded.config : null;
+  let runtimeLog = bootLog;
+  registerSettingsRoutes(opts.router, {
+    configPath,
+    log: bootLog,
+    live: () => liveConfig,
+    startErrors: () => loaded.ok ? [] : loaded.errors,
+    secrets: () => liveConfig ? configSecrets(liveConfig) : [],
+    applyHot: (c) => {
+      if (!liveConfig) return;
+      liveConfig.dialogueStyle = c.dialogueStyle;
+      liveConfig.logLevel = c.logLevel;
+      liveConfig.idleShutdownMinutes = c.idleShutdownMinutes;
+      liveConfig.lowMemory = c.lowMemory;
+      runtimeLog.setLevel?.(c.logLevel);
+    }
+  });
   if (!loaded.ok) {
     for (const e of loaded.errors) bootLog.error(`\u914D\u7F6E\u9519\u8BEF [${e.field}]\uFF1A${e.message}`);
     bootLog.error("silly-tg \u672A\u542F\u52A8\uFF08SillyTavern \u7684\u5176\u4F59\u529F\u80FD\u4E0D\u53D7\u5F71\u54CD\uFF09\u3002\u4FEE\u6B63\u914D\u7F6E\u540E\u91CD\u542F ST\u3002");
@@ -91640,6 +92215,7 @@ async function startPlugin(opts) {
   const config2 = loaded.config;
   const secrets = configSecrets(config2);
   const log = opts.log ?? createLogger({ level: config2.logLevel, secrets });
+  runtimeLog = log;
   for (const w2 of loaded.warnings) log.warn(`\u914D\u7F6E\u63D0\u793A [${w2.field}]\uFF1A${w2.message}`);
   const channel = new HostChannel({ log });
   channel.register(opts.router);
@@ -91708,6 +92284,7 @@ async function startPlugin(opts) {
   let stopped;
   return {
     config: config2,
+    configPath,
     dataDir: env2.SILLY_TG_DATA_DIR || join9(opts.pluginDir, "data"),
     log,
     channel,
@@ -91739,7 +92316,7 @@ var info = {
 var runtime = null;
 async function init(router) {
   try {
-    const pluginDir = resolve8(dirname6(fileURLToPath2(import.meta.url)), "..");
+    const pluginDir = resolve8(dirname8(fileURLToPath2(import.meta.url)), "..");
     runtime = await startPlugin({ router, pluginDir });
     if (runtime) attachBridge(runtime);
   } catch (e) {

@@ -1,0 +1,14 @@
+[
+  {
+    "name": "SUOT",
+    "block": "<SUOT>([\\s\\S]*?)</SUOT>",
+    "item": "^\\s*[（(]?(?:\\d{1,2}|[A-Za-z])[.、)）:：]\\s*(.+?)\\s*$",
+    "htmlSelector": "suot"
+  },
+  {
+    "name": "示例：<options> 里每行一个、用 - 开头",
+    "block": "<options>([\\s\\S]*?)</options>",
+    "item": "^\\s*[-•]\\s*(.+?)\\s*$",
+    "htmlSelector": "options"
+  }
+]

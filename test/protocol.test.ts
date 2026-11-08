@@ -31,6 +31,20 @@ describe('decodeHostEvent', () => {
   });
 });
 
+describe('新增字段与命令', () => {
+  const base = { type: 'messageFinal', generationId: 'g', chatId: 'c', messageId: 3, html: '', text: '', stopped: false, cards: [] };
+  it('messageFinal.raw 可选：有则带上，旧页面缺省', () => {
+    expect(decodeHostEvent({ ...base, raw: '<SUOT>1. a</SUOT>' })).toMatchObject({ raw: '<SUOT>1. a</SUOT>' });
+    expect(decodeHostEvent(base)).toMatchObject({ raw: undefined });
+    expect(decodeHostEvent({ ...base, raw: 1 })).toBeNull();
+  });
+  it('listPresets / selectPreset 命令', () => {
+    expect(decodeHostCommand({ id: '1', type: 'listPresets' })).toEqual({ id: '1', type: 'listPresets' });
+    expect(decodeHostCommand({ id: '1', type: 'selectPreset', name: '破限 A' })).toEqual({ id: '1', type: 'selectPreset', name: '破限 A' });
+    expect(decodeHostCommand({ id: '1', type: 'selectPreset' })).toBeNull();
+  });
+});
+
 describe('decodeHostUpload', () => {
   it('需要 nonce 与合法事件', () => {
     expect(decodeHostUpload({ nonce: 'n', event: { type: 'heartbeat' } })).toEqual({ nonce: 'n', event: { type: 'heartbeat' } });

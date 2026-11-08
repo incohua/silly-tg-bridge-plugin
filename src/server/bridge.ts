@@ -1,7 +1,8 @@
 // 把无头浏览器、bot、看门狗和消息映射接到插件运行时上。
 // 与 startPlugin 分开，单元测试启动插件时不会真的拉起 Chromium。
-import { join } from 'node:path';
-import { Bot } from './bot';
+import { dirname, join } from 'node:path';
+import { Bot, BOT_COMMANDS } from './bot';
+import { ChoiceRuleStore } from './choices';
 import { BrowserManager, type Launcher } from './browser';
 import { BridgeStore } from './message-map';
 import type { PluginRuntime } from './plugin';
@@ -25,8 +26,13 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher } = 
     missingHint: status.chromium.hint,
     stBaseUrl: config.stBaseUrl,
     basicAuth: config.basicAuth,
-    lowMemory: config.lowMemory,
-    idleShutdownMs: config.idleShutdownMinutes * 60_000,
+    // 配置面板保存后热生效，所以用 getter 每次读最新值
+    get lowMemory() {
+      return config.lowMemory;
+    },
+    get idleShutdownMs() {
+      return config.idleShutdownMinutes * 60_000;
+    },
     testSkipCsrfPatch: process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === '1',
   });
   if (process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === '1') log.warn('SILLY_TG_TEST_SKIP_CSRF_PATCH=1：页面不安装 CSRF 补丁（仅用于测试）。');
@@ -38,6 +44,7 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher } = 
     }
   };
   const watchdog = new Watchdog({ browser, host: channel, log, notify });
+  const choiceRules = new ChoiceRuleStore(join(dirname(rt.configPath), 'choice-rules.json'), log);
   const bot = new Bot({
     telegram,
     host: channel,
@@ -45,11 +52,20 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher } = 
     store,
     status,
     log,
-    idleShutdownMinutes: config.idleShutdownMinutes,
-    dialogueStyle: config.dialogueStyle,
+    get idleShutdownMinutes() {
+      return config.idleShutdownMinutes;
+    },
+    get dialogueStyle() {
+      return config.dialogueStyle;
+    },
     watchdogStatus: () => watchdog.status(),
+    choiceRules: () => choiceRules.get(),
   });
   rt.setUpdateHandler((u) => bot.handleUpdate(u));
+  // 命令菜单：输入 / 时可选。失败只记警告，不影响使用。
+  if (process.env.SILLY_TG_OFFLINE !== '1') {
+    telegram.setMyCommands([...BOT_COMMANDS]).catch((e) => log.warn(`注册命令菜单失败（不影响使用）：${(e as Error).message}`));
+  }
   // 退出钩子按注册的相反顺序执行：先停看门狗（避免把正在关闭的浏览器当成故障），再关浏览器。
   rt.onShutdown(() => browser.dispose());
   rt.onShutdown(() => watchdog.dispose());

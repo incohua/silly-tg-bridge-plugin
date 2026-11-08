@@ -16,12 +16,13 @@ function dirWithConfig(config: unknown): string {
 const json = (b: unknown): Response => new Response(JSON.stringify(b));
 
 describe('startPlugin', () => {
-  it('配置文件缺失：返回 null，提示复制 config.example.json，不注册路由', async () => {
+  it('配置文件缺失：返回 null，提示复制 config.example.json；只注册配置面板的接口（host 通道不注册）', async () => {
     const log = captureLogger();
     const router = express.Router();
     const rt = await startPlugin({ router, pluginDir: dirWithConfig(undefined), env: {}, log });
     expect(rt).toBeNull();
-    expect(router.stack).toHaveLength(0);
+    // 只有配置面板的 GET/POST /config，没有 host 通道的路由
+    expect(router.stack.map((l) => (l as unknown as { route?: { path: string } }).route?.path)).toEqual(['/config', '/config']);
     expect(log.lines.join('\n')).toMatch(/config\.example\.json/);
   });
 
@@ -103,6 +104,24 @@ describe('startPlugin', () => {
     const out = log.lines.join('\n');
     expect(out).toMatch(/telegramProxy/);
     expect(out).not.toContain(FAKE_TOKEN);
+    await rt!.stop();
+  });
+
+  it('配置面板保存：热生效字段直接改到运行中的配置对象，其余字段保持不变', async () => {
+    const log = captureLogger();
+    const router = express.Router();
+    const dir = dirWithConfig({ botToken: FAKE_TOKEN, allowedUserIds: [1], dialogueStyle: 'bold' });
+    const rt = await startPlugin({ router, pluginDir: dir, env: { SILLY_TG_OFFLINE: '1' }, log });
+    const layer = router.stack.find((l) => (l as unknown as { route?: { path: string; methods: Record<string, boolean> } }).route?.methods.post && (l as unknown as { route: { path: string } }).route.path === '/config') as unknown as {
+      route: { stack: Array<{ handle: (req: unknown, res: unknown) => void }> };
+    };
+    let out: unknown;
+    const res = { status: () => res, json: (b: unknown) => (out = b) };
+    layer.route.stack[0].handle({ body: { settings: { dialogueStyle: 'italic', idleShutdownMinutes: 5, allowedUserIds: [1, 2] } } }, res);
+    expect(out).toMatchObject({ ok: true, hot: ['dialogueStyle', 'idleShutdownMinutes'], restart: ['allowedUserIds'] });
+    expect(rt!.config.dialogueStyle).toBe('italic');
+    expect(rt!.config.idleShutdownMinutes).toBe(5);
+    expect(rt!.config.allowedUserIds).toEqual([1]); // 需要重启才生效
     await rt!.stop();
   });
 });

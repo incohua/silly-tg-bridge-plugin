@@ -3,7 +3,7 @@ import { detectApp, getHostApi, isKnownNoise, isReadyConsoleLine } from '../src/
 import { parseHostNonce, parseHostTestFlags } from '../src/extension/host-mode';
 import { SerialQueue } from '../src/extension/queue';
 import { activeCharacterFromSettingsResponse } from '../src/extension/restore';
-import { normalizeChats } from '../src/extension/commands';
+import { isGreetingOnly, normalizeChats } from '../src/extension/commands';
 import { regenerateRejection } from '../src/extension/generation';
 
 const NONCE = '0123456789abcdef0123456789abcdef';
@@ -139,5 +139,15 @@ describe('normalizeChats', () => {
     expect(out.map((c) => c.fileName)).toEqual(['A - 2', 'A - 1']);
     expect(out[0]).toEqual({ fileName: 'A - 2', lastMessageAt: Date.parse('2026-11-07T10:00:00.000Z'), messageCount: 5, preview: '多个 空格' });
     expect(out[1].preview).toHaveLength(60);
+  });
+});
+
+describe('isGreetingOnly（新聊天判定）', () => {
+  it('只有一条角色消息才算新聊天', () => {
+    expect(isGreetingOnly([{}])).toBe(true);
+    expect(isGreetingOnly([])).toBe(false);
+    expect(isGreetingOnly([{}, { is_user: true }])).toBe(false);
+    expect(isGreetingOnly([{ is_user: true }])).toBe(false);
+    expect(isGreetingOnly([{ is_system: true }])).toBe(false);
   });
 });

@@ -3,7 +3,7 @@
 // ST 的切换函数可能被弹窗挡住而一直不返回（spike 调整 3），所以只等到“状态已变成目标值”或超时，
 // 弹窗交给 dialog-watcher 处理。
 
-import type { CharacterInfo, ChatInfo, HostStatus, SwitchResult } from '../shared/protocol';
+import type { CharacterInfo, ChatInfo, Greeting, HostStatus, PresetList, SwitchResult } from '../shared/protocol';
 import { ctx, detectApp, newChat as adapterNewChat, pastChats } from './adapter';
 import { isGenerating } from './generation';
 
@@ -73,6 +73,28 @@ function switchResult(): SwitchResult {
   return { characterName: ch?.name, characterAvatar: ch?.avatar, chatId: c.getCurrentChatId() };
 }
 
+/**
+ * 聊天里只有开场白一条消息（新聊天）时，返回第 0 条消息渲染后的内容。纯函数部分见 isGreetingOnly。
+ */
+export function isGreetingOnly(chat: ReadonlyArray<{ is_user?: boolean; is_system?: boolean }>): boolean {
+  return chat.length === 1 && !chat[0].is_user && !chat[0].is_system;
+}
+
+function readGreeting(): Greeting | undefined {
+  const c = ctx();
+  if (!isGreetingOnly(c.chat)) return undefined;
+  const node = document.querySelector<HTMLElement>('#chat .mes[mesid="0"] .mes_text');
+  const html = node?.innerHTML ?? '';
+  const text = node ? node.innerText : (c.chat[0].mes ?? '');
+  return html || text ? { html, text } : undefined;
+}
+
+/** 当前 API 的预设管理器；该 API 没有预设时返回 null。 */
+function presetManager() {
+  const c = ctx();
+  return typeof c.getPresetManager === 'function' ? c.getPresetManager() : null;
+}
+
 export function hostStatus(): HostStatus {
   const c = ctx();
   const r = switchResult();
@@ -86,7 +108,25 @@ export function hostStatus(): HostStatus {
     mainApi: c.mainApi,
     onlineStatus: c.onlineStatus,
     generating: isGenerating(),
+    presetName: presetManager()?.getSelectedPresetName() || undefined,
   };
+}
+
+export function listPresets(): PresetList {
+  const m = presetManager();
+  if (!m) throw new Error('当前 API 没有可切换的预设');
+  const presets = m.getAllPresets().filter((n) => typeof n === 'string' && n);
+  return { api: ctx().mainApi ?? '', current: m.getSelectedPresetName() || undefined, presets };
+}
+
+export async function selectPreset(name: string): Promise<{ presetName: string }> {
+  const m = presetManager();
+  if (!m) throw new Error('当前 API 没有可切换的预设');
+  const value = m.findPreset(name);
+  if (value === undefined || value === null) throw new Error('找不到这个预设（可能已被删除或改名），请重新发送 /preset');
+  if (m.getSelectedPresetName() !== name) await m.selectPreset(value);
+  if (!(await waitFor(() => presetManager()?.getSelectedPresetName() === name, 5000))) throw new Error('切换预设超时');
+  return { presetName: name };
 }
 
 export function listCharacters(): CharacterInfo[] {
@@ -99,11 +139,12 @@ export async function selectCharacter(avatar: string): Promise<SwitchResult> {
   const c = ctx();
   const index = c.characters.findIndex((ch) => ch.avatar === avatar);
   if (index < 0) throw new Error('找不到这个角色（可能已被删除或改名），请重新发送 /chars');
-  if (currentIndex() === index && c.getCurrentChatId()) return switchResult();
+  if (currentIndex() === index && c.getCurrentChatId()) return { ...switchResult(), greeting: readGreeting() };
   await settle(c.selectCharacterById(index), SWITCH_TIMEOUT_MS);
   const ok = await waitFor(() => currentIndex() === index && !!ctx().getCurrentChatId(), 5000);
   if (!ok) throw new Error('切换角色超时');
-  return switchResult();
+  await sleep(300); // 等开场白渲染
+  return { ...switchResult(), greeting: readGreeting() };
 }
 
 /** 把 ST /api/characters/chats（或 Luker getPastCharacterChats）的结果整理成 ChatInfo，按最近使用排序。纯函数。 */
@@ -150,5 +191,6 @@ export async function newChat(): Promise<SwitchResult> {
   assertCardSafe('新建聊天');
   await settle(adapterNewChat(), SWITCH_TIMEOUT_MS);
   if (!(await waitFor(() => !!ctx().getCurrentChatId() && ctx().getCurrentChatId() !== before, 5000))) throw new Error('新建聊天超时');
-  return switchResult();
+  await sleep(300); // 等开场白渲染
+  return { ...switchResult(), greeting: readGreeting() };
 }

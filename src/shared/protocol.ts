@@ -16,7 +16,9 @@ export type HostCommand =
    */
   | { id: string; type: 'regenerate'; generationId: string; chatId: string; messageId: number }
   /** stop 和 getStatus 不进页面串行队列（生成进行中也要能立即执行）。 */
-  | { id: string; type: 'stop' | 'getStatus' | 'newChat' | 'listCharacters' | 'listChats' }
+  | { id: string; type: 'stop' | 'getStatus' | 'newChat' | 'listCharacters' | 'listChats' | 'listPresets' }
+  /** name 是预设名称（getAllPresets 的元素），作用于页面当前 API 的预设管理器。 */
+  | { id: string; type: 'selectPreset'; name: string }
   /** characterId 是角色的 avatar 文件名（跨重启稳定），不是数组下标。 */
   | { id: string; type: 'selectCharacter'; characterId: string }
   /** fileName 是聊天名（getCurrentChatId 的值，不带 .jsonl）。 */
@@ -44,6 +46,22 @@ export interface HostStatus {
    * 有重复字段时卡片字段会被存成数组（卡片损坏），所以这时 openChat / newChat 会拒绝执行。
    */
   formDuplicates?: string[];
+  /** 当前 API 的预设名；当前 API 没有预设管理器时缺省。 */
+  presetName?: string;
+}
+
+/** listPresets 的结果。 */
+export interface PresetList {
+  /** 预设所属 API（main_api，如 openai、textgenerationwebui）。 */
+  api: string;
+  current?: string;
+  presets: string[];
+}
+
+/** 新聊天里只有开场白一条消息时附带的开场白（第 0 条消息渲染后的内容）。 */
+export interface Greeting {
+  html: string;
+  text: string;
 }
 
 /** listCharacters 的结果项。 */
@@ -68,6 +86,8 @@ export interface SwitchResult {
   characterName?: string;
   characterAvatar?: string;
   chatId?: string;
+  /** 聊天里只有开场白一条消息（新聊天）时才有。 */
+  greeting?: Greeting;
 }
 
 /** 自检项。设计要求的启动自检（CSRF、Mvu 等）都用这个结构上报。 */
@@ -100,6 +120,8 @@ export type HostEvent =
       messageId: number;
       html: string;
       text: string;
+      /** ST 里的原始消息（chat[i].mes，未经渲染和“仅格式显示”正则），选项解析用。旧页面缺省，此时不解析选项。 */
+      raw?: string;
       stopped: boolean;
       cards: CardSource[];
     }
@@ -155,6 +177,7 @@ export function decodeHostEvent(v: unknown): HostEvent | null {
         typeof v.messageId === 'number' &&
         isStr(v.html) &&
         isStr(v.text) &&
+        isOptStr(v.raw) &&
         typeof v.stopped === 'boolean' &&
         Array.isArray(v.cards) &&
         v.cards.every(isCardSource)
@@ -165,6 +188,7 @@ export function decodeHostEvent(v: unknown): HostEvent | null {
             messageId: v.messageId,
             html: v.html,
             text: v.text,
+            raw: typeof v.raw === 'string' ? v.raw : undefined,
             stopped: v.stopped,
             cards: v.cards.map((c) => ({ source: c.source })),
           }
@@ -206,7 +230,10 @@ export function decodeHostCommand(v: unknown): HostCommand | null {
     case 'newChat':
     case 'listCharacters':
     case 'listChats':
+    case 'listPresets':
       return { id, type: v.type };
+    case 'selectPreset':
+      return isStr(v.name) ? { id, type: 'selectPreset', name: v.name } : null;
     case 'selectCharacter':
       return isStr(v.characterId) ? { id, type: 'selectCharacter', characterId: v.characterId } : null;
     case 'openChat':

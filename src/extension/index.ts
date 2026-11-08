@@ -1,9 +1,10 @@
 // UI 扩展入口。只在 host 模式工作：URL 的 hash 带 #silly_tg_host=<nonce>，且服务端接受了 hello。
-// 用户另开的普通 ST 页面里，这个文件只做一次 URL 判断就返回，不注册任何监听，也不发任何请求。
+// 用户另开的普通 ST 页面里，这个文件只在“扩展”设置栏渲染配置抽屉（settings-ui.ts，打开页面时读一次配置），
+// 不注册消息监听，不连接 host 通道，也不处理命令。
 
 import { decodeHostCommand, type HostCommand, type HostEvent, type SelfCheckItem } from '../shared/protocol';
 import { ctx, detectApp, getHostApi, isKnownNoise, waitAppReady } from './adapter';
-import { hostStatus, listCharacters, listChats, newChat, openChat, selectCharacter } from './commands';
+import { hostStatus, listCharacters, listChats, listPresets, newChat, openChat, selectCharacter, selectPreset } from './commands';
 import { ensureApiConnected } from './api-connect';
 import { applyCsrfPatchAndCheck } from './csrf';
 import { startDialogWatcher } from './dialog-watcher';
@@ -11,6 +12,7 @@ import { captureToasts, runGeneration, type GenerationRequest } from './generati
 import { parseHostNonce, parseHostTestFlags } from './host-mode';
 import { SerialQueue } from './queue';
 import { restoreActiveCharacter } from './restore';
+import { mountSettings } from './settings-ui';
 import { PLUGIN_BASE, Uplink } from './uplink';
 
 const HEARTBEAT_MS = 15_000;
@@ -49,7 +51,12 @@ async function main(): Promise<void> {
   // 扩展加载时立刻读取：ST 之后可能改写 hash。
   const nonce = parseHostNonce(location.hash);
   const testFlags = parseHostTestFlags(location.hash);
-  if (!nonce || !getHostApi()) return;
+  if (!getHostApi()) return;
+  // 普通页面：只在“扩展”设置栏里渲染配置抽屉，不注册任何监听、不连接服务端通道。
+  if (!nonce) {
+    mountSettings();
+    return;
+  }
 
   let alive = true;
   const cleanups: Array<() => void> = [];
@@ -231,6 +238,12 @@ async function main(): Promise<void> {
           return;
         case 'newChat':
           queued(newChat);
+          return;
+        case 'listPresets':
+          queued(listPresets);
+          return;
+        case 'selectPreset':
+          queued(() => selectPreset(cmd.name));
           return;
         // 不进队列：生成进行中也要立即执行
         case 'stop':

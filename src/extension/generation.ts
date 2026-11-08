@@ -140,6 +140,7 @@ export async function runGeneration(opts: GenerationOptions): Promise<void> {
       messageId: index,
       html: node?.innerHTML ?? '',
       text: node ? node.innerText : (msg.mes ?? ''),
+      raw: msg.mes ?? '',
       stopped,
       cards: [],
     });

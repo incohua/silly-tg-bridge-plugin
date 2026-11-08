@@ -16,6 +16,16 @@ const rec = (over: Partial<ReplyRecord> = {}): ReplyRecord => ({
 });
 
 describe('BridgeStore', () => {
+  it('markGreeted：同一聊天只返回一次 true，重启后仍记得；数量有上限', () => {
+    const f = file();
+    const a = new BridgeStore(f, noopLogger);
+    expect(a.markGreeted('A - 1')).toBe(true);
+    expect(a.markGreeted('A - 1')).toBe(false);
+    expect(new BridgeStore(f, noopLogger).markGreeted('A - 1')).toBe(false);
+    for (let i = 0; i < 250; i++) a.markGreeted(`c${i}`);
+    expect(JSON.parse(readFileSync(f, 'utf8')).greeted.length).toBeLessThanOrEqual(200);
+  });
+
   it('写入后重新加载仍在（ST 重启后可重新生成上一条、恢复会话）', () => {
     const f = file();
     const a = new BridgeStore(f, noopLogger);

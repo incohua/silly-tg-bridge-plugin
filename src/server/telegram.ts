@@ -193,6 +193,11 @@ export class TelegramClient {
   answerCallbackQuery(params: { callback_query_id: string; text?: string }, opts?: CallOptions): Promise<boolean> {
     return this.call<boolean>('answerCallbackQuery', params, opts);
   }
+
+  /** 注册命令菜单（用户在输入框输入 / 时显示）。 */
+  setMyCommands(commands: Array<{ command: string; description: string }>, opts?: CallOptions): Promise<boolean> {
+    return this.call<boolean>('setMyCommands', { commands }, opts);
+  }
 }
 
 export interface PollOptions {

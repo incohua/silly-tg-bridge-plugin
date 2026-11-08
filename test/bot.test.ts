@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   Bot,
+  BOT_COMMANDS,
   BUSY_COMMAND_TEXT,
   BUSY_TEXT,
   COLD_START_TEXT,
@@ -134,6 +135,12 @@ class FakeStore implements BotStore {
   }
   setSession(s: SessionRecord) {
     this.session = s;
+  }
+  greeted = new Set<string>();
+  markGreeted(id: string) {
+    if (this.greeted.has(id)) return false;
+    this.greeted.add(id);
+    return true;
   }
 }
 
@@ -887,6 +894,194 @@ describe('/chars、/chats、/new', () => {
     expect(seen[0]).toBe('getStatus');
     ctx.host.emit(final(ctx.host.gen, { chatId: 'E - 2', messageId: 7 }));
     await ctx.bot.idle();
+  });
+});
+
+describe('/preset 与开场白', () => {
+  const presets = ['Default', '破限 A', '破限 B'];
+  const keyboard = (c: Call) => (c.params.reply_markup as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }).inline_keyboard;
+  const tap = (ctx: ReturnType<typeof setup>, data: string, messageId = 900): Promise<void> =>
+    ctx.bot.handleUpdate({ update_id: ++uid, callback_query: { id: `q${uid}`, from: { id: 1 }, data, message: { message_id: messageId, chat: { id: 7, type: 'private' } } } });
+
+  it('/preset：列出预设并标注当前；点选后切换，列表作废', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async (cmd) => {
+      if (cmd.type === 'getStatus') return { app: 'st', generating: false };
+      if (cmd.type === 'listPresets') return { api: 'openai', current: '破限 A', presets };
+      if (cmd.type === 'selectPreset') return { presetName: cmd.name };
+      return {};
+    };
+    await ctx.bot.handleUpdate(text('/preset'));
+    const list = ctx.telegram.of('sendMessage').at(-1)!;
+    expect(list.params.text).toMatch(/选择预设（共 3 个/);
+    const kb = keyboard(list);
+    expect(kb.map((r) => r[0].text)).toEqual(['Default', '[当前] 破限 A', '破限 B']);
+    await tap(ctx, kb[2][0].callback_data);
+    expect(ctx.host.requests.at(-1)).toEqual({ type: 'selectPreset', name: '破限 B' });
+    expect(ctx.telegram.of('editMessageText').at(-1)!.params.text).toMatch(/已切换到预设：破限 B/);
+    await tap(ctx, kb[0][0].callback_data);
+    expect(ctx.telegram.of('answerCallbackQuery').at(-1)!.params.text).toMatch(/已过期/);
+  });
+
+  it('当前 API 没有预设：提示原因', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async (cmd) => {
+      if (cmd.type === 'listPresets') throw new Error('当前 API 没有可切换的预设');
+      return { generating: false };
+    };
+    await ctx.bot.handleUpdate(text('/preset'));
+    expect(ctx.telegram.texts().at(-1)).toBe('/preset 失败：当前 API 没有可切换的预设');
+  });
+
+  it('/status 显示预设名', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async () => ({ app: 'st', characterName: 'A', presetName: '破限 A', generating: false });
+    await ctx.bot.handleUpdate(text('/status'));
+    expect(ctx.telegram.texts()[0]).toMatch(/预设：破限 A/);
+  });
+
+  it('/new 后发送开场白，同一聊天只发一次', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async (cmd) =>
+      cmd.type === 'newChat' ? { characterName: 'A', characterAvatar: 'a.png', chatId: 'A - 9', greeting: { html: '<p>欢迎来到这里</p>', text: '欢迎来到这里' } } : {};
+    await ctx.bot.handleUpdate(text('/new'));
+    expect(ctx.telegram.rich().join('')).toMatch(/欢迎来到这里/);
+    const n = ctx.telegram.rich().length;
+    await ctx.bot.handleUpdate(text('/new'));
+    expect(ctx.telegram.rich()).toHaveLength(n);
+  });
+
+  it('没有 greeting 字段（已有对话的聊天）：不发送', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async (cmd) => (cmd.type === 'newChat' ? { chatId: 'A - 9' } : {});
+    await ctx.bot.handleUpdate(text('/new'));
+    expect(ctx.telegram.rich()).toHaveLength(0);
+  });
+});
+
+describe('/menu 与命令菜单', () => {
+  const keyboard = (c: Call) => (c.params.reply_markup as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }).inline_keyboard;
+  const tap = (ctx: ReturnType<typeof setup>, data: string): Promise<void> =>
+    ctx.bot.handleUpdate({ update_id: ++uid, callback_query: { id: `q${uid}`, from: { id: 1 }, data, message: { message_id: 900, chat: { id: 7, type: 'private' } } } });
+
+  it('/menu：速览行加六个按钮；不唤醒浏览器', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async () => ({ characterName: '角色A', chatId: 'A - 1', presetName: '破限 A', generating: false });
+    await ctx.bot.handleUpdate(text('/menu'));
+    const m = ctx.telegram.of('sendMessage').at(-1)!;
+    expect(m.params.text).toBe('主菜单\n角色A · A - 1 · 破限 A');
+    expect(keyboard(m).flat().map((b) => b.callback_data)).toEqual(['m|chars', 'm|chats', 'm|preset', 'm|new', 'm|regen', 'm|status']);
+    expect(ctx.browser.ensureCalls).toBe(0);
+  });
+
+  it('页面未连接时 /menu 只有标题', async () => {
+    const ctx = setup();
+    ctx.host.connected = false;
+    await ctx.bot.handleUpdate(text('/menu'));
+    expect(ctx.telegram.of('sendMessage').at(-1)!.params.text).toBe('主菜单');
+  });
+
+  it('菜单按钮等同于发送对应命令', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async (cmd) => (cmd.type === 'listPresets' ? { api: 'openai', current: 'A', presets: ['A', 'B'] } : { generating: false });
+    await tap(ctx, 'm|preset');
+    expect(ctx.telegram.of('sendMessage').at(-1)!.params.text).toMatch(/选择预设/);
+    await tap(ctx, 'm|new');
+    expect(ctx.host.requests.at(-1)).toEqual({ type: 'newChat' });
+    await tap(ctx, 'm|regen');
+    expect(ctx.telegram.texts().at(-1)).toBe(NOTHING_TO_REGEN_TEXT);
+    await tap(ctx, 'm|bogus');
+    expect(ctx.telegram.of('answerCallbackQuery').at(-1)!.params.text).toMatch(/已过期/);
+  });
+
+  it('命令菜单覆盖全部命令且描述非空', () => {
+    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['menu', 'chars', 'chats', 'preset', 'new', 'regen', 'stop', 'status', 'help']);
+    expect(BOT_COMMANDS.every((c) => c.description.length > 0 && c.description.length <= 256)).toBe(true);
+  });
+});
+
+describe('行动选项按钮', () => {
+  const keyboard = (c: Call) => (c.params.reply_markup as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }).inline_keyboard;
+  const tap = (ctx: ReturnType<typeof setup>, data: string, messageId = 901): Promise<void> =>
+    ctx.bot.handleUpdate({ update_id: ++uid, callback_query: { id: `q${uid}`, from: { id: 1 }, data, message: { message_id: messageId, chat: { id: 7, type: 'private' } } } });
+  const raw = '她看着你。\n<SUOT>\n1. 去酒馆\n2. 回家\n3. 沉默\n</SUOT>';
+  const round = (ctx: ReturnType<typeof setup>, over: Partial<Extract<HostEvent, { type: 'messageFinal' }>> = {}) =>
+    oneRound(ctx, 'hi', { html: '<p>她看着你。</p><suot>1. 去酒馆</suot>', text: raw, raw, ...over });
+
+  it('正文去掉选项块；下面一条带按钮的选项消息；点击后把该选项作为用户消息发出', async () => {
+    const ctx = setup();
+    await round(ctx);
+    expect(ctx.telegram.rich().join('')).not.toMatch(/suot|去酒馆/i);
+    const m = ctx.telegram.of('sendMessage').at(-1)!;
+    expect(m.params.text).toMatch(/行动选项[\s\S]*1\. 去酒馆\n2\. 回家\n3\. 沉默/);
+    const kb = keyboard(m);
+    expect(kb.flat().map((b) => b.text)).toEqual(['1', '2', '3']);
+    await tap(ctx, kb[0][1].callback_data);
+    await wait(5);
+    expect(ctx.host.requests.at(-1)).toMatchObject({ type: 'send', text: '回家' });
+    expect(ctx.telegram.of('editMessageText').at(-1)!.params).toMatchObject({ message_id: 901, text: '已选择 2：回家' });
+    ctx.host.emit(final(ctx.host.gen, { chatId: 'chat-A', messageId: 5 }));
+    await ctx.bot.idle();
+  });
+
+  it('选完后旧按钮失效；新回复让旧按钮失效', async () => {
+    const ctx = setup();
+    await round(ctx);
+    const data = keyboard(ctx.telegram.of('sendMessage').at(-1)!)[0][0].callback_data;
+    await ctx.bot.handleUpdate(text('自己打字'));
+    await wait(5);
+    ctx.host.emit(final(ctx.host.gen, { messageId: 5 }));
+    await ctx.bot.idle();
+    await tap(ctx, data);
+    expect(ctx.telegram.of('answerCallbackQuery').at(-1)!.params.text).toMatch(/已过期/);
+    expect(ctx.host.requests.filter((r) => r.type === 'send')).toHaveLength(2);
+  });
+
+  it('/chars 只是列出列表，不会让选项作废', async () => {
+    const ctx = setup();
+    await round(ctx);
+    const data = keyboard(ctx.telegram.of('sendMessage').at(-1)!)[0][0].callback_data;
+    await ctx.bot.handleUpdate(text('/chars'));
+    await tap(ctx, data);
+    expect(ctx.telegram.of('answerCallbackQuery').at(-1)!.params.text).toBeUndefined();
+    expect(ctx.host.requests.filter((r) => r.type === 'send')).toHaveLength(2);
+    ctx.host.emit(final(ctx.host.gen, { chatId: 'chat-A', messageId: 5 }));
+    await ctx.bot.idle();
+  });
+
+  it('连点两次同一个按钮只发出一次', async () => {
+    const ctx = setup();
+    await round(ctx);
+    const data = keyboard(ctx.telegram.of('sendMessage').at(-1)!)[0][0].callback_data;
+    await Promise.all([tap(ctx, data), tap(ctx, data)]);
+    await wait(5);
+    expect(ctx.host.requests.filter((r) => r.type === 'send')).toHaveLength(2);
+    ctx.host.emit(final(ctx.host.gen, { chatId: 'chat-A', messageId: 5 }));
+    await ctx.bot.idle();
+  });
+
+  it('/new 之后旧选项失效', async () => {
+    const ctx = setup();
+    await round(ctx);
+    const data = keyboard(ctx.telegram.of('sendMessage').at(-1)!)[0][0].callback_data;
+    ctx.host.onRequest = async (cmd) => (cmd.type === 'newChat' ? { chatId: 'x' } : {});
+    await ctx.bot.handleUpdate(text('/new'));
+    await tap(ctx, data);
+    expect(ctx.telegram.of('answerCallbackQuery').at(-1)!.params.text).toMatch(/已过期/);
+  });
+
+  it('没有选项的回复、停止的回复：不出按钮', async () => {
+    const ctx = setup();
+    await oneRound(ctx, 'hi', { html: '<p>普通回复</p>', text: '普通回复', raw: '普通回复' });
+    expect(ctx.telegram.of('sendMessage').filter((c) => c.params.reply_markup)).toHaveLength(0);
+    await round(ctx, { stopped: true });
+    expect(ctx.telegram.of('sendMessage').filter((c) => c.params.reply_markup)).toHaveLength(0);
+  });
+
+  it('旧页面不上报 raw：不解析，正文原样', async () => {
+    const ctx = setup();
+    await oneRound(ctx, 'hi', { html: '<p>你好</p>', text: raw, raw: undefined });
+    expect(ctx.telegram.of('sendMessage').filter((c) => c.params.reply_markup)).toHaveLength(0);
   });
 });
 

@@ -31,7 +31,8 @@
     "lint": "eslint .",
     "test": "vitest run",
     "test:watch": "vitest",
-    "build": "node build.mjs"
+    "build": "node build.mjs",
+    "choices:test": "node scripts/choices-test.mjs"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",

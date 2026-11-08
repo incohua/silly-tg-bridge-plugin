@@ -6,11 +6,11 @@ import type { CharacterInfo, ChatInfo } from '../shared/protocol';
 export const PAGE_SIZE = 8;
 const LABEL_MAX = 48;
 
-export type ListKind = 'chars' | 'chats';
+export type ListKind = 'chars' | 'chats' | 'presets';
 
 export interface Listing {
   kind: ListKind;
-  items: CharacterInfo[] | ChatInfo[];
+  items: CharacterInfo[] | ChatInfo[] | string[];
   /** 当前角色的 avatar 或当前聊天名，用于标注。 */
   current?: string;
   createdAt: number;
@@ -28,6 +28,8 @@ const OPS: Record<string, { op: 'select' | 'page'; kind: ListKind }> = {
   cp: { op: 'page', kind: 'chars' },
   h: { op: 'select', kind: 'chats' },
   hp: { op: 'page', kind: 'chats' },
+  p: { op: 'select', kind: 'presets' },
+  pp: { op: 'page', kind: 'presets' },
 };
 
 export function encodeCallback(a: CallbackAction): string {
@@ -37,7 +39,7 @@ export function encodeCallback(a: CallbackAction): string {
 
 export function decodeCallback(data: string | undefined): CallbackAction | null {
   if (!data) return null;
-  const m = /^(c|cp|h|hp)\|([0-9a-f]{1,16})\|(\d{1,6})$/.exec(data);
+  const m = /^(c|cp|h|hp|p|pp)\|([0-9a-f]{1,16})\|(\d{1,6})$/.exec(data);
   if (!m) return null;
   return { ...OPS[m[1]], token: m[2], n: Number(m[3]) };
 }
@@ -76,14 +78,18 @@ export function itemLabel(l: Listing, i: number): string {
     const c = (l.items as CharacterInfo[])[i];
     return truncate(`${c.avatar === l.current ? '[当前] ' : ''}${c.name}`);
   }
+  if (l.kind === 'presets') {
+    const n = (l.items as string[])[i];
+    return truncate(`${n === l.current ? '[当前] ' : ''}${n}`);
+  }
   const c = (l.items as ChatInfo[])[i];
   return truncate(`${c.fileName === l.current ? '[当前] ' : ''}${chatLabel(c)}`);
 }
 
 export function listTitle(l: Listing, page: number): string {
-  const what = l.kind === 'chars' ? '角色' : '聊天';
+  const what = l.kind === 'chars' ? '角色' : l.kind === 'presets' ? '预设' : '聊天';
   const total = l.items.length;
-  if (total === 0) return l.kind === 'chars' ? 'ST 里还没有角色。' : '当前角色还没有聊天记录。';
+  if (total === 0) return l.kind === 'chars' ? 'ST 里还没有角色。' : l.kind === 'presets' ? '当前 API 还没有预设。' : '当前角色还没有聊天记录。';
   return `选择${what}（共 ${total} 个，第 ${page + 1}/${pageCount(total)} 页）`;
 }
 
