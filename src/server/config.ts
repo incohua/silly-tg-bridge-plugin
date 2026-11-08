@@ -17,6 +17,12 @@ export interface Config {
   /** 对话（带引号的内容）在 Telegram 里的样式：bold 加粗（默认）、italic 斜体、mark 高亮、plain 只保留引号。 */
   dialogueStyle: 'bold' | 'italic' | 'mark' | 'plain';
   logLevel: LogLevel;
+  /** 生成时草稿的刷新间隔（秒），范围 0.5–30，默认 1。调大可以减少聊天窗口的上下滚动。 */
+  draftIntervalSeconds: number;
+  /** 生成时草稿显示什么：live 逐步显示正文（默认），progress 只显示“正在生成… 已写 N 字”。 */
+  draftMode: 'live' | 'progress';
+  /** 行动选项按钮：numbers 一排数字按钮（默认），rows 每个选项一行并带文字。 */
+  choiceLayout: 'numbers' | 'rows';
   /** 仅用于测试：Bot API 根地址（默认 https://api.telegram.org），指向本地假服务做离线联调。 */
   telegramApiBase?: string;
 }
@@ -43,6 +49,9 @@ const KNOWN_KEYS = new Set([
   'lowMemory',
   'dialogueStyle',
   'logLevel',
+  'draftIntervalSeconds',
+  'draftMode',
+  'choiceLayout',
   'telegramApiBase',
 ]);
 
@@ -190,6 +199,28 @@ export function validateConfig(raw: unknown, source = 'config.json'): ConfigResu
     else logLevel = raw.logLevel as LogLevel;
   }
 
+  // draftIntervalSeconds
+  let draftIntervalSeconds = 1;
+  if (!unset(raw.draftIntervalSeconds)) {
+    const d = raw.draftIntervalSeconds;
+    if (typeof d !== 'number' || !Number.isFinite(d) || d < 0.5 || d > 30) err('draftIntervalSeconds', 'draftIntervalSeconds 必须是 0.5–30 之间的数字（秒）。');
+    else draftIntervalSeconds = d;
+  }
+
+  // draftMode
+  let draftMode: Config['draftMode'] = 'live';
+  if (!unset(raw.draftMode)) {
+    if (raw.draftMode !== 'live' && raw.draftMode !== 'progress') err('draftMode', 'draftMode 必须是 live 或 progress。');
+    else draftMode = raw.draftMode;
+  }
+
+  // choiceLayout
+  let choiceLayout: Config['choiceLayout'] = 'numbers';
+  if (!unset(raw.choiceLayout)) {
+    if (raw.choiceLayout !== 'numbers' && raw.choiceLayout !== 'rows') err('choiceLayout', 'choiceLayout 必须是 numbers 或 rows。');
+    else choiceLayout = raw.choiceLayout;
+  }
+
   // telegramApiBase（测试用）
   let telegramApiBase: string | undefined;
   if (!unset(raw.telegramApiBase)) {
@@ -206,7 +237,7 @@ export function validateConfig(raw: unknown, source = 'config.json'): ConfigResu
   return {
     ok: true,
     warnings,
-    config: { botToken, allowedUserIds, stBaseUrl, telegramProxy, chromiumPath, basicAuth, miniAppPort, publicBaseUrl, idleShutdownMinutes, lowMemory, dialogueStyle, logLevel, telegramApiBase },
+    config: { botToken, allowedUserIds, stBaseUrl, telegramProxy, chromiumPath, basicAuth, miniAppPort, publicBaseUrl, idleShutdownMinutes, lowMemory, dialogueStyle, logLevel, draftIntervalSeconds, draftMode, choiceLayout, telegramApiBase },
   };
 }
 

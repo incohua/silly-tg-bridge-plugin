@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Router } from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { applySettings, maskProxy, MASK, registerSettingsRoutes, viewSettings } from '../src/server/settings-api';
+import { applySettings, maskProxy, MASK, registerSettingsRoutes, saveSettingsPatch, viewSettings } from '../src/server/settings-api';
 import { validateConfig, type Config } from '../src/server/config';
 import { FAKE_TOKEN, noopLogger } from './helpers';
 
@@ -195,5 +195,40 @@ describe('路由', () => {
     const p = call('POST /config', { settings: { botToken: FAKE_TOKEN, allowedUserIds: [1] } });
     expect(p.statusCode).toBe(409);
     expect(readFileSync(file, 'utf8')).toContain('坏的');
+  });
+});
+
+describe('saveSettingsPatch（bot 的 /settings 用）', () => {
+  it('写入 config.json 并立即更新运行中的配置，其余字段保留', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'settings-patch-'));
+    try {
+      const path = join(dir, 'config.json');
+      writeFileSync(path, JSON.stringify({ ...base, draftMode: 'live' }));
+      const v = validateConfig(base);
+      if (!v.ok) throw new Error('fixture');
+      const live: Config = v.config;
+      saveSettingsPatch(path, live, { draftMode: 'progress', draftIntervalSeconds: 3 });
+      expect(live).toMatchObject({ draftMode: 'progress', draftIntervalSeconds: 3 });
+      const saved = JSON.parse(readFileSync(path, 'utf8'));
+      expect(saved).toMatchObject({ draftMode: 'progress', draftIntervalSeconds: 3, extraField: 'keep-me', chromiumPath: '/usr/bin/chromium' });
+      expect(statSync(path).mode & 0o777).toBe(0o600);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
+  });
+  it('不合法的值抛出可读原因，文件和运行中的配置都不变', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'settings-patch-'));
+    try {
+      const path = join(dir, 'config.json');
+      writeFileSync(path, JSON.stringify(base));
+      const before = readFileSync(path, 'utf8');
+      const v = validateConfig(base);
+      if (!v.ok) throw new Error('fixture');
+      expect(() => saveSettingsPatch(path, v.config, { draftIntervalSeconds: 999 })).toThrow(/0\.5–30/);
+      expect(readFileSync(path, 'utf8')).toBe(before);
+      expect(v.config.draftIntervalSeconds).toBe(1);
+    } finally {
+      rmSync(dir, { recursive: true, force: true });
+    }
   });
 });

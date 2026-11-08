@@ -84,6 +84,7 @@ UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-p
 | `/chats` | 分页按钮选择当前角色的聊天 |
 | `/preset` | 分页按钮切换当前 API 的预设（对话补全的预设、文本补全的预设等） |
 | `/new` | 为当前角色新建聊天；新聊天会自动发出角色的开场白 |
+| `/settings` | 在 Telegram 里切换对话样式、生成时预览方式、预览刷新间隔、行动选项按钮排版；点一下切到下一个值，保存到 `config.json` 并立即生效 |
 | `/menu` | 主菜单：角色、聊天、预设、新建聊天、重新生成、状态一键入口，附“角色 · 聊天 · 预设”速览 |
 
 在 Telegram 输入框里输入 `/` 会弹出命令菜单。直接发文字就是对角色说话。生成进行中再发消息会收到提示，这条消息不会发给角色，当前生成不受影响。开头是 `/` 的文字会被当作命令。
@@ -104,6 +105,9 @@ UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-p
 | `botToken` | 无，必填 | @BotFather 给出的完整 token |
 | `allowedUserIds` | 无，必填 | 允许使用的 Telegram 用户数字 ID 数组，例如 `[123456789]`。不在名单里的账号发消息没有任何回应。为空时插件不启动 |
 | `dialogueStyle` | `bold` | 对话（带引号的内容）的样式：`bold` 加粗，`italic` 斜体，`mark` 高亮，`plain` 只保留引号 |
+| `draftIntervalSeconds` | `1` | 生成时草稿的刷新间隔（秒），0.5–30。聊天窗口上下滚动明显时调大 |
+| `draftMode` | `live` | 生成时的草稿：`live` 逐步显示正文，`progress` 只显示“正在生成… 已写 N 字”（不滚动） |
+| `choiceLayout` | `numbers` | 行动选项按钮：`numbers` 一排数字按钮，`rows` 每个选项一行并带文字 |
 | `stBaseUrl` | `http://127.0.0.1:8000` | 无头 Chromium 访问 ST 的地址。ST 换了端口时修改 |
 | `telegramProxy` | 空 | 访问 Telegram 用的代理，见[代理](#代理) |
 | `chromiumPath` | 空 | Chrome/Chromium 可执行文件路径。留空时自动查找系统安装位置和 PATH |

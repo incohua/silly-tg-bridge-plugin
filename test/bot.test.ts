@@ -1024,7 +1024,7 @@ describe('/menu 与命令菜单', () => {
     await ctx.bot.handleUpdate(text('/menu'));
     const m = ctx.telegram.of('sendMessage').at(-1)!;
     expect(m.params.text).toBe('主菜单\n角色A · A - 1 · 破限 A');
-    expect(keyboard(m).flat().map((b) => b.callback_data)).toEqual(['m|chars', 'm|chats', 'm|preset', 'm|new', 'm|regen', 'm|status']);
+    expect(keyboard(m).flat().map((b) => b.callback_data)).toEqual(['m|chars', 'm|chats', 'm|preset', 'm|new', 'm|regen', 'm|status', 'm|settings']);
     expect(ctx.browser.ensureCalls).toBe(0);
   });
 
@@ -1049,7 +1049,7 @@ describe('/menu 与命令菜单', () => {
   });
 
   it('命令菜单覆盖全部命令且描述非空', () => {
-    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['menu', 'chars', 'chats', 'preset', 'new', 'regen', 'stop', 'status', 'help']);
+    expect(BOT_COMMANDS.map((c) => c.command)).toEqual(['menu', 'chars', 'chats', 'preset', 'new', 'regen', 'settings', 'stop', 'status', 'help']);
     expect(BOT_COMMANDS.every((c) => c.description.length > 0 && c.description.length <= 256)).toBe(true);
   });
 });
@@ -1062,6 +1062,28 @@ describe('行动选项按钮', () => {
   const round = (ctx: ReturnType<typeof setup>, over: Partial<Extract<HostEvent, { type: 'messageFinal' }>> = {}) =>
     oneRound(ctx, 'hi', { html: '<p>她看着你。</p><suot>1. 去酒馆</suot>', text: raw, raw, ...over });
 
+  it('选项消息上的 🔄：重新生成上一条回复，选项消息改成已重新生成', async () => {
+    const ctx = setup();
+    await round(ctx);
+    const m = ctx.telegram.of('sendMessage').at(-1)!;
+    const regen = keyboard(m).flat().at(-1)!;
+    expect(regen.text).toBe('🔄');
+    await tap(ctx, regen.callback_data);
+    await wait(5);
+    expect(ctx.host.requests.at(-1)).toMatchObject({ type: 'regenerate', chatId: 'chat-A' });
+    expect(ctx.telegram.of('editMessageText').at(-1)!.params.text).toBe('已重新生成上一条回复');
+    // 同一组选项不能再点
+    await tap(ctx, regen.callback_data);
+    expect(ctx.telegram.of('answerCallbackQuery').at(-1)!.params.text).toMatch(/已过期/);
+  });
+
+  it('choiceLayout=rows：每个选项一行，最后一行是 🔄', async () => {
+    const ctx = setup({ choiceLayout: 'rows' });
+    await round(ctx);
+    const kb = keyboard(ctx.telegram.of('sendMessage').at(-1)!);
+    expect(kb.map((r) => r.map((b) => b.text))).toEqual([['1. 去酒馆'], ['2. 回家'], ['3. 沉默'], ['🔄']]);
+  });
+
   it('正文去掉选项块；下面一条带按钮的选项消息；点击后把该选项作为用户消息发出', async () => {
     const ctx = setup();
     await round(ctx);
@@ -1069,7 +1091,7 @@ describe('行动选项按钮', () => {
     const m = ctx.telegram.of('sendMessage').at(-1)!;
     expect(m.params.text).toMatch(/行动选项[\s\S]*1\. 去酒馆\n2\. 回家\n3\. 沉默/);
     const kb = keyboard(m);
-    expect(kb.flat().map((b) => b.text)).toEqual(['1', '2', '3']);
+    expect(kb.flat().map((b) => b.text)).toEqual(['1', '2', '3', '🔄']);
     await tap(ctx, kb[0][1].callback_data);
     await wait(5);
     expect(ctx.host.requests.at(-1)).toMatchObject({ type: 'send', text: '回家' });
@@ -1154,5 +1176,72 @@ describe('日志', () => {
     expect(out).not.toContain(secret);
     expect(out).not.toContain('私密回复');
     expect(out).not.toContain(FAKE_TOKEN);
+  });
+});
+
+describe('/settings', () => {
+  const keyboard = (c: Call) => (c.params.reply_markup as { inline_keyboard: Array<Array<{ text: string; callback_data: string }>> }).inline_keyboard;
+  const tap = (ctx: ReturnType<typeof setup>, data: string): Promise<void> =>
+    ctx.bot.handleUpdate({ update_id: ++uid, callback_query: { id: `q${uid}`, from: { id: 1 }, data, message: { message_id: 950, chat: { id: 7, type: 'private' } } } });
+  const makeSettings = () => {
+    const values = { dialogueStyle: 'bold', draftMode: 'live', draftIntervalSeconds: 1, choiceLayout: 'numbers' };
+    const saved: Array<Record<string, unknown>> = [];
+    return {
+      values,
+      saved,
+      settings: {
+        get: () => ({ ...values }),
+        set: (p: Record<string, unknown>) => {
+          if (p.draftIntervalSeconds === 999) throw new Error('不合法');
+          saved.push(p);
+          Object.assign(values, p);
+        },
+      },
+    };
+  };
+
+  it('列出当前值；点按钮切到下一个值并保存，消息原地更新', async () => {
+    const s = makeSettings();
+    const ctx = setup({ settings: s.settings });
+    await ctx.bot.handleUpdate(text('/settings'));
+    const m = ctx.telegram.of('sendMessage').at(-1)!;
+    expect(keyboard(m).map((r) => r[0].text)).toEqual(['对话样式：加粗', '生成时预览：逐步显示正文', '预览刷新间隔：1 秒', '行动选项按钮：一排数字']);
+    await tap(ctx, 's|1');
+    await tap(ctx, 's|2');
+    await tap(ctx, 's|3');
+    expect(s.saved).toEqual([{ draftMode: 'progress' }, { draftIntervalSeconds: 2 }, { choiceLayout: 'rows' }]);
+    const edit = ctx.telegram.of('editMessageText').at(-1)!;
+    expect(keyboard(edit).map((r) => r[0].text)).toEqual(['对话样式：加粗', '生成时预览：只显示进度', '预览刷新间隔：2 秒', '行动选项按钮：每项一行']);
+  });
+
+  it('保存失败：提示原因，不改消息', async () => {
+    const s = makeSettings();
+    s.values.draftIntervalSeconds = 999;
+    s.settings.set = () => {
+      throw new Error('写入失败');
+    };
+    const ctx = setup({ settings: s.settings });
+    await tap(ctx, 's|2');
+    expect(ctx.telegram.of('answerCallbackQuery').at(-1)!.params.text).toMatch(/保存失败：写入失败/);
+    expect(ctx.telegram.of('editMessageText')).toHaveLength(0);
+  });
+
+  it('没有启用设置功能时给出提示', async () => {
+    const ctx = setup();
+    await ctx.bot.handleUpdate(text('/settings'));
+    expect(ctx.telegram.texts().at(-1)).toMatch(/没有启用设置/);
+  });
+
+  it('生成时预览为 progress：草稿只显示进度', async () => {
+    const ctx = setup({ draftMode: 'progress' });
+    ctx.host.onRequest = async () => ({ generationId: 'x' });
+    await ctx.bot.handleUpdate(text('hi'));
+    await wait(5);
+    ctx.host.emit({ type: 'streamText', generationId: ctx.host.gen, text: '她看着你，一言不发。' } as HostEvent);
+    await wait(60);
+    const draft = ctx.telegram.of('sendMessageDraft').at(-1)!;
+    expect(draft.params.text).toMatch(/^正在生成… 已写 \d+ 字$/);
+    ctx.host.emit(final(ctx.host.gen));
+    await ctx.bot.idle();
   });
 });

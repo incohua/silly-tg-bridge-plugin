@@ -10,6 +10,9 @@ export interface SettingsValues {
   lowMemory: boolean;
   dialogueStyle: string;
   logLevel: string;
+  draftIntervalSeconds: number;
+  draftMode: string;
+  choiceLayout: string;
 }
 
 export interface SettingsResponse {
@@ -37,6 +40,9 @@ export interface FormValues {
   lowMemory: boolean;
   dialogueStyle: string;
   logLevel: string;
+  draftIntervalSeconds: string;
+  draftMode: string;
+  choiceLayout: string;
 }
 
 export type ParsedIds = { ok: true; ids: number[] } | { ok: false; message: string };
@@ -83,6 +89,12 @@ export function buildPatch(form: FormValues, original: SettingsValues | undefine
   patch.lowMemory = form.lowMemory;
   patch.dialogueStyle = form.dialogueStyle;
   patch.logLevel = form.logLevel;
+  patch.draftMode = form.draftMode;
+  patch.choiceLayout = form.choiceLayout;
+
+  const draft = form.draftIntervalSeconds.trim() === '' ? 1 : Number(form.draftIntervalSeconds);
+  if (!Number.isFinite(draft)) errors.push({ field: 'draftIntervalSeconds', message: '草稿刷新间隔必须是数字（秒）。' });
+  else patch.draftIntervalSeconds = draft;
 
   return errors.length > 0 ? { ok: false, errors } : { ok: true, patch };
 }
@@ -106,6 +118,9 @@ export const FIELD_LABELS: Record<string, string> = {
   lowMemory: '低内存模式',
   dialogueStyle: '对话样式',
   logLevel: '日志级别',
+  draftIntervalSeconds: '草稿刷新间隔',
+  draftMode: '草稿显示方式',
+  choiceLayout: '选项按钮排版',
 };
 
 export const fieldLabel = (k: string): string => FIELD_LABELS[k] ?? k;

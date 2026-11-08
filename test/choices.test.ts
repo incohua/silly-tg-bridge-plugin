@@ -4,6 +4,8 @@ import { join } from 'node:path';
 import { describe, expect, it } from 'vitest';
 import {
   choicesKeyboard,
+  decodeChoiceRegen,
+  encodeChoiceRegen,
   choicesText,
   ChoiceRuleStore,
   compileRules,
@@ -140,11 +142,26 @@ describe('按钮', () => {
   });
   it('键盘每行 4 个数字；正文截断过长选项', () => {
     const kb = choicesKeyboard('abcd1234', 7);
-    expect(kb.map((r) => r.map((b) => b.text))).toEqual([['1', '2', '3', '4'], ['5', '6', '7']]);
+    expect(kb.map((r) => r.map((b) => b.text))).toEqual([['1', '2', '3', '4'], ['5', '6', '7'], ['🔄']]);
     const t = choicesText(['短', 'x'.repeat(500)]);
     expect(t).toMatch(/^行动选项/);
     expect(t).toMatch(/1\. 短/);
     expect(t.split('\n').at(-1)!.length).toBeLessThan(310);
+  });
+  it('🔄 回调编码：能解出令牌，且不会被当作选项', () => {
+    expect(decodeChoiceRegen(encodeChoiceRegen('abcd1234'))).toBe('abcd1234');
+    expect(decodeChoiceCallback(encodeChoiceRegen('abcd1234'))).toBeNull();
+    expect(decodeChoiceRegen('o|abcd1234|1')).toBeNull();
+    expect(encodeChoiceRegen('abcd1234').length).toBeLessThanOrEqual(64);
+  });
+  it('rows 排版：每个选项一行，文字过长截断', () => {
+    const kb = choicesKeyboard('abcd1234', 2, 'rows', ['短', 'x'.repeat(100)]);
+    expect(kb).toHaveLength(3);
+    expect(kb[2][0].text).toBe('🔄');
+    expect(kb[0][0].text).toBe('1. 短');
+    expect(Array.from(kb[1][0].text).length).toBeLessThanOrEqual(30);
+    expect(kb[1][0].callback_data).toBe(encodeChoiceCallback('abcd1234', 1));
+    expect(choicesText(['a'], 'rows')).toMatch(/点下面的按钮/);
   });
 });
 

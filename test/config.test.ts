@@ -22,6 +22,9 @@ describe('validateConfig', () => {
         lowMemory: true,
         dialogueStyle: 'bold',
         logLevel: 'info',
+        draftIntervalSeconds: 1,
+        draftMode: 'live',
+        choiceLayout: 'numbers',
         allowedUserIds: [42],
       });
       expect(r.config.telegramProxy).toBeUndefined();
@@ -88,6 +91,11 @@ describe('validateConfig', () => {
     expect(errorsOf({ ...base, lowMemory: 'yes' })).toHaveProperty('lowMemory');
     expect(errorsOf({ ...base, dialogueStyle: 'neon' })).toHaveProperty('dialogueStyle');
     expect(errorsOf({ ...base, dialogueStyle: 'italic' })).not.toHaveProperty('dialogueStyle');
+    expect(errorsOf({ ...base, draftIntervalSeconds: 0.1 })).toHaveProperty('draftIntervalSeconds');
+    expect(errorsOf({ ...base, draftIntervalSeconds: 31 })).toHaveProperty('draftIntervalSeconds');
+    expect(errorsOf({ ...base, draftIntervalSeconds: 2.5 })).not.toHaveProperty('draftIntervalSeconds');
+    expect(errorsOf({ ...base, draftMode: 'off' })).toHaveProperty('draftMode');
+    expect(errorsOf({ ...base, choiceLayout: 'grid' })).toHaveProperty('choiceLayout');
     expect(errorsOf({ ...base, logLevel: 'loud' })).toHaveProperty('logLevel');
   });
   it('未知配置项只警告', () => {

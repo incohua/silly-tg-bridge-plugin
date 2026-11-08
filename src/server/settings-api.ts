@@ -16,7 +16,7 @@ import { redactError } from './redact';
 export const MASK = '********';
 
 /** 保存后立即生效的字段。 */
-export const HOT_FIELDS = ['dialogueStyle', 'logLevel', 'idleShutdownMinutes', 'lowMemory'] as const;
+export const HOT_FIELDS = ['dialogueStyle', 'logLevel', 'idleShutdownMinutes', 'lowMemory', 'draftIntervalSeconds', 'draftMode', 'choiceLayout'] as const;
 /** 保存后要重启 ST 才生效的字段。 */
 export const RESTART_FIELDS = ['botToken', 'allowedUserIds', 'telegramProxy', 'basicAuth', 'stBaseUrl'] as const;
 export const MANAGED_FIELDS: readonly string[] = [...RESTART_FIELDS, ...HOT_FIELDS];
@@ -55,6 +55,9 @@ export interface SettingsView {
     lowMemory: boolean;
     dialogueStyle: string;
     logLevel: string;
+    draftIntervalSeconds: number;
+    draftMode: string;
+    choiceLayout: string;
   };
 }
 
@@ -73,6 +76,9 @@ export function viewSettings(raw: Record<string, unknown>, exists: boolean): Set
       lowMemory: typeof raw.lowMemory === 'boolean' ? raw.lowMemory : true,
       dialogueStyle: typeof raw.dialogueStyle === 'string' && raw.dialogueStyle ? raw.dialogueStyle : 'bold',
       logLevel: typeof raw.logLevel === 'string' && raw.logLevel ? raw.logLevel : 'info',
+      draftIntervalSeconds: typeof raw.draftIntervalSeconds === 'number' ? raw.draftIntervalSeconds : 1,
+      draftMode: typeof raw.draftMode === 'string' && raw.draftMode ? raw.draftMode : 'live',
+      choiceLayout: typeof raw.choiceLayout === 'string' && raw.choiceLayout ? raw.choiceLayout : 'numbers',
     },
   };
 }
@@ -200,6 +206,23 @@ export interface SettingsRouteOptions {
 function isAdmin(req: import('express').Request): boolean {
   const user = (req as unknown as { user?: { profile?: { admin?: boolean } } }).user;
   return !user || user.profile?.admin === true;
+}
+
+/** 把校验后的新配置里热生效的字段写进运行中的 Config 对象（消费方用 getter 实时读取）。 */
+export function assignHotFields(target: Config, source: Config): void {
+  for (const f of HOT_FIELDS) (target as unknown as Record<string, unknown>)[f] = source[f];
+}
+
+/**
+ * 校验并保存一个设置补丁到 config.json，热生效字段立即应用到运行中的配置。失败抛出带可读原因的错误。
+ * bot 里的 /settings 用它；它与面板接口走同一套 applySettings 校验。
+ */
+export function saveSettingsPatch(configPath: string, live: Config, patch: Record<string, unknown>): void {
+  const { raw } = readRawConfig(configPath);
+  const r = applySettings(raw, patch);
+  if (!r.ok) throw new Error(r.errors.map((e) => e.message).join('；'));
+  writeRawConfig(configPath, r.raw);
+  assignHotFields(live, r.config);
 }
 
 /** 注册 GET/POST /config。 */

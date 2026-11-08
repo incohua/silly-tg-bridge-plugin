@@ -195,6 +195,14 @@ export interface ChoiceCallback {
 
 export const encodeChoiceCallback = (token: string, n: number): string => `o|${token}|${n}`;
 
+/** 选项消息上的“重新生成”按钮：o|<令牌>|r。 */
+export const encodeChoiceRegen = (token: string): string => `o|${token}|r`;
+
+export function decodeChoiceRegen(data: string | undefined): string | null {
+  const m = /^o\|([0-9a-f]{1,16})\|r$/.exec(data ?? '');
+  return m ? m[1] : null;
+}
+
 export function decodeChoiceCallback(data: string | undefined): ChoiceCallback | null {
   const m = /^o\|([0-9a-f]{1,16})\|(\d{1,2})$/.exec(data ?? '');
   return m ? { token: m[1], n: Number(m[2]) } : null;
@@ -203,20 +211,36 @@ export function decodeChoiceCallback(data: string | undefined): ChoiceCallback |
 const LINE_MAX = 300;
 
 /** 选项消息正文：完整的编号选项（过长的截断，按钮发送的仍是完整文字）。 */
-export function choicesText(choices: readonly string[]): string {
+export function choicesText(choices: readonly string[], layout: 'numbers' | 'rows' = 'numbers'): string {
   const cps = (s: string): string => {
     const a = Array.from(s);
     return a.length > LINE_MAX ? `${a.slice(0, LINE_MAX - 1).join('')}…` : s;
   };
-  return `行动选项（点下面的数字选择）\n\n${choices.map((c, i) => `${i + 1}. ${cps(c)}`).join('\n')}`;
+  return `行动选项（点下面的${layout === 'rows' ? '按钮' : '数字'}选择）\n\n${choices.map((c, i) => `${i + 1}. ${cps(c)}`).join('\n')}`;
 }
 
-/** 数字按钮，每行 4 个。 */
-export function choicesKeyboard(token: string, count: number): Array<Array<{ text: string; callback_data: string }>> {
+const BUTTON_TEXT_MAX = 26;
+
+/** 选项按钮：numbers 每行 4 个数字；rows 每个选项一行，带序号和前几个字（点按发送的仍是完整文字）。 */
+export function choicesKeyboard(
+  token: string,
+  count: number,
+  layout: 'numbers' | 'rows' = 'numbers',
+  choices: readonly string[] = [],
+): Array<Array<{ text: string; callback_data: string }>> {
+  const regen = [{ text: '🔄', callback_data: encodeChoiceRegen(token) }];
+  if (layout === 'rows') {
+    return [...Array.from({ length: count }, (_, i) => {
+      const a = Array.from(choices[i] ?? '');
+      const label = a.length > BUTTON_TEXT_MAX ? `${a.slice(0, BUTTON_TEXT_MAX - 1).join('')}…` : a.join('');
+      return [{ text: `${i + 1}. ${label}`.trim(), callback_data: encodeChoiceCallback(token, i) }];
+    }), regen];
+  }
   const rows: Array<Array<{ text: string; callback_data: string }>> = [];
   for (let i = 0; i < count; i += 4) {
     rows.push(Array.from({ length: Math.min(4, count - i) }, (_, k) => ({ text: String(i + k + 1), callback_data: encodeChoiceCallback(token, i + k) })));
   }
+  rows.push(regen);
   return rows;
 }
 

@@ -551,6 +551,11 @@
     patch.lowMemory = form.lowMemory;
     patch.dialogueStyle = form.dialogueStyle;
     patch.logLevel = form.logLevel;
+    patch.draftMode = form.draftMode;
+    patch.choiceLayout = form.choiceLayout;
+    const draft = form.draftIntervalSeconds.trim() === "" ? 1 : Number(form.draftIntervalSeconds);
+    if (!Number.isFinite(draft)) errors.push({ field: "draftIntervalSeconds", message: "\u8349\u7A3F\u5237\u65B0\u95F4\u9694\u5FC5\u987B\u662F\u6570\u5B57\uFF08\u79D2\uFF09\u3002" });
+    else patch.draftIntervalSeconds = draft;
     return errors.length > 0 ? { ok: false, errors } : { ok: true, patch };
   }
   function saveSummary(r) {
@@ -569,7 +574,10 @@
     idleShutdownMinutes: "\u7A7A\u95F2\u5173\u95ED\u65F6\u95F4",
     lowMemory: "\u4F4E\u5185\u5B58\u6A21\u5F0F",
     dialogueStyle: "\u5BF9\u8BDD\u6837\u5F0F",
-    logLevel: "\u65E5\u5FD7\u7EA7\u522B"
+    logLevel: "\u65E5\u5FD7\u7EA7\u522B",
+    draftIntervalSeconds: "\u8349\u7A3F\u5237\u65B0\u95F4\u9694",
+    draftMode: "\u8349\u7A3F\u663E\u793A\u65B9\u5F0F",
+    choiceLayout: "\u9009\u9879\u6309\u94AE\u6392\u7248"
   };
   var fieldLabel = (k) => FIELD_LABELS[k] ?? k;
 
@@ -688,6 +696,15 @@
         ["mark", "\u9AD8\u4EAE"],
         ["plain", "\u53EA\u4FDD\u7559\u5F15\u53F7"]
       ]),
+      draftIntervalSeconds: input("number", "1"),
+      draftMode: select([
+        ["live", "\u9010\u6B65\u663E\u793A\u6B63\u6587"],
+        ["progress", "\u53EA\u663E\u793A\u8FDB\u5EA6"]
+      ]),
+      choiceLayout: select([
+        ["numbers", "\u4E00\u6392\u6570\u5B57\u6309\u94AE"],
+        ["rows", "\u6BCF\u4E2A\u9009\u9879\u4E00\u884C"]
+      ]),
       logLevel: select([
         ["info", "info"],
         ["debug", "debug"],
@@ -704,6 +721,9 @@
       idleShutdownMinutes: row("\u7A7A\u95F2\u5173\u95ED\uFF08\u5206\u949F\uFF09", "\u7ACB\u5373\u751F\u6548", f.idleShutdownMinutes, "0 \u8868\u793A\u4E0D\u81EA\u52A8\u5173\u95ED\u65E0\u5934\u6D4F\u89C8\u5668\u3002"),
       lowMemory: row("\u4F4E\u5185\u5B58\u6A21\u5F0F", "\u4E0B\u6B21\u542F\u52A8\u6D4F\u89C8\u5668\u65F6\u751F\u6548", f.lowMemory),
       dialogueStyle: row("\u5BF9\u8BDD\u6837\u5F0F", "\u7ACB\u5373\u751F\u6548", f.dialogueStyle),
+      draftIntervalSeconds: row("\u8349\u7A3F\u5237\u65B0\u95F4\u9694\uFF08\u79D2\uFF09", "\u7ACB\u5373\u751F\u6548", f.draftIntervalSeconds, "\u751F\u6210\u65F6\u6BCF\u9694\u8FD9\u4E48\u4E45\u66F4\u65B0\u4E00\u6B21\u8349\u7A3F\uFF0C0.5\u201330\u3002\u8C03\u5927\u53EF\u51CF\u5C11\u804A\u5929\u7A97\u53E3\u4E0A\u4E0B\u6EDA\u52A8\u3002"),
+      draftMode: row("\u8349\u7A3F\u663E\u793A\u65B9\u5F0F", "\u7ACB\u5373\u751F\u6548", f.draftMode, "\u201C\u53EA\u663E\u793A\u8FDB\u5EA6\u201D\u65F6\u751F\u6210\u8FC7\u7A0B\u4E2D\u4E0D\u663E\u793A\u6B63\u6587\uFF0C\u804A\u5929\u7A97\u53E3\u4E0D\u4F1A\u6EDA\u52A8\u3002"),
+      choiceLayout: row("\u884C\u52A8\u9009\u9879\u6309\u94AE", "\u7ACB\u5373\u751F\u6548", f.choiceLayout),
       logLevel: row("\u65E5\u5FD7\u7EA7\u522B", "\u7ACB\u5373\u751F\u6548", f.logLevel)
     };
     rows.basicAuth.root.insertBefore(f.basicAuthPassword, rows.basicAuth.error);
@@ -739,6 +759,9 @@
       f.idleShutdownMinutes.value = String(v.idleShutdownMinutes);
       f.lowMemory.checked = v.lowMemory;
       f.dialogueStyle.value = v.dialogueStyle;
+      f.draftIntervalSeconds.value = String(v.draftIntervalSeconds);
+      f.draftMode.value = v.draftMode;
+      f.choiceLayout.value = v.choiceLayout;
       f.logLevel.value = v.logLevel;
     };
     const showBanner = (r) => {
@@ -788,6 +811,9 @@
           idleShutdownMinutes: f.idleShutdownMinutes.value,
           lowMemory: f.lowMemory.checked,
           dialogueStyle: f.dialogueStyle.value,
+          draftIntervalSeconds: f.draftIntervalSeconds.value,
+          draftMode: f.draftMode.value,
+          choiceLayout: f.choiceLayout.value,
           logLevel: f.logLevel.value
         };
         const built = buildPatch(form2, original);

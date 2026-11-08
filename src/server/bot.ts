@@ -12,13 +12,14 @@ import { randomBytes, randomInt, randomUUID } from 'node:crypto';
 import type { CharacterInfo, ChatInfo, HostCommandInput, HostEvent, Greeting, HostStatus, PresetList, SwitchResult } from '../shared/protocol';
 import { clampPage, decodeCallback, listKeyboard, listTitle, PAGE_SIZE, type ListKind, type Listing } from './bot-lists';
 import type { BrowserState } from './browser';
-import { choicesKeyboard, choicesText, decodeChoiceCallback, DEFAULT_RULES, compileRules, parseChoices, type CompiledChoiceRule } from './choices';
+import { choicesKeyboard, choicesText, decodeChoiceCallback, decodeChoiceRegen, DEFAULT_RULES, compileRules, parseChoices, type CompiledChoiceRule } from './choices';
 import { deliverFinal } from './deliver';
 import type { Logger } from './logger';
 import type { ReplyRecord, SessionRecord } from './message-map';
 import type { PluginStatus } from './plugin';
 import type { CallOptions, TelegramCallbackQuery, TelegramMessage, TelegramUpdate } from './telegram';
 import { TelegramApiError } from './telegram';
+import { decodeSettingsCallback, nextValue, SETTING_DEFS, settingsKeyboard, settingsText, type BotSettings } from './bot-settings';
 import { streamPreview } from './text';
 import type { DialogueStyle } from '../shared/rich-html';
 
@@ -75,8 +76,14 @@ export interface BotOptions {
   dialogueStyle?: DialogueStyle;
   /** /status 显示看门狗状态。 */
   watchdogStatus?: () => string | undefined;
+  /** /settings 用：读取和保存常用设置。没有提供时 /settings 提示不可用。 */
+  settings?: BotSettings;
   /** 草稿更新最小间隔，默认 1000 毫秒。 */
   draftIntervalMs?: number;
+  /** 草稿显示方式：live 逐步显示正文（默认），progress 只显示进度。 */
+  draftMode?: 'live' | 'progress';
+  /** 行动选项按钮排版：numbers（默认）或 rows。 */
+  choiceLayout?: 'numbers' | 'rows';
   /** typing 重发间隔，默认 4500 毫秒（Telegram 的 typing 状态约持续 5 秒）。 */
   typingIntervalMs?: number;
   /** 一轮生成中超过这么久没有任何进展就放弃，默认 10 分钟。 */
@@ -113,6 +120,7 @@ export const HELP_TEXT = [
   '/preset 切换预设',
   '/new 为当前角色新建聊天',
   '/menu 打开主菜单（角色、聊天、预设等一键入口）',
+  '/settings 设置（对话样式、生成预览、选项按钮排版）',
   '/status 查看无头浏览器、ST 页面和当前角色',
   '/help 显示这段说明',
 ].join('\n');
@@ -125,19 +133,20 @@ export const BOT_COMMANDS: ReadonlyArray<{ command: string; description: string 
   { command: 'preset', description: '切换预设' },
   { command: 'new', description: '为当前角色新建聊天' },
   { command: 'regen', description: '重新生成上一条回复' },
+  { command: 'settings', description: '设置：对话样式、生成预览等' },
   { command: 'stop', description: '停止生成' },
   { command: 'status', description: '查看运行状态' },
   { command: 'help', description: '显示命令说明' },
 ];
 
 /** /menu 的按钮：callback_data 为 m|<动作>，动作对应同名命令。 */
-export const MENU_ACTIONS = ['chars', 'chats', 'preset', 'new', 'regen', 'status'] as const;
+export const MENU_ACTIONS = ['chars', 'chats', 'preset', 'new', 'regen', 'status', 'settings'] as const;
 export type MenuAction = (typeof MENU_ACTIONS)[number];
-const MENU_LABELS: Record<MenuAction, string> = { chars: '角色', chats: '聊天', preset: '预设', new: '新建聊天', regen: '重新生成', status: '状态' };
+const MENU_LABELS: Record<MenuAction, string> = { chars: '角色', chats: '聊天', preset: '预设', new: '新建聊天', regen: '重新生成', status: '状态', settings: '设置' };
 
 export function menuKeyboard(): Array<Array<{ text: string; callback_data: string }>> {
   const btn = (a: MenuAction) => ({ text: MENU_LABELS[a], callback_data: `m|${a}` });
-  return [[btn('chars'), btn('chats'), btn('preset')], [btn('new'), btn('regen'), btn('status')]];
+  return [[btn('chars'), btn('chats'), btn('preset')], [btn('new'), btn('regen'), btn('status')], [btn('settings')]];
 }
 
 export function decodeMenuCallback(data: string | undefined): MenuAction | null {
@@ -272,6 +281,9 @@ export class Bot {
         return this.requestStop(chatId, 'command');
       case 'menu':
         await this.sendMenu(chatId);
+        return;
+      case 'settings':
+        await this.sendSettings(chatId);
         return;
     }
     if (!['regen', 'chars', 'chats', 'preset', 'new'].includes(name)) {
@@ -468,6 +480,65 @@ export class Bot {
     }
   }
 
+  /** 选项消息上的 🔄：重新生成上一条回复。 */
+  private async handleChoiceRegen(q: TelegramCallbackQuery, token: string, answer: (text?: string) => Promise<unknown>): Promise<void> {
+    const { telegram, log, store } = this.opts;
+    const chatId = q.message?.chat.id ?? q.from.id;
+    if (!this.choiceSet || this.choiceSet.token !== token) {
+      await answer('这组选项已过期（只有最新一条回复的选项有效）');
+      return;
+    }
+    if (this.busy) {
+      await answer('正在处理上一条，请稍后再试');
+      return;
+    }
+    const previous = store.lastReply(chatId);
+    if (!previous) {
+      await answer(NOTHING_TO_REGEN_TEXT);
+      return;
+    }
+    await answer();
+    log.info('选项消息：重新生成');
+    this.startTurn(chatId, { kind: 'regenerate', previous });
+    if (q.message) {
+      await telegram.editMessageText({ chat_id: chatId, message_id: q.message.message_id, text: '已重新生成上一条回复' }).catch((e) => log.debug(`更新选项消息失败：${errMsg(e)}`));
+    }
+  }
+
+  private async sendSettings(chatId: number): Promise<void> {
+    const s = this.opts.settings;
+    if (!s) {
+      await this.reply(chatId, '当前版本没有启用设置功能。');
+      return;
+    }
+    await this.reply(chatId, settingsText(), { reply_markup: { inline_keyboard: settingsKeyboard(s.get()) } });
+  }
+
+  private async handleSettingsTap(q: TelegramCallbackQuery, index: number, answer: (text?: string) => Promise<unknown>): Promise<void> {
+    const { telegram, log } = this.opts;
+    const s = this.opts.settings;
+    const def = SETTING_DEFS[index];
+    if (!s || !def) {
+      await answer('设置不可用');
+      return;
+    }
+    try {
+      const next = nextValue(def, s.get()[def.key]);
+      s.set({ [def.key]: next });
+      log.info(`/settings：${def.key} -> ${String(next)}`);
+      await answer('已保存');
+    } catch (e) {
+      log.warn(`/settings 保存失败：${errMsg(e)}`);
+      await answer(`保存失败：${errMsg(e)}`.slice(0, 190));
+      return;
+    }
+    if (q.message) {
+      await telegram
+        .editMessageText({ chat_id: q.message.chat.id, message_id: q.message.message_id, text: settingsText(), reply_markup: { inline_keyboard: settingsKeyboard(s.get()) } })
+        .catch((e) => log.debug(`更新设置消息失败：${errMsg(e)}`));
+    }
+  }
+
   private async handleCallback(q: TelegramCallbackQuery): Promise<void> {
     const { telegram, log } = this.opts;
     const answer = (text?: string): Promise<unknown> => telegram.answerCallbackQuery({ callback_query_id: q.id, text }).catch(() => undefined);
@@ -475,6 +546,16 @@ export class Bot {
     if (menu) {
       await answer();
       await this.handleCommand(q.message?.chat.id ?? q.from.id, menu);
+      return;
+    }
+    const settingIndex = decodeSettingsCallback(q.data);
+    if (settingIndex !== null) {
+      await this.handleSettingsTap(q, settingIndex, answer);
+      return;
+    }
+    const regenToken = decodeChoiceRegen(q.data);
+    if (regenToken) {
+      await this.handleChoiceRegen(q, regenToken, answer);
       return;
     }
     const choice = decodeChoiceCallback(q.data);
@@ -546,7 +627,8 @@ export class Bot {
   private async sendChoices(chatId: number, choices: string[]): Promise<void> {
     const token = randomBytes(4).toString('hex');
     this.choiceSet = { token, items: choices };
-    const m = await this.reply(chatId, choicesText(choices), { reply_markup: { inline_keyboard: choicesKeyboard(token, choices.length) } });
+    const layout = this.opts.choiceLayout ?? 'numbers';
+    const m = await this.reply(chatId, choicesText(choices, layout), { reply_markup: { inline_keyboard: choicesKeyboard(token, choices.length, layout, choices) } });
     if (!m) this.choiceSet = null;
   }
 
@@ -734,8 +816,9 @@ export class Bot {
     };
     const onStream = (raw: string): void => {
       if (this.draftsDisabled) return;
-      const preview = streamPreview(raw);
+      let preview = streamPreview(raw);
       if (!preview) return;
+      if ((this.opts.draftMode ?? 'live') === 'progress') preview = `正在生成… 已写 ${Array.from(preview).length} 字`;
       stopTyping();
       pendingPreview = preview;
       if (draftTimer) return;

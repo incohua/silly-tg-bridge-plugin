@@ -9,7 +9,7 @@ import { HostChannel } from './host-channel';
 import { createFetch, type FetchLike } from './http';
 import { createLogger, type Logger } from './logger';
 import { redactError } from './redact';
-import { registerSettingsRoutes } from './settings-api';
+import { assignHotFields, registerSettingsRoutes } from './settings-api';
 import { pollUpdates, TelegramClient, type TelegramUpdate } from './telegram';
 
 /** 启动自检的汇总，供 /status 展示（bot 命令在后续步骤接入）。 */
@@ -75,10 +75,7 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
     applyHot: (c) => {
       if (!liveConfig) return;
       // 只更新热生效字段；其余字段要重启才生效，运行中的值保持不变
-      liveConfig.dialogueStyle = c.dialogueStyle;
-      liveConfig.logLevel = c.logLevel;
-      liveConfig.idleShutdownMinutes = c.idleShutdownMinutes;
-      liveConfig.lowMemory = c.lowMemory;
+      assignHotFields(liveConfig, c);
       runtimeLog.setLevel?.(c.logLevel);
     },
   });

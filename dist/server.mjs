@@ -85161,7 +85161,7 @@ function createLogger(opts = {}) {
 }
 
 // src/server/bridge.ts
-import { dirname as dirname6, join as join6 } from "node:path";
+import { dirname as dirname7, join as join6 } from "node:path";
 
 // src/server/bot.ts
 import { randomBytes, randomInt, randomUUID } from "node:crypto";
@@ -85369,25 +85369,40 @@ function parseChoices(raw, html, text2, rules) {
   return null;
 }
 var encodeChoiceCallback = (token, n) => `o|${token}|${n}`;
+var encodeChoiceRegen = (token) => `o|${token}|r`;
+function decodeChoiceRegen(data) {
+  const m = /^o\|([0-9a-f]{1,16})\|r$/.exec(data ?? "");
+  return m ? m[1] : null;
+}
 function decodeChoiceCallback(data) {
   const m = /^o\|([0-9a-f]{1,16})\|(\d{1,2})$/.exec(data ?? "");
   return m ? { token: m[1], n: Number(m[2]) } : null;
 }
 var LINE_MAX = 300;
-function choicesText(choices) {
+function choicesText(choices, layout = "numbers") {
   const cps = (s) => {
     const a2 = Array.from(s);
     return a2.length > LINE_MAX ? `${a2.slice(0, LINE_MAX - 1).join("")}\u2026` : s;
   };
-  return `\u884C\u52A8\u9009\u9879\uFF08\u70B9\u4E0B\u9762\u7684\u6570\u5B57\u9009\u62E9\uFF09
+  return `\u884C\u52A8\u9009\u9879\uFF08\u70B9\u4E0B\u9762\u7684${layout === "rows" ? "\u6309\u94AE" : "\u6570\u5B57"}\u9009\u62E9\uFF09
 
 ${choices.map((c, i) => `${i + 1}. ${cps(c)}`).join("\n")}`;
 }
-function choicesKeyboard(token, count) {
+var BUTTON_TEXT_MAX = 26;
+function choicesKeyboard(token, count, layout = "numbers", choices = []) {
+  const regen = [{ text: "\u{1F504}", callback_data: encodeChoiceRegen(token) }];
+  if (layout === "rows") {
+    return [...Array.from({ length: count }, (_2, i) => {
+      const a2 = Array.from(choices[i] ?? "");
+      const label = a2.length > BUTTON_TEXT_MAX ? `${a2.slice(0, BUTTON_TEXT_MAX - 1).join("")}\u2026` : a2.join("");
+      return [{ text: `${i + 1}. ${label}`.trim(), callback_data: encodeChoiceCallback(token, i) }];
+    }), regen];
+  }
   const rows = [];
   for (let i = 0; i < count; i += 4) {
     rows.push(Array.from({ length: Math.min(4, count - i) }, (_2, k) => ({ text: String(i + k + 1), callback_data: encodeChoiceCallback(token, i + k) })));
   }
+  rows.push(regen);
   return rows;
 }
 var ChoiceRuleStore = class {
@@ -88686,6 +88701,33 @@ async function pollUpdates(opts) {
   return "aborted";
 }
 
+// src/server/bot-settings.ts
+var SETTING_DEFS = [
+  { key: "dialogueStyle", label: "\u5BF9\u8BDD\u6837\u5F0F", values: [["bold", "\u52A0\u7C97"], ["italic", "\u659C\u4F53"], ["mark", "\u9AD8\u4EAE"], ["plain", "\u53EA\u4FDD\u7559\u5F15\u53F7"]] },
+  { key: "draftMode", label: "\u751F\u6210\u65F6\u9884\u89C8", values: [["live", "\u9010\u6B65\u663E\u793A\u6B63\u6587"], ["progress", "\u53EA\u663E\u793A\u8FDB\u5EA6"]] },
+  { key: "draftIntervalSeconds", label: "\u9884\u89C8\u5237\u65B0\u95F4\u9694", values: [[0.5, "0.5 \u79D2"], [1, "1 \u79D2"], [2, "2 \u79D2"], [3, "3 \u79D2"], [5, "5 \u79D2"], [10, "10 \u79D2"]] },
+  { key: "choiceLayout", label: "\u884C\u52A8\u9009\u9879\u6309\u94AE", values: [["numbers", "\u4E00\u6392\u6570\u5B57"], ["rows", "\u6BCF\u9879\u4E00\u884C"]] }
+];
+function valueLabel(def, current) {
+  return def.values.find(([v2]) => v2 === current)?.[1] ?? (def.key === "draftIntervalSeconds" ? `${current} \u79D2` : String(current));
+}
+function nextValue(def, current) {
+  const i = def.values.findIndex(([v2]) => v2 === current);
+  if (i >= 0) return def.values[(i + 1) % def.values.length][0];
+  if (typeof current === "number") return def.values.find(([v2]) => typeof v2 === "number" && v2 > current)?.[0] ?? def.values[0][0];
+  return def.values[0][0];
+}
+function settingsText() {
+  return "\u8BBE\u7F6E\uFF08\u70B9\u6309\u94AE\u5207\u6362\u5230\u4E0B\u4E00\u4E2A\u503C\uFF0C\u7ACB\u5373\u751F\u6548\u5E76\u4FDD\u5B58\u5230 config.json\uFF09";
+}
+function settingsKeyboard(values) {
+  return SETTING_DEFS.map((def, i) => [{ text: `${def.label}\uFF1A${valueLabel(def, values[def.key])}`, callback_data: `s|${i}` }]);
+}
+function decodeSettingsCallback(data) {
+  const m = /^s\|(\d{1,2})$/.exec(data ?? "");
+  return m && Number(m[1]) < SETTING_DEFS.length ? Number(m[1]) : null;
+}
+
 // src/server/bot.ts
 var HELP_TEXT = [
   "\u5728\u8FD9\u91CC\u548C SillyTavern \u91CC\u5F53\u524D\u6253\u5F00\u7684\u89D2\u8272\u804A\u5929\u3002\u76F4\u63A5\u53D1\u6587\u5B57\u5373\u53EF\u3002",
@@ -88697,6 +88739,7 @@ var HELP_TEXT = [
   "/preset \u5207\u6362\u9884\u8BBE",
   "/new \u4E3A\u5F53\u524D\u89D2\u8272\u65B0\u5EFA\u804A\u5929",
   "/menu \u6253\u5F00\u4E3B\u83DC\u5355\uFF08\u89D2\u8272\u3001\u804A\u5929\u3001\u9884\u8BBE\u7B49\u4E00\u952E\u5165\u53E3\uFF09",
+  "/settings \u8BBE\u7F6E\uFF08\u5BF9\u8BDD\u6837\u5F0F\u3001\u751F\u6210\u9884\u89C8\u3001\u9009\u9879\u6309\u94AE\u6392\u7248\uFF09",
   "/status \u67E5\u770B\u65E0\u5934\u6D4F\u89C8\u5668\u3001ST \u9875\u9762\u548C\u5F53\u524D\u89D2\u8272",
   "/help \u663E\u793A\u8FD9\u6BB5\u8BF4\u660E"
 ].join("\n");
@@ -88707,15 +88750,16 @@ var BOT_COMMANDS = [
   { command: "preset", description: "\u5207\u6362\u9884\u8BBE" },
   { command: "new", description: "\u4E3A\u5F53\u524D\u89D2\u8272\u65B0\u5EFA\u804A\u5929" },
   { command: "regen", description: "\u91CD\u65B0\u751F\u6210\u4E0A\u4E00\u6761\u56DE\u590D" },
+  { command: "settings", description: "\u8BBE\u7F6E\uFF1A\u5BF9\u8BDD\u6837\u5F0F\u3001\u751F\u6210\u9884\u89C8\u7B49" },
   { command: "stop", description: "\u505C\u6B62\u751F\u6210" },
   { command: "status", description: "\u67E5\u770B\u8FD0\u884C\u72B6\u6001" },
   { command: "help", description: "\u663E\u793A\u547D\u4EE4\u8BF4\u660E" }
 ];
-var MENU_ACTIONS = ["chars", "chats", "preset", "new", "regen", "status"];
-var MENU_LABELS = { chars: "\u89D2\u8272", chats: "\u804A\u5929", preset: "\u9884\u8BBE", new: "\u65B0\u5EFA\u804A\u5929", regen: "\u91CD\u65B0\u751F\u6210", status: "\u72B6\u6001" };
+var MENU_ACTIONS = ["chars", "chats", "preset", "new", "regen", "status", "settings"];
+var MENU_LABELS = { chars: "\u89D2\u8272", chats: "\u804A\u5929", preset: "\u9884\u8BBE", new: "\u65B0\u5EFA\u804A\u5929", regen: "\u91CD\u65B0\u751F\u6210", status: "\u72B6\u6001", settings: "\u8BBE\u7F6E" };
 function menuKeyboard() {
   const btn = (a2) => ({ text: MENU_LABELS[a2], callback_data: `m|${a2}` });
-  return [[btn("chars"), btn("chats"), btn("preset")], [btn("new"), btn("regen"), btn("status")]];
+  return [[btn("chars"), btn("chats"), btn("preset")], [btn("new"), btn("regen"), btn("status")], [btn("settings")]];
 }
 function decodeMenuCallback(data) {
   const m = /^m\|([a-z]+)$/.exec(data ?? "");
@@ -88815,6 +88859,9 @@ var Bot = class {
         return this.requestStop(chatId, "command");
       case "menu":
         await this.sendMenu(chatId);
+        return;
+      case "settings":
+        await this.sendSettings(chatId);
         return;
     }
     if (!["regen", "chars", "chats", "preset", "new"].includes(name)) {
@@ -88996,6 +89043,60 @@ ${summary}` : "\u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard: menuKeybo
       await telegram.editMessageText({ chat_id: chatId, message_id: q2.message.message_id, text: text2 }).catch((e) => log.debug(`\u66F4\u65B0\u9009\u9879\u6D88\u606F\u5931\u8D25\uFF1A${errMsg(e)}`));
     }
   }
+  /** 选项消息上的 🔄：重新生成上一条回复。 */
+  async handleChoiceRegen(q2, token, answer) {
+    const { telegram, log, store } = this.opts;
+    const chatId = q2.message?.chat.id ?? q2.from.id;
+    if (!this.choiceSet || this.choiceSet.token !== token) {
+      await answer("\u8FD9\u7EC4\u9009\u9879\u5DF2\u8FC7\u671F\uFF08\u53EA\u6709\u6700\u65B0\u4E00\u6761\u56DE\u590D\u7684\u9009\u9879\u6709\u6548\uFF09");
+      return;
+    }
+    if (this.busy) {
+      await answer("\u6B63\u5728\u5904\u7406\u4E0A\u4E00\u6761\uFF0C\u8BF7\u7A0D\u540E\u518D\u8BD5");
+      return;
+    }
+    const previous = store.lastReply(chatId);
+    if (!previous) {
+      await answer(NOTHING_TO_REGEN_TEXT);
+      return;
+    }
+    await answer();
+    log.info("\u9009\u9879\u6D88\u606F\uFF1A\u91CD\u65B0\u751F\u6210");
+    this.startTurn(chatId, { kind: "regenerate", previous });
+    if (q2.message) {
+      await telegram.editMessageText({ chat_id: chatId, message_id: q2.message.message_id, text: "\u5DF2\u91CD\u65B0\u751F\u6210\u4E0A\u4E00\u6761\u56DE\u590D" }).catch((e) => log.debug(`\u66F4\u65B0\u9009\u9879\u6D88\u606F\u5931\u8D25\uFF1A${errMsg(e)}`));
+    }
+  }
+  async sendSettings(chatId) {
+    const s = this.opts.settings;
+    if (!s) {
+      await this.reply(chatId, "\u5F53\u524D\u7248\u672C\u6CA1\u6709\u542F\u7528\u8BBE\u7F6E\u529F\u80FD\u3002");
+      return;
+    }
+    await this.reply(chatId, settingsText(), { reply_markup: { inline_keyboard: settingsKeyboard(s.get()) } });
+  }
+  async handleSettingsTap(q2, index, answer) {
+    const { telegram, log } = this.opts;
+    const s = this.opts.settings;
+    const def = SETTING_DEFS[index];
+    if (!s || !def) {
+      await answer("\u8BBE\u7F6E\u4E0D\u53EF\u7528");
+      return;
+    }
+    try {
+      const next = nextValue(def, s.get()[def.key]);
+      s.set({ [def.key]: next });
+      log.info(`/settings\uFF1A${def.key} -> ${String(next)}`);
+      await answer("\u5DF2\u4FDD\u5B58");
+    } catch (e) {
+      log.warn(`/settings \u4FDD\u5B58\u5931\u8D25\uFF1A${errMsg(e)}`);
+      await answer(`\u4FDD\u5B58\u5931\u8D25\uFF1A${errMsg(e)}`.slice(0, 190));
+      return;
+    }
+    if (q2.message) {
+      await telegram.editMessageText({ chat_id: q2.message.chat.id, message_id: q2.message.message_id, text: settingsText(), reply_markup: { inline_keyboard: settingsKeyboard(s.get()) } }).catch((e) => log.debug(`\u66F4\u65B0\u8BBE\u7F6E\u6D88\u606F\u5931\u8D25\uFF1A${errMsg(e)}`));
+    }
+  }
   async handleCallback(q2) {
     const { telegram, log } = this.opts;
     const answer = (text2) => telegram.answerCallbackQuery({ callback_query_id: q2.id, text: text2 }).catch(() => void 0);
@@ -89003,6 +89104,16 @@ ${summary}` : "\u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard: menuKeybo
     if (menu) {
       await answer();
       await this.handleCommand(q2.message?.chat.id ?? q2.from.id, menu);
+      return;
+    }
+    const settingIndex = decodeSettingsCallback(q2.data);
+    if (settingIndex !== null) {
+      await this.handleSettingsTap(q2, settingIndex, answer);
+      return;
+    }
+    const regenToken = decodeChoiceRegen(q2.data);
+    if (regenToken) {
+      await this.handleChoiceRegen(q2, regenToken, answer);
       return;
     }
     const choice = decodeChoiceCallback(q2.data);
@@ -89070,7 +89181,8 @@ ${summary}` : "\u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard: menuKeybo
   async sendChoices(chatId, choices) {
     const token = randomBytes(4).toString("hex");
     this.choiceSet = { token, items: choices };
-    const m = await this.reply(chatId, choicesText(choices), { reply_markup: { inline_keyboard: choicesKeyboard(token, choices.length) } });
+    const layout = this.opts.choiceLayout ?? "numbers";
+    const m = await this.reply(chatId, choicesText(choices, layout), { reply_markup: { inline_keyboard: choicesKeyboard(token, choices.length, layout, choices) } });
     if (!m) this.choiceSet = null;
   }
   /** 新聊天只有开场白时，把开场白作为正式消息发出；同一聊天只发一次。 */
@@ -89241,8 +89353,9 @@ ${summary}` : "\u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard: menuKeybo
     };
     const onStream = (raw) => {
       if (this.draftsDisabled) return;
-      const preview = streamPreview(raw);
+      let preview = streamPreview(raw);
       if (!preview) return;
+      if ((this.opts.draftMode ?? "live") === "progress") preview = `\u6B63\u5728\u751F\u6210\u2026 \u5DF2\u5199 ${Array.from(preview).length} \u5B57`;
       stopTyping();
       pendingPreview = preview;
       if (draftTimer) return;
@@ -91323,6 +91436,401 @@ var puppeteerLauncher = async ({ executablePath: executablePath2, args, userData
   return wrapped;
 };
 
+// src/server/settings-api.ts
+import { chmodSync, existsSync as existsSync3, mkdirSync as mkdirSync2, readFileSync as readFileSync8, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "node:fs";
+import { dirname as dirname6 } from "node:path";
+
+// src/server/config.ts
+import { readFileSync as readFileSync7 } from "node:fs";
+var KNOWN_KEYS = /* @__PURE__ */ new Set([
+  "botToken",
+  "allowedUserIds",
+  "stBaseUrl",
+  "telegramProxy",
+  "chromiumPath",
+  "basicAuth",
+  "miniAppPort",
+  "publicBaseUrl",
+  "idleShutdownMinutes",
+  "lowMemory",
+  "dialogueStyle",
+  "logLevel",
+  "draftIntervalSeconds",
+  "draftMode",
+  "choiceLayout",
+  "telegramApiBase"
+]);
+var TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
+var LOG_LEVELS = ["debug", "info", "warn", "error"];
+var isRecord = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
+var unset = (v2) => v2 === void 0 || v2 === null || v2 === "";
+function parseUrl(raw) {
+  try {
+    return new URL(raw);
+  } catch {
+    return null;
+  }
+}
+function validateConfig(raw, source2 = "config.json") {
+  const errors = [];
+  const warnings = [];
+  const err = (field, message) => void errors.push({ field, message });
+  if (!isRecord(raw)) {
+    return { ok: false, errors: [{ field: "(root)", message: `${source2} \u7684\u5185\u5BB9\u5FC5\u987B\u662F JSON \u5BF9\u8C61\uFF0C\u53C2\u8003 config.example.json\u3002` }], warnings };
+  }
+  for (const key of Object.keys(raw)) {
+    if (!KNOWN_KEYS.has(key)) warnings.push({ field: key, message: `\u672A\u77E5\u914D\u7F6E\u9879 "${key}"\uFF0C\u5DF2\u5FFD\u7565\u3002\u68C0\u67E5\u662F\u5426\u62FC\u5199\u9519\u8BEF\u3002` });
+  }
+  let botToken = "";
+  if (unset(raw.botToken)) {
+    err("botToken", `\u7F3A\u5C11 botToken\u3002\u5728 Telegram \u91CC\u627E @BotFather \u521B\u5EFA\u673A\u5668\u4EBA\uFF0C\u628A\u5F97\u5230\u7684 token \u586B\u8FDB ${source2}\u3002`);
+  } else if (typeof raw.botToken !== "string" || !TOKEN_RE.test(raw.botToken.trim())) {
+    err("botToken", 'botToken \u683C\u5F0F\u4E0D\u5BF9\uFF0C\u5E94\u5F62\u5982 "123456789:AA..."\uFF08@BotFather \u7ED9\u51FA\u7684\u5B8C\u6574 token\uFF0C\u4E0D\u5E26 "bot" \u524D\u7F00\uFF09\u3002');
+  } else {
+    botToken = raw.botToken.trim();
+  }
+  let allowedUserIds = [];
+  if (!Array.isArray(raw.allowedUserIds) || raw.allowedUserIds.length === 0) {
+    err(
+      "allowedUserIds",
+      `allowedUserIds \u4E3A\u7A7A\u3002\u586B\u5165\u5141\u8BB8\u4F7F\u7528\u7684 Telegram \u7528\u6237\u6570\u5B57 ID\uFF08\u53EF\u5411 @userinfobot \u67E5\u8BE2\uFF09\uFF0C\u4F8B\u5982 [123456789]\u3002\u4E3A\u7A7A\u65F6\u4EFB\u4F55\u4EBA\u90FD\u4E0D\u80FD\u7528\uFF0C\u63D2\u4EF6\u4E0D\u4F1A\u542F\u52A8\u3002`
+    );
+  } else if (!raw.allowedUserIds.every((id) => typeof id === "number" && Number.isSafeInteger(id) && id > 0)) {
+    err("allowedUserIds", "allowedUserIds \u7684\u6BCF\u4E00\u9879\u5FC5\u987B\u662F\u6B63\u6574\u6570\uFF08\u7528\u6237\u6570\u5B57 ID\uFF0C\u4E0D\u662F\u7528\u6237\u540D\uFF0C\u4E5F\u4E0D\u8981\u52A0\u5F15\u53F7\uFF09\u3002");
+  } else {
+    allowedUserIds = [...new Set(raw.allowedUserIds)];
+  }
+  let stBaseUrl = "http://127.0.0.1:8000";
+  if (!unset(raw.stBaseUrl)) {
+    const u = typeof raw.stBaseUrl === "string" ? parseUrl(raw.stBaseUrl) : null;
+    if (!u || u.protocol !== "http:" && u.protocol !== "https:") {
+      err("stBaseUrl", 'stBaseUrl \u5FC5\u987B\u662F http:// \u6216 https:// \u5F00\u5934\u7684\u5730\u5740\uFF0C\u4F8B\u5982 "http://127.0.0.1:8000"\u3002');
+    } else {
+      stBaseUrl = u.origin + u.pathname.replace(/\/+$/, "");
+    }
+  }
+  let telegramProxy;
+  if (!unset(raw.telegramProxy)) {
+    const u = typeof raw.telegramProxy === "string" ? parseUrl(raw.telegramProxy) : null;
+    if (!u) {
+      err("telegramProxy", 'telegramProxy \u4E0D\u662F\u5408\u6CD5\u5730\u5740\uFF0C\u4F8B\u5982 "http://127.0.0.1:7890"\u3002');
+    } else if (u.protocol !== "http:" && u.protocol !== "https:") {
+      err(
+        "telegramProxy",
+        `telegramProxy \u53EA\u652F\u6301 http:// \u6216 https:// \u4EE3\u7406\uFF0C\u4E0D\u652F\u6301 ${u.protocol.replace(":", "")}://\u3002\u5982\u679C\u4F60\u7684\u4EE3\u7406\u8F6F\u4EF6\u540C\u65F6\u63D0\u4F9B HTTP \u7AEF\u53E3\uFF0C\u8BF7\u6539\u7528\u90A3\u4E2A\u7AEF\u53E3\u3002`
+      );
+    } else {
+      telegramProxy = raw.telegramProxy.trim();
+    }
+  }
+  let chromiumPath;
+  if (!unset(raw.chromiumPath)) {
+    if (typeof raw.chromiumPath !== "string") err("chromiumPath", "chromiumPath \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u8DEF\u5F84\u3002");
+    else chromiumPath = raw.chromiumPath;
+  }
+  let basicAuth;
+  if (!unset(raw.basicAuth)) {
+    const b2 = raw.basicAuth;
+    if (!isRecord(b2) || typeof b2.username !== "string" || typeof b2.password !== "string" || !b2.username) {
+      err("basicAuth", 'basicAuth \u5E94\u4E3A {"username": "...", "password": "..."}\uFF08\u4E0E ST config.yaml \u91CC basicAuthUser \u4E00\u81F4\uFF09\uFF0C\u4E0D\u7528\u65F6\u586B null\u3002');
+    } else {
+      basicAuth = { username: b2.username, password: b2.password };
+    }
+  }
+  let miniAppPort = 8788;
+  if (!unset(raw.miniAppPort)) {
+    const p = raw.miniAppPort;
+    if (typeof p !== "number" || !Number.isInteger(p) || p < 1 || p > 65535) err("miniAppPort", "miniAppPort \u5FC5\u987B\u662F 1\u201365535 \u7684\u6574\u6570\u3002");
+    else miniAppPort = p;
+  }
+  let publicBaseUrl;
+  if (!unset(raw.publicBaseUrl)) {
+    const u = typeof raw.publicBaseUrl === "string" ? parseUrl(raw.publicBaseUrl) : null;
+    if (!u || u.protocol !== "https:") {
+      err("publicBaseUrl", "publicBaseUrl \u5FC5\u987B\u662F https:// \u5F00\u5934\u7684\u5730\u5740\uFF08Telegram Mini App \u8981\u6C42 HTTPS\uFF09\u3002\u4E0D\u9700\u8981 Mini App \u65F6\u7559\u7A7A\u3002");
+    } else {
+      publicBaseUrl = u.origin + u.pathname.replace(/\/+$/, "");
+    }
+  }
+  let idleShutdownMinutes = 0;
+  if (!unset(raw.idleShutdownMinutes)) {
+    const m = raw.idleShutdownMinutes;
+    if (typeof m !== "number" || !Number.isFinite(m) || m < 0) err("idleShutdownMinutes", "idleShutdownMinutes \u5FC5\u987B\u662F\u5927\u4E8E\u7B49\u4E8E 0 \u7684\u6570\u5B57\uFF08\u5206\u949F\uFF09\uFF0C0 \u8868\u793A\u4E0D\u81EA\u52A8\u5173\u95ED\u3002");
+    else idleShutdownMinutes = m;
+  }
+  let lowMemory = true;
+  if (raw.lowMemory !== void 0 && raw.lowMemory !== null) {
+    if (typeof raw.lowMemory !== "boolean") err("lowMemory", "lowMemory \u5FC5\u987B\u662F true \u6216 false\u3002");
+    else lowMemory = raw.lowMemory;
+  }
+  let dialogueStyle = "bold";
+  if (!unset(raw.dialogueStyle)) {
+    if (raw.dialogueStyle !== "bold" && raw.dialogueStyle !== "italic" && raw.dialogueStyle !== "mark" && raw.dialogueStyle !== "plain") err("dialogueStyle", "dialogueStyle \u5FC5\u987B\u662F bold / italic / mark / plain \u4E4B\u4E00\u3002");
+    else dialogueStyle = raw.dialogueStyle;
+  }
+  let logLevel = "info";
+  if (!unset(raw.logLevel)) {
+    if (typeof raw.logLevel !== "string" || !LOG_LEVELS.includes(raw.logLevel)) err("logLevel", `logLevel \u5FC5\u987B\u662F ${LOG_LEVELS.join(" / ")} \u4E4B\u4E00\u3002`);
+    else logLevel = raw.logLevel;
+  }
+  let draftIntervalSeconds = 1;
+  if (!unset(raw.draftIntervalSeconds)) {
+    const d = raw.draftIntervalSeconds;
+    if (typeof d !== "number" || !Number.isFinite(d) || d < 0.5 || d > 30) err("draftIntervalSeconds", "draftIntervalSeconds \u5FC5\u987B\u662F 0.5\u201330 \u4E4B\u95F4\u7684\u6570\u5B57\uFF08\u79D2\uFF09\u3002");
+    else draftIntervalSeconds = d;
+  }
+  let draftMode = "live";
+  if (!unset(raw.draftMode)) {
+    if (raw.draftMode !== "live" && raw.draftMode !== "progress") err("draftMode", "draftMode \u5FC5\u987B\u662F live \u6216 progress\u3002");
+    else draftMode = raw.draftMode;
+  }
+  let choiceLayout = "numbers";
+  if (!unset(raw.choiceLayout)) {
+    if (raw.choiceLayout !== "numbers" && raw.choiceLayout !== "rows") err("choiceLayout", "choiceLayout \u5FC5\u987B\u662F numbers \u6216 rows\u3002");
+    else choiceLayout = raw.choiceLayout;
+  }
+  let telegramApiBase;
+  if (!unset(raw.telegramApiBase)) {
+    const u = typeof raw.telegramApiBase === "string" ? parseUrl(raw.telegramApiBase) : null;
+    if (!u || u.protocol !== "http:" && u.protocol !== "https:") {
+      err("telegramApiBase", "telegramApiBase \u5FC5\u987B\u662F http:// \u6216 https:// \u5730\u5740\u3002\u8FD9\u4E2A\u914D\u7F6E\u9879\u53EA\u7528\u4E8E\u6D4B\u8BD5\uFF0C\u6B63\u5E38\u4F7F\u7528\u65F6\u4E0D\u8981\u586B\u3002");
+    } else {
+      telegramApiBase = u.origin + u.pathname.replace(/\/+$/, "");
+      warnings.push({ field: "telegramApiBase", message: `telegramApiBase \u5DF2\u8BBE\u7F6E\u4E3A ${telegramApiBase}\uFF0C\u4E0D\u4F1A\u8FDE\u63A5\u771F\u6B63\u7684 Telegram\uFF08\u4EC5\u7528\u4E8E\u6D4B\u8BD5\uFF09\u3002` });
+    }
+  }
+  if (errors.length > 0) return { ok: false, errors, warnings };
+  return {
+    ok: true,
+    warnings,
+    config: { botToken, allowedUserIds, stBaseUrl, telegramProxy, chromiumPath, basicAuth, miniAppPort, publicBaseUrl, idleShutdownMinutes, lowMemory, dialogueStyle, logLevel, draftIntervalSeconds, draftMode, choiceLayout, telegramApiBase }
+  };
+}
+function loadConfigFile(path14, read = (p) => readFileSync7(p, "utf8")) {
+  let text2;
+  try {
+    text2 = read(path14);
+  } catch (e) {
+    const code = e.code;
+    const message = code === "ENOENT" ? `\u627E\u4E0D\u5230\u914D\u7F6E\u6587\u4EF6 ${path14}\u3002\u628A\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 config.example.json \u590D\u5236\u4E3A config.json\uFF0C\u586B\u597D botToken \u548C allowedUserIds \u540E\u91CD\u542F ST\u3002` : `\u65E0\u6CD5\u8BFB\u53D6\u914D\u7F6E\u6587\u4EF6 ${path14}\uFF1A${e.message}`;
+    return { ok: false, errors: [{ field: "(file)", message }], warnings: [] };
+  }
+  let raw;
+  try {
+    raw = JSON.parse(text2);
+  } catch (e) {
+    const pos = /position (\d+)/.exec(e.message)?.[1];
+    const where = pos ? `\uFF08\u5927\u7EA6\u5728\u7B2C ${pos} \u4E2A\u5B57\u7B26\u9644\u8FD1\uFF09` : "";
+    return { ok: false, errors: [{ field: "(file)", message: `${path14} \u4E0D\u662F\u5408\u6CD5\u7684 JSON${where}\u3002\u68C0\u67E5\u9017\u53F7\u3001\u5F15\u53F7\u548C\u62EC\u53F7\u3002` }], warnings: [] };
+  }
+  return validateConfig(raw, path14);
+}
+function configSecrets(c) {
+  const out = [c.botToken];
+  if (c.basicAuth?.password) out.push(c.basicAuth.password);
+  if (c.telegramProxy) {
+    const u = parseUrl(c.telegramProxy);
+    if (u?.password) out.push(decodeURIComponent(u.password));
+    if (u?.username) out.push(decodeURIComponent(u.username));
+  }
+  return out;
+}
+
+// src/server/settings-api.ts
+var MASK = "********";
+var HOT_FIELDS = ["dialogueStyle", "logLevel", "idleShutdownMinutes", "lowMemory", "draftIntervalSeconds", "draftMode", "choiceLayout"];
+var RESTART_FIELDS = ["botToken", "allowedUserIds", "telegramProxy", "basicAuth", "stBaseUrl"];
+var MANAGED_FIELDS = [...RESTART_FIELDS, ...HOT_FIELDS];
+var FIELD_EFFECTS = {
+  ...Object.fromEntries(HOT_FIELDS.map((f) => [f, "hot"])),
+  ...Object.fromEntries(RESTART_FIELDS.map((f) => [f, "restart"]))
+  // lowMemory 的新值在下次启动 Chromium 时才会用上，界面上单独说明
+};
+var isRecord2 = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
+function maskProxy(url) {
+  try {
+    const u = new URL(url);
+    if (!u.password) return url;
+    u.password = MASK;
+    return url.endsWith("/") ? u.toString() : u.toString().replace(/\/$/, "");
+  } catch {
+    return url;
+  }
+}
+function viewSettings(raw, exists) {
+  const ba = raw.basicAuth;
+  return {
+    exists,
+    values: {
+      botToken: { set: typeof raw.botToken === "string" && raw.botToken.trim() !== "" },
+      allowedUserIds: Array.isArray(raw.allowedUserIds) ? raw.allowedUserIds.filter((x2) => typeof x2 === "number") : [],
+      telegramProxy: typeof raw.telegramProxy === "string" ? maskProxy(raw.telegramProxy) : "",
+      stBaseUrl: typeof raw.stBaseUrl === "string" && raw.stBaseUrl ? raw.stBaseUrl : "http://127.0.0.1:8000",
+      basicAuth: isRecord2(ba) && typeof ba.username === "string" ? { username: ba.username, passwordSet: typeof ba.password === "string" && ba.password !== "" } : null,
+      idleShutdownMinutes: typeof raw.idleShutdownMinutes === "number" ? raw.idleShutdownMinutes : 0,
+      lowMemory: typeof raw.lowMemory === "boolean" ? raw.lowMemory : true,
+      dialogueStyle: typeof raw.dialogueStyle === "string" && raw.dialogueStyle ? raw.dialogueStyle : "bold",
+      logLevel: typeof raw.logLevel === "string" && raw.logLevel ? raw.logLevel : "info",
+      draftIntervalSeconds: typeof raw.draftIntervalSeconds === "number" ? raw.draftIntervalSeconds : 1,
+      draftMode: typeof raw.draftMode === "string" && raw.draftMode ? raw.draftMode : "live",
+      choiceLayout: typeof raw.choiceLayout === "string" && raw.choiceLayout ? raw.choiceLayout : "numbers"
+    }
+  };
+}
+var same = (a2, b2) => JSON.stringify(a2 ?? null) === JSON.stringify(b2 ?? null);
+var keep = (v2) => v2 === void 0 || v2 === "" || v2 === MASK;
+function applySettings(existing, patch) {
+  if (!isRecord2(patch)) return { ok: false, errors: [{ field: "(root)", message: "\u63D0\u4EA4\u7684\u5185\u5BB9\u4E0D\u662F\u5BF9\u8C61\u3002" }] };
+  const next = { ...existing };
+  for (const key of MANAGED_FIELDS) {
+    if (!(key in patch)) continue;
+    const v2 = patch[key];
+    switch (key) {
+      case "botToken":
+        if (!keep(v2)) next.botToken = typeof v2 === "string" ? v2.trim() : v2;
+        break;
+      case "telegramProxy":
+        if (typeof v2 === "string" && v2 === maskProxy(String(existing.telegramProxy ?? ""))) break;
+        if (typeof v2 === "string" && v2.includes(MASK)) {
+          const old = typeof existing.telegramProxy === "string" ? safeUrl2(existing.telegramProxy) : null;
+          const cur = safeUrl2(v2.replace(MASK, "x"));
+          if (old?.password && cur) {
+            cur.password = old.password;
+            next.telegramProxy = v2.endsWith("/") ? cur.toString() : cur.toString().replace(/\/$/, "");
+            break;
+          }
+        }
+        next.telegramProxy = typeof v2 === "string" ? v2.trim() : v2;
+        break;
+      case "basicAuth": {
+        if (v2 === null) {
+          next.basicAuth = null;
+          break;
+        }
+        if (!isRecord2(v2)) {
+          next.basicAuth = v2;
+          break;
+        }
+        const old = isRecord2(existing.basicAuth) ? existing.basicAuth : {};
+        const password = keep(v2.password) ? typeof old.password === "string" ? old.password : "" : v2.password;
+        next.basicAuth = { username: v2.username, password };
+        break;
+      }
+      default:
+        next[key] = v2;
+    }
+  }
+  const result = validateConfig(next, "config.json");
+  if (!result.ok) return { ok: false, errors: result.errors };
+  const changed = MANAGED_FIELDS.filter((k) => !same(existing[k], next[k]));
+  return {
+    ok: true,
+    raw: next,
+    config: result.config,
+    changed,
+    hot: changed.filter((k) => FIELD_EFFECTS[k] === "hot"),
+    restart: changed.filter((k) => FIELD_EFFECTS[k] === "restart"),
+    warnings: result.warnings
+  };
+}
+function safeUrl2(s) {
+  try {
+    return new URL(s);
+  } catch {
+    return null;
+  }
+}
+function readRawConfig(path14) {
+  if (!existsSync3(path14)) return { raw: {}, exists: false };
+  let parsed;
+  try {
+    parsed = JSON.parse(readFileSync8(path14, "utf8"));
+  } catch {
+    throw new Error("config.json \u4E0D\u662F\u5408\u6CD5\u7684 JSON\uFF0C\u8BF7\u5148\u624B\u52A8\u4FEE\u6B63\uFF08\u9762\u677F\u4E0D\u4F1A\u8986\u76D6\u5B83\uFF09\u3002");
+  }
+  if (!isRecord2(parsed)) throw new Error("config.json \u7684\u5185\u5BB9\u5FC5\u987B\u662F JSON \u5BF9\u8C61\u3002");
+  return { raw: parsed, exists: true };
+}
+function writeRawConfig(path14, raw) {
+  mkdirSync2(dirname6(path14), { recursive: true });
+  const tmp = `${path14}.tmp`;
+  writeFileSync2(tmp, `${JSON.stringify(raw, null, 2)}
+`, { mode: 384 });
+  try {
+    chmodSync(tmp, 384);
+  } catch {
+  }
+  renameSync2(tmp, path14);
+}
+function isAdmin(req) {
+  const user = req.user;
+  return !user || user.profile?.admin === true;
+}
+function assignHotFields(target, source2) {
+  for (const f of HOT_FIELDS) target[f] = source2[f];
+}
+function saveSettingsPatch(configPath, live, patch) {
+  const { raw } = readRawConfig(configPath);
+  const r = applySettings(raw, patch);
+  if (!r.ok) throw new Error(r.errors.map((e) => e.message).join("\uFF1B"));
+  writeRawConfig(configPath, r.raw);
+  assignHotFields(live, r.config);
+}
+function registerSettingsRoutes(router, opts) {
+  const { configPath, log } = opts;
+  const fail = (res, status, error) => void res.status(status).json({ ok: false, error });
+  router.get("/config", (req, res) => {
+    if (!isAdmin(req)) {
+      fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
+      return;
+    }
+    try {
+      const { raw, exists } = readRawConfig(configPath);
+      res.json({
+        ok: true,
+        running: opts.live() !== null,
+        startErrors: opts.live() ? [] : opts.startErrors(),
+        effects: FIELD_EFFECTS,
+        ...viewSettings(raw, exists)
+      });
+    } catch (e) {
+      fail(res, 500, e.message);
+    }
+  });
+  router.post("/config", (req, res) => {
+    if (!isAdmin(req)) {
+      fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
+      return;
+    }
+    let existing;
+    try {
+      existing = readRawConfig(configPath);
+    } catch (e) {
+      fail(res, 409, e.message);
+      return;
+    }
+    const body = req.body;
+    const r = applySettings(existing.raw, body?.settings);
+    if (!r.ok) {
+      res.status(422).json({ ok: false, errors: r.errors });
+      return;
+    }
+    try {
+      writeRawConfig(configPath, r.raw);
+    } catch (e) {
+      log.error(`\u4FDD\u5B58\u914D\u7F6E\u5931\u8D25\uFF1A${redactError(e, opts.secrets?.() ?? [])}`);
+      fail(res, 500, "\u5199\u5165 config.json \u5931\u8D25\uFF0C\u8BE6\u60C5\u89C1 ST \u65E5\u5FD7\u3002");
+      return;
+    }
+    const live = opts.live();
+    const hot = live ? r.hot : [];
+    const restart = live ? r.restart : r.changed;
+    if (live && hot.length > 0) opts.applyHot(r.config);
+    log.info(`\u914D\u7F6E\u5DF2\u901A\u8FC7\u9762\u677F\u4FDD\u5B58\uFF1A${r.changed.length ? r.changed.join("\u3001") : "\u65E0\u53D8\u5316"}${hot.length ? `\uFF08\u7ACB\u5373\u751F\u6548\uFF1A${hot.join("\u3001")}\uFF09` : ""}${restart.length ? `\uFF08\u9700\u91CD\u542F ST\uFF1A${restart.join("\u3001")}\uFF09` : ""}`);
+    res.json({ ok: true, changed: r.changed, hot, restart, lowMemoryNote: r.changed.includes("lowMemory"), warnings: r.warnings, ...viewSettings(r.raw, true) });
+  });
+}
+
 // src/server/watchdog.ts
 var DEFAULT_BACKOFF = [0, 5e3, 3e4, 12e4, 3e5];
 var Watchdog = class {
@@ -91475,7 +91983,7 @@ function attachBridge(rt, opts = {}) {
     }
   };
   const watchdog = new Watchdog({ browser, host: channel, log, notify });
-  const choiceRules = new ChoiceRuleStore(join6(dirname6(rt.configPath), "choice-rules.json"), log);
+  const choiceRules = new ChoiceRuleStore(join6(dirname7(rt.configPath), "choice-rules.json"), log);
   const bot = new Bot({
     telegram,
     host: channel,
@@ -91488,6 +91996,24 @@ function attachBridge(rt, opts = {}) {
     },
     get dialogueStyle() {
       return config2.dialogueStyle;
+    },
+    get draftIntervalMs() {
+      return Math.round(config2.draftIntervalSeconds * 1e3);
+    },
+    get draftMode() {
+      return config2.draftMode;
+    },
+    get choiceLayout() {
+      return config2.choiceLayout;
+    },
+    settings: {
+      get: () => ({
+        dialogueStyle: config2.dialogueStyle,
+        draftMode: config2.draftMode,
+        draftIntervalSeconds: config2.draftIntervalSeconds,
+        choiceLayout: config2.choiceLayout
+      }),
+      set: (patch) => saveSettingsPatch(rt.configPath, config2, patch)
     },
     watchdogStatus: () => watchdog.status(),
     choiceRules: () => choiceRules.get()
@@ -91570,189 +92096,12 @@ function findChromium(configured, env2 = defaultEnv()) {
   return { warning, hint: HINTS[env2.platform] ?? "\u5B89\u88C5 Chrome \u6216 Chromium\uFF0C\u5E76\u5728 config.json \u7684 chromiumPath \u91CC\u5199\u53EF\u6267\u884C\u6587\u4EF6\u8DEF\u5F84\u3002" };
 }
 
-// src/server/config.ts
-import { readFileSync as readFileSync7 } from "node:fs";
-var KNOWN_KEYS = /* @__PURE__ */ new Set([
-  "botToken",
-  "allowedUserIds",
-  "stBaseUrl",
-  "telegramProxy",
-  "chromiumPath",
-  "basicAuth",
-  "miniAppPort",
-  "publicBaseUrl",
-  "idleShutdownMinutes",
-  "lowMemory",
-  "dialogueStyle",
-  "logLevel",
-  "telegramApiBase"
-]);
-var TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
-var LOG_LEVELS = ["debug", "info", "warn", "error"];
-var isRecord = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
-var unset = (v2) => v2 === void 0 || v2 === null || v2 === "";
-function parseUrl(raw) {
-  try {
-    return new URL(raw);
-  } catch {
-    return null;
-  }
-}
-function validateConfig(raw, source2 = "config.json") {
-  const errors = [];
-  const warnings = [];
-  const err = (field, message) => void errors.push({ field, message });
-  if (!isRecord(raw)) {
-    return { ok: false, errors: [{ field: "(root)", message: `${source2} \u7684\u5185\u5BB9\u5FC5\u987B\u662F JSON \u5BF9\u8C61\uFF0C\u53C2\u8003 config.example.json\u3002` }], warnings };
-  }
-  for (const key of Object.keys(raw)) {
-    if (!KNOWN_KEYS.has(key)) warnings.push({ field: key, message: `\u672A\u77E5\u914D\u7F6E\u9879 "${key}"\uFF0C\u5DF2\u5FFD\u7565\u3002\u68C0\u67E5\u662F\u5426\u62FC\u5199\u9519\u8BEF\u3002` });
-  }
-  let botToken = "";
-  if (unset(raw.botToken)) {
-    err("botToken", `\u7F3A\u5C11 botToken\u3002\u5728 Telegram \u91CC\u627E @BotFather \u521B\u5EFA\u673A\u5668\u4EBA\uFF0C\u628A\u5F97\u5230\u7684 token \u586B\u8FDB ${source2}\u3002`);
-  } else if (typeof raw.botToken !== "string" || !TOKEN_RE.test(raw.botToken.trim())) {
-    err("botToken", 'botToken \u683C\u5F0F\u4E0D\u5BF9\uFF0C\u5E94\u5F62\u5982 "123456789:AA..."\uFF08@BotFather \u7ED9\u51FA\u7684\u5B8C\u6574 token\uFF0C\u4E0D\u5E26 "bot" \u524D\u7F00\uFF09\u3002');
-  } else {
-    botToken = raw.botToken.trim();
-  }
-  let allowedUserIds = [];
-  if (!Array.isArray(raw.allowedUserIds) || raw.allowedUserIds.length === 0) {
-    err(
-      "allowedUserIds",
-      `allowedUserIds \u4E3A\u7A7A\u3002\u586B\u5165\u5141\u8BB8\u4F7F\u7528\u7684 Telegram \u7528\u6237\u6570\u5B57 ID\uFF08\u53EF\u5411 @userinfobot \u67E5\u8BE2\uFF09\uFF0C\u4F8B\u5982 [123456789]\u3002\u4E3A\u7A7A\u65F6\u4EFB\u4F55\u4EBA\u90FD\u4E0D\u80FD\u7528\uFF0C\u63D2\u4EF6\u4E0D\u4F1A\u542F\u52A8\u3002`
-    );
-  } else if (!raw.allowedUserIds.every((id) => typeof id === "number" && Number.isSafeInteger(id) && id > 0)) {
-    err("allowedUserIds", "allowedUserIds \u7684\u6BCF\u4E00\u9879\u5FC5\u987B\u662F\u6B63\u6574\u6570\uFF08\u7528\u6237\u6570\u5B57 ID\uFF0C\u4E0D\u662F\u7528\u6237\u540D\uFF0C\u4E5F\u4E0D\u8981\u52A0\u5F15\u53F7\uFF09\u3002");
-  } else {
-    allowedUserIds = [...new Set(raw.allowedUserIds)];
-  }
-  let stBaseUrl = "http://127.0.0.1:8000";
-  if (!unset(raw.stBaseUrl)) {
-    const u = typeof raw.stBaseUrl === "string" ? parseUrl(raw.stBaseUrl) : null;
-    if (!u || u.protocol !== "http:" && u.protocol !== "https:") {
-      err("stBaseUrl", 'stBaseUrl \u5FC5\u987B\u662F http:// \u6216 https:// \u5F00\u5934\u7684\u5730\u5740\uFF0C\u4F8B\u5982 "http://127.0.0.1:8000"\u3002');
-    } else {
-      stBaseUrl = u.origin + u.pathname.replace(/\/+$/, "");
-    }
-  }
-  let telegramProxy;
-  if (!unset(raw.telegramProxy)) {
-    const u = typeof raw.telegramProxy === "string" ? parseUrl(raw.telegramProxy) : null;
-    if (!u) {
-      err("telegramProxy", 'telegramProxy \u4E0D\u662F\u5408\u6CD5\u5730\u5740\uFF0C\u4F8B\u5982 "http://127.0.0.1:7890"\u3002');
-    } else if (u.protocol !== "http:" && u.protocol !== "https:") {
-      err(
-        "telegramProxy",
-        `telegramProxy \u53EA\u652F\u6301 http:// \u6216 https:// \u4EE3\u7406\uFF0C\u4E0D\u652F\u6301 ${u.protocol.replace(":", "")}://\u3002\u5982\u679C\u4F60\u7684\u4EE3\u7406\u8F6F\u4EF6\u540C\u65F6\u63D0\u4F9B HTTP \u7AEF\u53E3\uFF0C\u8BF7\u6539\u7528\u90A3\u4E2A\u7AEF\u53E3\u3002`
-      );
-    } else {
-      telegramProxy = raw.telegramProxy.trim();
-    }
-  }
-  let chromiumPath;
-  if (!unset(raw.chromiumPath)) {
-    if (typeof raw.chromiumPath !== "string") err("chromiumPath", "chromiumPath \u5FC5\u987B\u662F\u5B57\u7B26\u4E32\u8DEF\u5F84\u3002");
-    else chromiumPath = raw.chromiumPath;
-  }
-  let basicAuth;
-  if (!unset(raw.basicAuth)) {
-    const b2 = raw.basicAuth;
-    if (!isRecord(b2) || typeof b2.username !== "string" || typeof b2.password !== "string" || !b2.username) {
-      err("basicAuth", 'basicAuth \u5E94\u4E3A {"username": "...", "password": "..."}\uFF08\u4E0E ST config.yaml \u91CC basicAuthUser \u4E00\u81F4\uFF09\uFF0C\u4E0D\u7528\u65F6\u586B null\u3002');
-    } else {
-      basicAuth = { username: b2.username, password: b2.password };
-    }
-  }
-  let miniAppPort = 8788;
-  if (!unset(raw.miniAppPort)) {
-    const p = raw.miniAppPort;
-    if (typeof p !== "number" || !Number.isInteger(p) || p < 1 || p > 65535) err("miniAppPort", "miniAppPort \u5FC5\u987B\u662F 1\u201365535 \u7684\u6574\u6570\u3002");
-    else miniAppPort = p;
-  }
-  let publicBaseUrl;
-  if (!unset(raw.publicBaseUrl)) {
-    const u = typeof raw.publicBaseUrl === "string" ? parseUrl(raw.publicBaseUrl) : null;
-    if (!u || u.protocol !== "https:") {
-      err("publicBaseUrl", "publicBaseUrl \u5FC5\u987B\u662F https:// \u5F00\u5934\u7684\u5730\u5740\uFF08Telegram Mini App \u8981\u6C42 HTTPS\uFF09\u3002\u4E0D\u9700\u8981 Mini App \u65F6\u7559\u7A7A\u3002");
-    } else {
-      publicBaseUrl = u.origin + u.pathname.replace(/\/+$/, "");
-    }
-  }
-  let idleShutdownMinutes = 0;
-  if (!unset(raw.idleShutdownMinutes)) {
-    const m = raw.idleShutdownMinutes;
-    if (typeof m !== "number" || !Number.isFinite(m) || m < 0) err("idleShutdownMinutes", "idleShutdownMinutes \u5FC5\u987B\u662F\u5927\u4E8E\u7B49\u4E8E 0 \u7684\u6570\u5B57\uFF08\u5206\u949F\uFF09\uFF0C0 \u8868\u793A\u4E0D\u81EA\u52A8\u5173\u95ED\u3002");
-    else idleShutdownMinutes = m;
-  }
-  let lowMemory = true;
-  if (raw.lowMemory !== void 0 && raw.lowMemory !== null) {
-    if (typeof raw.lowMemory !== "boolean") err("lowMemory", "lowMemory \u5FC5\u987B\u662F true \u6216 false\u3002");
-    else lowMemory = raw.lowMemory;
-  }
-  let dialogueStyle = "bold";
-  if (!unset(raw.dialogueStyle)) {
-    if (raw.dialogueStyle !== "bold" && raw.dialogueStyle !== "italic" && raw.dialogueStyle !== "mark" && raw.dialogueStyle !== "plain") err("dialogueStyle", "dialogueStyle \u5FC5\u987B\u662F bold / italic / mark / plain \u4E4B\u4E00\u3002");
-    else dialogueStyle = raw.dialogueStyle;
-  }
-  let logLevel = "info";
-  if (!unset(raw.logLevel)) {
-    if (typeof raw.logLevel !== "string" || !LOG_LEVELS.includes(raw.logLevel)) err("logLevel", `logLevel \u5FC5\u987B\u662F ${LOG_LEVELS.join(" / ")} \u4E4B\u4E00\u3002`);
-    else logLevel = raw.logLevel;
-  }
-  let telegramApiBase;
-  if (!unset(raw.telegramApiBase)) {
-    const u = typeof raw.telegramApiBase === "string" ? parseUrl(raw.telegramApiBase) : null;
-    if (!u || u.protocol !== "http:" && u.protocol !== "https:") {
-      err("telegramApiBase", "telegramApiBase \u5FC5\u987B\u662F http:// \u6216 https:// \u5730\u5740\u3002\u8FD9\u4E2A\u914D\u7F6E\u9879\u53EA\u7528\u4E8E\u6D4B\u8BD5\uFF0C\u6B63\u5E38\u4F7F\u7528\u65F6\u4E0D\u8981\u586B\u3002");
-    } else {
-      telegramApiBase = u.origin + u.pathname.replace(/\/+$/, "");
-      warnings.push({ field: "telegramApiBase", message: `telegramApiBase \u5DF2\u8BBE\u7F6E\u4E3A ${telegramApiBase}\uFF0C\u4E0D\u4F1A\u8FDE\u63A5\u771F\u6B63\u7684 Telegram\uFF08\u4EC5\u7528\u4E8E\u6D4B\u8BD5\uFF09\u3002` });
-    }
-  }
-  if (errors.length > 0) return { ok: false, errors, warnings };
-  return {
-    ok: true,
-    warnings,
-    config: { botToken, allowedUserIds, stBaseUrl, telegramProxy, chromiumPath, basicAuth, miniAppPort, publicBaseUrl, idleShutdownMinutes, lowMemory, dialogueStyle, logLevel, telegramApiBase }
-  };
-}
-function loadConfigFile(path14, read = (p) => readFileSync7(p, "utf8")) {
-  let text2;
-  try {
-    text2 = read(path14);
-  } catch (e) {
-    const code = e.code;
-    const message = code === "ENOENT" ? `\u627E\u4E0D\u5230\u914D\u7F6E\u6587\u4EF6 ${path14}\u3002\u628A\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 config.example.json \u590D\u5236\u4E3A config.json\uFF0C\u586B\u597D botToken \u548C allowedUserIds \u540E\u91CD\u542F ST\u3002` : `\u65E0\u6CD5\u8BFB\u53D6\u914D\u7F6E\u6587\u4EF6 ${path14}\uFF1A${e.message}`;
-    return { ok: false, errors: [{ field: "(file)", message }], warnings: [] };
-  }
-  let raw;
-  try {
-    raw = JSON.parse(text2);
-  } catch (e) {
-    const pos = /position (\d+)/.exec(e.message)?.[1];
-    const where = pos ? `\uFF08\u5927\u7EA6\u5728\u7B2C ${pos} \u4E2A\u5B57\u7B26\u9644\u8FD1\uFF09` : "";
-    return { ok: false, errors: [{ field: "(file)", message: `${path14} \u4E0D\u662F\u5408\u6CD5\u7684 JSON${where}\u3002\u68C0\u67E5\u9017\u53F7\u3001\u5F15\u53F7\u548C\u62EC\u53F7\u3002` }], warnings: [] };
-  }
-  return validateConfig(raw, path14);
-}
-function configSecrets(c) {
-  const out = [c.botToken];
-  if (c.basicAuth?.password) out.push(c.basicAuth.password);
-  if (c.telegramProxy) {
-    const u = parseUrl(c.telegramProxy);
-    if (u?.password) out.push(decodeURIComponent(u.password));
-    if (u?.username) out.push(decodeURIComponent(u.username));
-  }
-  return out;
-}
-
 // src/server/deploy-extension.ts
-import { existsSync as existsSync3 } from "node:fs";
+import { existsSync as existsSync4 } from "node:fs";
 import { cp, rm as rm5 } from "node:fs/promises";
 import { join as join8, resolve as resolve7 } from "node:path";
 var EXTENSION_DIR_NAME = "silly-tg";
-function findStRoot(pluginDir, cwd = process.cwd(), exists = existsSync3) {
+function findStRoot(pluginDir, cwd = process.cwd(), exists = existsSync4) {
   const candidates = [cwd, resolve7(pluginDir, "..", "..")];
   return candidates.find((c) => exists(join8(c, "public", "scripts", "extensions")));
 }
@@ -91760,7 +92109,7 @@ async function deployExtension(opts) {
   const source2 = join8(opts.pluginDir, "dist", "extension");
   const stRoot = opts.stRoot ?? findStRoot(opts.pluginDir, opts.cwd);
   const manualFor = (target2) => `\u624B\u52A8\u5B89\u88C5\uFF1A\u628A ${source2} \u6574\u4E2A\u76EE\u5F55\u590D\u5236\u4E3A ${target2}\uFF0C\u7136\u540E\u5237\u65B0 ST \u9875\u9762\uFF08\u6216\u91CD\u542F ST\uFF09\u3002`;
-  if (!existsSync3(join8(source2, "manifest.json"))) {
+  if (!existsSync4(join8(source2, "manifest.json"))) {
     return { ok: false, reason: `\u627E\u4E0D\u5230\u6269\u5C55\u6784\u5EFA\u4EA7\u7269 ${source2}\uFF08\u7F3A manifest.json\uFF09\u3002`, manual: "\u5728\u63D2\u4EF6\u76EE\u5F55\u8FD0\u884C pnpm build\uFF0C\u6216\u91CD\u65B0 git clone \u5B8C\u6574\u7684\u4ED3\u5E93\uFF08dist/ \u9700\u8981\u5728\u4ED3\u5E93\u91CC\uFF09\u3002" };
   }
   if (!stRoot) {
@@ -91784,17 +92133,17 @@ async function deployExtension(opts) {
 import { randomBytes as randomBytes2, randomUUID as randomUUID2, timingSafeEqual } from "node:crypto";
 
 // src/shared/protocol.ts
-var isRecord2 = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
+var isRecord3 = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
 var isStr = (v2) => typeof v2 === "string";
 var isOptStr = (v2) => v2 === void 0 || typeof v2 === "string";
 function isCardSource(v2) {
-  return isRecord2(v2) && isStr(v2.source);
+  return isRecord3(v2) && isStr(v2.source);
 }
 function isSelfCheckItem(v2) {
-  return isRecord2(v2) && isStr(v2.name) && typeof v2.ok === "boolean" && isOptStr(v2.detail);
+  return isRecord3(v2) && isStr(v2.name) && typeof v2.ok === "boolean" && isOptStr(v2.detail);
 }
 function decodeHostEvent(v2) {
-  if (!isRecord2(v2) || !isStr(v2.type)) return null;
+  if (!isRecord3(v2) || !isStr(v2.type)) return null;
   switch (v2.type) {
     case "hello":
       return isStr(v2.nonce) && isStr(v2.stVersion) && typeof v2.hasTavernHelper === "boolean" ? { type: "hello", nonce: v2.nonce, stVersion: v2.stVersion, hasTavernHelper: v2.hasTavernHelper } : null;
@@ -91830,7 +92179,7 @@ function decodeHostEvent(v2) {
   }
 }
 function decodeHostUpload(v2) {
-  if (!isRecord2(v2) || !isStr(v2.nonce)) return null;
+  if (!isRecord3(v2) || !isStr(v2.nonce)) return null;
   const event = decodeHostEvent(v2.event);
   return event ? { nonce: v2.nonce, event } : null;
 }
@@ -92026,190 +92375,6 @@ function createFetch(proxyUrl) {
   return (input2, init2) => (0, import_undici.fetch)(input2, { ...init2, dispatcher });
 }
 
-// src/server/settings-api.ts
-import { chmodSync, existsSync as existsSync4, mkdirSync as mkdirSync2, readFileSync as readFileSync8, renameSync as renameSync2, writeFileSync as writeFileSync2 } from "node:fs";
-import { dirname as dirname7 } from "node:path";
-var MASK = "********";
-var HOT_FIELDS = ["dialogueStyle", "logLevel", "idleShutdownMinutes", "lowMemory"];
-var RESTART_FIELDS = ["botToken", "allowedUserIds", "telegramProxy", "basicAuth", "stBaseUrl"];
-var MANAGED_FIELDS = [...RESTART_FIELDS, ...HOT_FIELDS];
-var FIELD_EFFECTS = {
-  ...Object.fromEntries(HOT_FIELDS.map((f) => [f, "hot"])),
-  ...Object.fromEntries(RESTART_FIELDS.map((f) => [f, "restart"]))
-  // lowMemory 的新值在下次启动 Chromium 时才会用上，界面上单独说明
-};
-var isRecord3 = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
-function maskProxy(url) {
-  try {
-    const u = new URL(url);
-    if (!u.password) return url;
-    u.password = MASK;
-    return url.endsWith("/") ? u.toString() : u.toString().replace(/\/$/, "");
-  } catch {
-    return url;
-  }
-}
-function viewSettings(raw, exists) {
-  const ba = raw.basicAuth;
-  return {
-    exists,
-    values: {
-      botToken: { set: typeof raw.botToken === "string" && raw.botToken.trim() !== "" },
-      allowedUserIds: Array.isArray(raw.allowedUserIds) ? raw.allowedUserIds.filter((x2) => typeof x2 === "number") : [],
-      telegramProxy: typeof raw.telegramProxy === "string" ? maskProxy(raw.telegramProxy) : "",
-      stBaseUrl: typeof raw.stBaseUrl === "string" && raw.stBaseUrl ? raw.stBaseUrl : "http://127.0.0.1:8000",
-      basicAuth: isRecord3(ba) && typeof ba.username === "string" ? { username: ba.username, passwordSet: typeof ba.password === "string" && ba.password !== "" } : null,
-      idleShutdownMinutes: typeof raw.idleShutdownMinutes === "number" ? raw.idleShutdownMinutes : 0,
-      lowMemory: typeof raw.lowMemory === "boolean" ? raw.lowMemory : true,
-      dialogueStyle: typeof raw.dialogueStyle === "string" && raw.dialogueStyle ? raw.dialogueStyle : "bold",
-      logLevel: typeof raw.logLevel === "string" && raw.logLevel ? raw.logLevel : "info"
-    }
-  };
-}
-var same = (a2, b2) => JSON.stringify(a2 ?? null) === JSON.stringify(b2 ?? null);
-var keep = (v2) => v2 === void 0 || v2 === "" || v2 === MASK;
-function applySettings(existing, patch) {
-  if (!isRecord3(patch)) return { ok: false, errors: [{ field: "(root)", message: "\u63D0\u4EA4\u7684\u5185\u5BB9\u4E0D\u662F\u5BF9\u8C61\u3002" }] };
-  const next = { ...existing };
-  for (const key of MANAGED_FIELDS) {
-    if (!(key in patch)) continue;
-    const v2 = patch[key];
-    switch (key) {
-      case "botToken":
-        if (!keep(v2)) next.botToken = typeof v2 === "string" ? v2.trim() : v2;
-        break;
-      case "telegramProxy":
-        if (typeof v2 === "string" && v2 === maskProxy(String(existing.telegramProxy ?? ""))) break;
-        if (typeof v2 === "string" && v2.includes(MASK)) {
-          const old = typeof existing.telegramProxy === "string" ? safeUrl2(existing.telegramProxy) : null;
-          const cur = safeUrl2(v2.replace(MASK, "x"));
-          if (old?.password && cur) {
-            cur.password = old.password;
-            next.telegramProxy = v2.endsWith("/") ? cur.toString() : cur.toString().replace(/\/$/, "");
-            break;
-          }
-        }
-        next.telegramProxy = typeof v2 === "string" ? v2.trim() : v2;
-        break;
-      case "basicAuth": {
-        if (v2 === null) {
-          next.basicAuth = null;
-          break;
-        }
-        if (!isRecord3(v2)) {
-          next.basicAuth = v2;
-          break;
-        }
-        const old = isRecord3(existing.basicAuth) ? existing.basicAuth : {};
-        const password = keep(v2.password) ? typeof old.password === "string" ? old.password : "" : v2.password;
-        next.basicAuth = { username: v2.username, password };
-        break;
-      }
-      default:
-        next[key] = v2;
-    }
-  }
-  const result = validateConfig(next, "config.json");
-  if (!result.ok) return { ok: false, errors: result.errors };
-  const changed = MANAGED_FIELDS.filter((k) => !same(existing[k], next[k]));
-  return {
-    ok: true,
-    raw: next,
-    config: result.config,
-    changed,
-    hot: changed.filter((k) => FIELD_EFFECTS[k] === "hot"),
-    restart: changed.filter((k) => FIELD_EFFECTS[k] === "restart"),
-    warnings: result.warnings
-  };
-}
-function safeUrl2(s) {
-  try {
-    return new URL(s);
-  } catch {
-    return null;
-  }
-}
-function readRawConfig(path14) {
-  if (!existsSync4(path14)) return { raw: {}, exists: false };
-  let parsed;
-  try {
-    parsed = JSON.parse(readFileSync8(path14, "utf8"));
-  } catch {
-    throw new Error("config.json \u4E0D\u662F\u5408\u6CD5\u7684 JSON\uFF0C\u8BF7\u5148\u624B\u52A8\u4FEE\u6B63\uFF08\u9762\u677F\u4E0D\u4F1A\u8986\u76D6\u5B83\uFF09\u3002");
-  }
-  if (!isRecord3(parsed)) throw new Error("config.json \u7684\u5185\u5BB9\u5FC5\u987B\u662F JSON \u5BF9\u8C61\u3002");
-  return { raw: parsed, exists: true };
-}
-function writeRawConfig(path14, raw) {
-  mkdirSync2(dirname7(path14), { recursive: true });
-  const tmp = `${path14}.tmp`;
-  writeFileSync2(tmp, `${JSON.stringify(raw, null, 2)}
-`, { mode: 384 });
-  try {
-    chmodSync(tmp, 384);
-  } catch {
-  }
-  renameSync2(tmp, path14);
-}
-function isAdmin(req) {
-  const user = req.user;
-  return !user || user.profile?.admin === true;
-}
-function registerSettingsRoutes(router, opts) {
-  const { configPath, log } = opts;
-  const fail = (res, status, error) => void res.status(status).json({ ok: false, error });
-  router.get("/config", (req, res) => {
-    if (!isAdmin(req)) {
-      fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
-      return;
-    }
-    try {
-      const { raw, exists } = readRawConfig(configPath);
-      res.json({
-        ok: true,
-        running: opts.live() !== null,
-        startErrors: opts.live() ? [] : opts.startErrors(),
-        effects: FIELD_EFFECTS,
-        ...viewSettings(raw, exists)
-      });
-    } catch (e) {
-      fail(res, 500, e.message);
-    }
-  });
-  router.post("/config", (req, res) => {
-    if (!isAdmin(req)) {
-      fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
-      return;
-    }
-    let existing;
-    try {
-      existing = readRawConfig(configPath);
-    } catch (e) {
-      fail(res, 409, e.message);
-      return;
-    }
-    const body = req.body;
-    const r = applySettings(existing.raw, body?.settings);
-    if (!r.ok) {
-      res.status(422).json({ ok: false, errors: r.errors });
-      return;
-    }
-    try {
-      writeRawConfig(configPath, r.raw);
-    } catch (e) {
-      log.error(`\u4FDD\u5B58\u914D\u7F6E\u5931\u8D25\uFF1A${redactError(e, opts.secrets?.() ?? [])}`);
-      fail(res, 500, "\u5199\u5165 config.json \u5931\u8D25\uFF0C\u8BE6\u60C5\u89C1 ST \u65E5\u5FD7\u3002");
-      return;
-    }
-    const live = opts.live();
-    const hot = live ? r.hot : [];
-    const restart = live ? r.restart : r.changed;
-    if (live && hot.length > 0) opts.applyHot(r.config);
-    log.info(`\u914D\u7F6E\u5DF2\u901A\u8FC7\u9762\u677F\u4FDD\u5B58\uFF1A${r.changed.length ? r.changed.join("\u3001") : "\u65E0\u53D8\u5316"}${hot.length ? `\uFF08\u7ACB\u5373\u751F\u6548\uFF1A${hot.join("\u3001")}\uFF09` : ""}${restart.length ? `\uFF08\u9700\u91CD\u542F ST\uFF1A${restart.join("\u3001")}\uFF09` : ""}`);
-    res.json({ ok: true, changed: r.changed, hot, restart, lowMemoryNote: r.changed.includes("lowMemory"), warnings: r.warnings, ...viewSettings(r.raw, true) });
-  });
-}
-
 // src/server/plugin.ts
 async function startPlugin(opts) {
   const env2 = opts.env ?? process.env;
@@ -92226,10 +92391,7 @@ async function startPlugin(opts) {
     secrets: () => liveConfig ? configSecrets(liveConfig) : [],
     applyHot: (c) => {
       if (!liveConfig) return;
-      liveConfig.dialogueStyle = c.dialogueStyle;
-      liveConfig.logLevel = c.logLevel;
-      liveConfig.idleShutdownMinutes = c.idleShutdownMinutes;
-      liveConfig.lowMemory = c.lowMemory;
+      assignHotFields(liveConfig, c);
       runtimeLog.setLevel?.(c.logLevel);
     }
   });

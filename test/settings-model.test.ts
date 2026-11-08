@@ -12,6 +12,9 @@ const form = (over: Partial<FormValues> = {}): FormValues => ({
   lowMemory: true,
   dialogueStyle: 'bold',
   logLevel: 'info',
+  draftIntervalSeconds: '1',
+  draftMode: 'live',
+  choiceLayout: 'numbers',
   ...over,
 });
 
@@ -25,6 +28,9 @@ const original: SettingsValues = {
   lowMemory: true,
   dialogueStyle: 'bold',
   logLevel: 'info',
+  draftIntervalSeconds: 1,
+  draftMode: 'live',
+  choiceLayout: 'numbers',
 };
 
 describe('parseUserIds', () => {
@@ -38,6 +44,13 @@ describe('parseUserIds', () => {
 });
 
 describe('buildPatch', () => {
+  it('草稿与选项排版字段', () => {
+    const r = buildPatch(form({ draftIntervalSeconds: '2.5', draftMode: 'progress', choiceLayout: 'rows' }), original);
+    expect(r.ok && r.patch).toMatchObject({ draftIntervalSeconds: 2.5, draftMode: 'progress', choiceLayout: 'rows' });
+    expect(buildPatch(form({ draftIntervalSeconds: 'abc' }), original).ok).toBe(false);
+    const blank = buildPatch(form({ draftIntervalSeconds: '' }), original);
+    expect(blank.ok && blank.patch.draftIntervalSeconds).toBe(1);
+  });
   it('token 留空不提交；其余字段都带上', () => {
     const r = buildPatch(form(), original);
     expect(r.ok).toBe(true);

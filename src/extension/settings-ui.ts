@@ -92,6 +92,15 @@ function buildDrawer(container: HTMLElement): void {
       ['mark', '高亮'],
       ['plain', '只保留引号'],
     ]),
+    draftIntervalSeconds: input('number', '1'),
+    draftMode: select([
+      ['live', '逐步显示正文'],
+      ['progress', '只显示进度'],
+    ]),
+    choiceLayout: select([
+      ['numbers', '一排数字按钮'],
+      ['rows', '每个选项一行'],
+    ]),
     logLevel: select([
       ['info', 'info'],
       ['debug', 'debug'],
@@ -108,6 +117,9 @@ function buildDrawer(container: HTMLElement): void {
     idleShutdownMinutes: row('空闲关闭（分钟）', '立即生效', f.idleShutdownMinutes, '0 表示不自动关闭无头浏览器。'),
     lowMemory: row('低内存模式', '下次启动浏览器时生效', f.lowMemory),
     dialogueStyle: row('对话样式', '立即生效', f.dialogueStyle),
+    draftIntervalSeconds: row('草稿刷新间隔（秒）', '立即生效', f.draftIntervalSeconds, '生成时每隔这么久更新一次草稿，0.5–30。调大可减少聊天窗口上下滚动。'),
+    draftMode: row('草稿显示方式', '立即生效', f.draftMode, '“只显示进度”时生成过程中不显示正文，聊天窗口不会滚动。'),
+    choiceLayout: row('行动选项按钮', '立即生效', f.choiceLayout),
     logLevel: row('日志级别', '立即生效', f.logLevel),
   };
   // 密码框放在账号框下面
@@ -148,6 +160,9 @@ function buildDrawer(container: HTMLElement): void {
     f.idleShutdownMinutes.value = String(v.idleShutdownMinutes);
     (f.lowMemory as HTMLInputElement).checked = v.lowMemory;
     f.dialogueStyle.value = v.dialogueStyle;
+    f.draftIntervalSeconds.value = String(v.draftIntervalSeconds);
+    f.draftMode.value = v.draftMode;
+    f.choiceLayout.value = v.choiceLayout;
     f.logLevel.value = v.logLevel;
   };
 
@@ -201,6 +216,9 @@ function buildDrawer(container: HTMLElement): void {
         idleShutdownMinutes: f.idleShutdownMinutes.value,
         lowMemory: (f.lowMemory as HTMLInputElement).checked,
         dialogueStyle: f.dialogueStyle.value,
+        draftIntervalSeconds: f.draftIntervalSeconds.value,
+        draftMode: f.draftMode.value,
+        choiceLayout: f.choiceLayout.value,
         logLevel: f.logLevel.value,
       };
       const built = buildPatch(form, original);

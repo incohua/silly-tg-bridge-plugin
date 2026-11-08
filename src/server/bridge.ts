@@ -7,6 +7,7 @@ import { BrowserManager, type Launcher } from './browser';
 import { BridgeStore } from './message-map';
 import type { PluginRuntime } from './plugin';
 import { puppeteerLauncher } from './puppeteer-launcher';
+import { saveSettingsPatch } from './settings-api';
 import { Watchdog } from './watchdog';
 
 export interface Bridge {
@@ -57,6 +58,24 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher } = 
     },
     get dialogueStyle() {
       return config.dialogueStyle;
+    },
+    get draftIntervalMs() {
+      return Math.round(config.draftIntervalSeconds * 1000);
+    },
+    get draftMode() {
+      return config.draftMode;
+    },
+    get choiceLayout() {
+      return config.choiceLayout;
+    },
+    settings: {
+      get: () => ({
+        dialogueStyle: config.dialogueStyle,
+        draftMode: config.draftMode,
+        draftIntervalSeconds: config.draftIntervalSeconds,
+        choiceLayout: config.choiceLayout,
+      }),
+      set: (patch) => saveSettingsPatch(rt.configPath, config, patch),
     },
     watchdogStatus: () => watchdog.status(),
     choiceRules: () => choiceRules.get(),

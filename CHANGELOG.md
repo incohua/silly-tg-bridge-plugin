@@ -11,6 +11,10 @@
 - 行动选项按钮：解析回复末尾的选项（内置 `<SUOT>` 与“标题+编号列表”），点按钮即发送；规则放在 `choice-rules.json`，热加载。附 `docs/choices.md`、样例、`pnpm choices:test` 和 `skills/silly-tg-choice-rules`。
 - 酒馆扩展栏里的“Silly TG”配置面板：读写 `config.json`，密码掩码，对话样式、日志级别、空闲关闭保存后立即生效。
 
+- `/settings`：在 Telegram 里切换对话样式、生成时预览方式、预览刷新间隔、行动选项按钮排版，保存到 `config.json` 并立即生效；这几项同时出现在酒馆扩展栏的配置面板里。
+- 新增配置项 `draftIntervalSeconds`、`draftMode`、`choiceLayout`（都可热生效），用来缓解流式生成时聊天窗口上下滚动，以及选择行动选项按钮的排版。
+- 行动选项消息最下面增加 🔄 按钮，点一下重新生成上一条回复。
+
 ### 变更
 - 配置有误或还没有 `config.json` 时，配置面板的接口仍然可用（其余路由不注册），以便用面板修好配置。
 - 扩展在普通 ST 页面不再完全静默：会在扩展栏渲染配置面板并读取一次配置，仍不处理命令、不连接 host 通道。
