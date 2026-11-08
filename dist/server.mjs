@@ -74022,27 +74022,27 @@ var require_cache = __commonJS({
       const directives = [];
       let start = 0;
       let quoteStart = -1;
-      let inQuote = false;
+      let inQuote2 = false;
       let escaped = false;
       for (let i = 0; i < value.length; i++) {
-        if (inQuote) {
+        if (inQuote2) {
           if (escaped) {
             escaped = false;
           } else if (value[i] === "\\") {
             escaped = true;
           } else if (value[i] === '"') {
-            inQuote = false;
+            inQuote2 = false;
             quoteStart = -1;
           }
         } else if (value[i] === '"') {
-          inQuote = true;
+          inQuote2 = true;
           quoteStart = i;
         } else if (value[i] === ",") {
           directives.push({ value: value.substring(start, i), fromMalformedQuote: false });
           start = i + 1;
         }
       }
-      if (!inQuote) {
+      if (!inQuote2) {
         directives.push({ value: value.substring(start), fromMalformedQuote: false });
         return directives;
       }
@@ -87823,6 +87823,21 @@ function mediaOf(el) {
   const url = safeUrl(src, ["http", "https"]);
   return url ? { t: "media", tag, src: url } : null;
 }
+var inQuote = 0;
+var BRACKET_DIALOGUE = /(「[^「」]*」|『[^『』]*』)/;
+function pushText(out, v2, depth) {
+  if (!dialogueTag || inQuote > 0 || depth >= KEEP_LIMIT || !/[「『]/.test(v2)) {
+    out.push(text(v2));
+    return;
+  }
+  for (const part of v2.split(BRACKET_DIALOGUE)) {
+    if (!part) continue;
+    if (BRACKET_DIALOGUE.test(part)) {
+      const kids = [text(part)];
+      out.push({ t: "el", tag: dialogueTag, attrs: {}, kids, hasMedia: false });
+    } else out.push(text(part));
+  }
+}
 var QUOTE_CHARS = /* @__PURE__ */ new Set(['"', "\u201C", "\u201D", "'", "\u2018", "\u2019", "\u300C", "\u300D", "\u300E", "\u300F", "\u300A", "\u300B"]);
 function inlineOf(nodes, depth, media) {
   const out = [];
@@ -87831,7 +87846,7 @@ function inlineOf(nodes, depth, media) {
   };
   for (const n of nodes) {
     if (typeof n === "string") {
-      out.push(text(n));
+      pushText(out, n, depth);
       continue;
     }
     const name = n.n;
@@ -87844,7 +87859,10 @@ function inlineOf(nodes, depth, media) {
     } else if (name === "q") {
       const inner = plainOf(n.k).trim();
       const quoted = inner.length >= 2 && QUOTE_CHARS.has(inner[0]) && QUOTE_CHARS.has(inner[inner.length - 1]);
-      const kids = quoted ? inlineOf(n.k, depth, media) : [text("\u201C"), ...inlineOf(n.k, depth, media), text("\u201D")];
+      inQuote++;
+      const inner2 = inlineOf(n.k, depth, media);
+      inQuote--;
+      const kids = quoted ? inner2 : [text("\u201C"), ...inner2, text("\u201D")];
       if (dialogueTag && depth < KEEP_LIMIT) out.push({ t: "el", tag: dialogueTag, attrs: {}, kids, hasMedia: kids.some(hasMedia) });
       else out.push(...kids);
     } else if (name === "a") {
@@ -88415,6 +88433,7 @@ function toRichMessages(input2, options = {}) {
     }
   } finally {
     dialogueTag = null;
+    inQuote = 0;
   }
 }
 

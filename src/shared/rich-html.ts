@@ -266,6 +266,26 @@ function mediaOf(el: DEl): Media | null {
   return url ? { t: 'media', tag, src: url } : null;
 }
 
+/** 正在 <q> 里面：里面的「」不再套第二层对话样式。 */
+let inQuote = 0;
+
+/** 「…」『…』是中文日系对话的引号，ST 不会把它们包成 <q>，这里按同样的对话样式处理。 */
+const BRACKET_DIALOGUE = /(「[^「」]*」|『[^『』]*』)/;
+
+function pushText(out: Inl[], v: string, depth: number): void {
+  if (!dialogueTag || inQuote > 0 || depth >= KEEP_LIMIT || !/[「『]/.test(v)) {
+    out.push(text(v));
+    return;
+  }
+  for (const part of v.split(BRACKET_DIALOGUE)) {
+    if (!part) continue;
+    if (BRACKET_DIALOGUE.test(part)) {
+      const kids = [text(part)];
+      out.push({ t: 'el', tag: dialogueTag, attrs: {}, kids, hasMedia: false });
+    } else out.push(text(part));
+  }
+}
+
 const QUOTE_CHARS = new Set(['"', '“', '”', "'", '‘', '’', '「', '」', '『', '』', '《', '》']);
 
 /** 行内模式：块级标签变成换行；media 为 false 时图片降级为 alt 文字。 */
@@ -276,7 +296,7 @@ function inlineOf(nodes: DNode[], depth: number, media: boolean): Inl[] {
   };
   for (const n of nodes) {
     if (typeof n === 'string') {
-      out.push(text(n));
+      pushText(out, n, depth);
       continue;
     }
     const name = n.n;
@@ -290,7 +310,10 @@ function inlineOf(nodes: DNode[], depth: number, media: boolean): Inl[] {
       // ST 的引号包装会让 <q> 里本身就带着引号字符（"op"），已经有就不再套一层，否则变成 “"op"”。
       const inner = plainOf(n.k).trim();
       const quoted = inner.length >= 2 && QUOTE_CHARS.has(inner[0]) && QUOTE_CHARS.has(inner[inner.length - 1]);
-      const kids = quoted ? inlineOf(n.k, depth, media) : [text('“'), ...inlineOf(n.k, depth, media), text('”')];
+      inQuote++;
+      const inner2 = inlineOf(n.k, depth, media);
+      inQuote--;
+      const kids = quoted ? inner2 : [text('“'), ...inner2, text('”')];
       if (dialogueTag && depth < KEEP_LIMIT) out.push({ t: 'el', tag: dialogueTag, attrs: {}, kids, hasMedia: kids.some(hasMedia) });
       else out.push(...kids);
     } else if (name === 'a') {
@@ -929,5 +952,6 @@ export function toRichMessages(input: string, options: RichOptions = {}): RichPa
     }
   } finally {
     dialogueTag = null;
+    inQuote = 0;
   }
 }

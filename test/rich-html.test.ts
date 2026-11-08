@@ -477,6 +477,12 @@ describe('前端卡片钩子', () => {
     expect(html(toRichMessages('<p><q>走</q></p>'))).toBe('<p>“走”</p>');
   });
 
+  it('dialogueStyle 也作用于「」『』对话（ST 不会把它们包成 <q>）；<q> 里的不重复套', () => {
+    const src = '<p>她低声说「借过，劳烦借过……」，心想『糟了』。</p><p><q>他说「好」</q></p>';
+    expect(html(toRichMessages(src, { dialogueStyle: 'italic' }))).toBe('<p>她低声说<i>「借过，劳烦借过……」</i>，心想<i>『糟了』</i>。</p><p><i>“他说「好」”</i></p>');
+    expect(html(toRichMessages(src))).toBe('<p>她低声说「借过，劳烦借过……」，心想『糟了』。</p><p>“他说「好」”</p>');
+  });
+
   it('酒馆助手的“显示前端代码块”按钮不进正文，代码块本身默认保留', () => {
     const out = html(
       toRichMessages(`<p>前文</p><div class="TH-render">${card}<div class="TH-collapse-code-block-button">显示前端代码块</div><iframe srcdoc="x"></iframe></div>`),
