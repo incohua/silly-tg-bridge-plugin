@@ -1,6 +1,6 @@
 {
   "name": "silly-tg-bridge-plugin",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "SillyTavern / Luker 的 Telegram 桥接插件：服务端插件 + 无头页面 UI 扩展",
   "license": "AGPL-3.0-only",
   "author": "incohua",
