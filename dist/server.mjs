@@ -88918,6 +88918,26 @@ ${summary}` : "\u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard: menuKeybo
     }
   }
   // ───────────── 列表与按钮 ─────────────
+  /**
+   * 重新加载无头页面再列预设：ST 的页面只在加载时读一次预设列表，别处新增的预设它看不到。
+   * 刷新失败不影响列表，用旧数据照常列出。
+   */
+  async refreshHostPage() {
+    const { host, log } = this.opts;
+    const before = host.hello;
+    try {
+      await host.request({ type: "refreshPage" }, 1e4);
+    } catch (e) {
+      log.warn(`\u5237\u65B0\u65E0\u5934\u9875\u9762\u5931\u8D25\uFF0C\u4F7F\u7528\u73B0\u6709\u7684\u9884\u8BBE\u5217\u8868\uFF1A${e.message}`);
+      return;
+    }
+    const limit = this.opts.hostReloadTimeoutMs ?? 6e4;
+    for (let waited = 0; waited < limit; waited += 200) {
+      if (host.connected && host.hello && host.hello !== before) return;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    log.warn("\u5237\u65B0\u65E0\u5934\u9875\u9762\u540E\u6CA1\u6709\u5728\u9650\u5B9A\u65F6\u95F4\u5185\u91CD\u65B0\u8FDE\u4E0A");
+  }
   async sendList(chatId, kind) {
     const { host, log } = this.opts;
     const timeout2 = this.opts.switchRpcTimeoutMs ?? 9e4;
@@ -88931,6 +88951,7 @@ ${summary}` : "\u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard: menuKeybo
       items = await host.request({ type: "listChats" }, timeout2);
       current = st.chatId;
     } else {
+      await this.refreshHostPage();
       const r = await host.request({ type: "listPresets" }, timeout2);
       items = r.presets;
       current = r.current;

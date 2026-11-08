@@ -90,11 +90,14 @@ class FakeHost implements BotHost {
   connected = true;
   hello: { stVersion: string; hasTavernHelper: boolean } | null = { stVersion: 'st 1.19.0', hasTavernHelper: true };
   requests: HostCommandInput[] = [];
+  reloadsOnRefresh = true;
   onRequest: (cmd: HostCommandInput) => Promise<unknown> = async () => ({});
   private handlers = new Set<(e: HostEvent) => void>();
   private connHandlers = new Set<(c: boolean) => void>();
   request<T>(cmd: HostCommandInput): Promise<T> {
     this.requests.push(cmd);
+    // 模拟页面重载：收到 refreshPage 后很快换一个新的 hello
+    if (cmd.type === 'refreshPage' && this.reloadsOnRefresh) setTimeout(() => (this.hello = { stVersion: 'st 1.19.0', hasTavernHelper: true }), 50);
     return this.onRequest(cmd) as Promise<T>;
   }
   onEvent(fn: (e: HostEvent) => void) {
@@ -921,6 +924,27 @@ describe('/preset 与开场白', () => {
     expect(ctx.telegram.of('editMessageText').at(-1)!.params.text).toMatch(/已切换到预设：破限 B/);
     await tap(ctx, kb[0][0].callback_data);
     expect(ctx.telegram.of('answerCallbackQuery').at(-1)!.params.text).toMatch(/已过期/);
+  });
+
+  it('/preset：先刷新无头页面再列出预设', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async (cmd) => (cmd.type === 'listPresets' ? { api: 'openai', current: 'Default', presets } : { app: 'st', generating: false });
+    await ctx.bot.handleUpdate(text('/preset'));
+    const types = ctx.host.requests.map((r) => r.type);
+    expect(types.indexOf('refreshPage')).toBeGreaterThan(-1);
+    expect(types.indexOf('refreshPage')).toBeLessThan(types.indexOf('listPresets'));
+    expect(ctx.telegram.of('sendMessage').at(-1)!.params.text).toMatch(/选择预设（共 3 个/);
+  });
+
+  it('/preset：刷新失败时仍用现有数据列出', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async (cmd) => {
+      if (cmd.type === 'refreshPage') throw new Error('正在生成，暂不刷新页面');
+      if (cmd.type === 'listPresets') return { api: 'openai', current: 'Default', presets };
+      return { app: 'st', generating: false };
+    };
+    await ctx.bot.handleUpdate(text('/preset'));
+    expect(ctx.telegram.of('sendMessage').at(-1)!.params.text).toMatch(/选择预设（共 3 个/);
   });
 
   it('当前 API 没有预设：提示原因', async () => {

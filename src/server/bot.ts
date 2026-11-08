@@ -87,6 +87,8 @@ export interface BotOptions {
   sendRpcTimeoutMs?: number;
   /** 切换类命令的 rpc 超时，默认 90 秒。 */
   switchRpcTimeoutMs?: number;
+  /** 刷新无头页面后等待重新连上的最长毫秒数，默认 60 秒。 */
+  hostReloadTimeoutMs?: number;
   /** 选项解析规则（热加载由调用方负责，每条回复读一次）。默认只有内置规则。 */
   choiceRules?: () => readonly CompiledChoiceRule[];
   /** 正式消息发出后回调（消息映射已在内部写入 store，这里供额外用途）。 */
@@ -381,6 +383,27 @@ export class Bot {
 
   // ───────────── 列表与按钮 ─────────────
 
+  /**
+   * 重新加载无头页面再列预设：ST 的页面只在加载时读一次预设列表，别处新增的预设它看不到。
+   * 刷新失败不影响列表，用旧数据照常列出。
+   */
+  private async refreshHostPage(): Promise<void> {
+    const { host, log } = this.opts;
+    const before = host.hello;
+    try {
+      await host.request({ type: 'refreshPage' }, 10_000);
+    } catch (e) {
+      log.warn(`刷新无头页面失败，使用现有的预设列表：${(e as Error).message}`);
+      return;
+    }
+    const limit = this.opts.hostReloadTimeoutMs ?? 60_000;
+    for (let waited = 0; waited < limit; waited += 200) {
+      if (host.connected && host.hello && host.hello !== before) return;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    log.warn('刷新无头页面后没有在限定时间内重新连上');
+  }
+
   private async sendList(chatId: number, kind: ListKind): Promise<void> {
     const { host, log } = this.opts;
     const timeout = this.opts.switchRpcTimeoutMs ?? 90_000;
@@ -394,6 +417,7 @@ export class Bot {
       items = await host.request<ChatInfo[]>({ type: 'listChats' }, timeout);
       current = st.chatId;
     } else {
+      await this.refreshHostPage();
       const r = await host.request<PresetList>({ type: 'listPresets' }, timeout);
       items = r.presets;
       current = r.current;

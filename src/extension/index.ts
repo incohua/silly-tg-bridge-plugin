@@ -245,6 +245,16 @@ async function main(): Promise<void> {
         case 'selectPreset':
           queued(() => selectPreset(cmd.name));
           return;
+        // 重新加载无头页面，让它读到 ST 里新增的预设等数据（ST 只在页面加载时读一次，别的标签页里的改动它看不到）。
+        // 先回应再刷新；页面重载后重新连上 host 通道并发 hello。
+        case 'refreshPage':
+          if (hostStatus().generating) {
+            fail(new Error('正在生成，暂不刷新页面'));
+            return;
+          }
+          reply(true, {});
+          setTimeout(() => location.reload(), 300);
+          return;
         // 不进队列：生成进行中也要立即执行
         case 'stop':
           reply(true, { stopped: ctx().stopGeneration() });

@@ -16,7 +16,7 @@ export type HostCommand =
    */
   | { id: string; type: 'regenerate'; generationId: string; chatId: string; messageId: number }
   /** stop 和 getStatus 不进页面串行队列（生成进行中也要能立即执行）。 */
-  | { id: string; type: 'stop' | 'getStatus' | 'newChat' | 'listCharacters' | 'listChats' | 'listPresets' }
+  | { id: string; type: 'stop' | 'getStatus' | 'newChat' | 'listCharacters' | 'listChats' | 'listPresets' | 'refreshPage' }
   /** name 是预设名称（getAllPresets 的元素），作用于页面当前 API 的预设管理器。 */
   | { id: string; type: 'selectPreset'; name: string }
   /** characterId 是角色的 avatar 文件名（跨重启稳定），不是数组下标。 */
@@ -231,6 +231,7 @@ export function decodeHostCommand(v: unknown): HostCommand | null {
     case 'listCharacters':
     case 'listChats':
     case 'listPresets':
+    case 'refreshPage':
       return { id, type: v.type };
     case 'selectPreset':
       return isStr(v.name) ? { id, type: 'selectPreset', name: v.name } : null;

@@ -40,6 +40,7 @@ describe('新增字段与命令', () => {
   });
   it('listPresets / selectPreset 命令', () => {
     expect(decodeHostCommand({ id: '1', type: 'listPresets' })).toEqual({ id: '1', type: 'listPresets' });
+    expect(decodeHostCommand({ id: '1', type: 'refreshPage' })).toEqual({ id: '1', type: 'refreshPage' });
     expect(decodeHostCommand({ id: '1', type: 'selectPreset', name: '破限 A' })).toEqual({ id: '1', type: 'selectPreset', name: '破限 A' });
     expect(decodeHostCommand({ id: '1', type: 'selectPreset' })).toBeNull();
   });
