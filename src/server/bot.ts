@@ -384,7 +384,8 @@ export class Bot {
   // ───────────── 列表与按钮 ─────────────
 
   /**
-   * 重新加载无头页面再列预设：ST 的页面只在加载时读一次预设列表，别处新增的预设它看不到。
+   * 重新加载无头页面再列预设或角色：ST 的页面只在加载时读一次预设和角色，别处新增的它看不到。
+   * 重载后页面是空白的，要按 bot 记着的会话把角色和聊天恢复回来，否则当前聊天会变。
    * 刷新失败不影响列表，用旧数据照常列出。
    */
   private async refreshHostPage(): Promise<void> {
@@ -398,7 +399,11 @@ export class Bot {
     }
     const limit = this.opts.hostReloadTimeoutMs ?? 60_000;
     for (let waited = 0; waited < limit; waited += 200) {
-      if (host.connected && host.hello && host.hello !== before) return;
+      if (host.connected && host.hello && host.hello !== before) {
+        this.sessionKey = undefined; // 强制再恢复一次
+        await this.ensureSession();
+        return;
+      }
       await new Promise((r) => setTimeout(r, 200));
     }
     log.warn('刷新无头页面后没有在限定时间内重新连上');
@@ -407,6 +412,7 @@ export class Bot {
   private async sendList(chatId: number, kind: ListKind): Promise<void> {
     const { host, log } = this.opts;
     const timeout = this.opts.switchRpcTimeoutMs ?? 90_000;
+    if (kind !== 'chats') await this.refreshHostPage(); // 聊天列表每次从服务器读，不用刷新
     const st = await host.request<HostStatus>({ type: 'getStatus' }, 10_000);
     let items: Listing['items'];
     let current: string | undefined;
@@ -417,7 +423,6 @@ export class Bot {
       items = await host.request<ChatInfo[]>({ type: 'listChats' }, timeout);
       current = st.chatId;
     } else {
-      await this.refreshHostPage();
       const r = await host.request<PresetList>({ type: 'listPresets' }, timeout);
       items = r.presets;
       current = r.current;

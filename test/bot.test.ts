@@ -936,6 +936,36 @@ describe('/preset 与开场白', () => {
     expect(ctx.telegram.of('sendMessage').at(-1)!.params.text).toMatch(/选择预设（共 3 个/);
   });
 
+  it('刷新页面后把角色和聊天恢复到 bot 记着的那个', async () => {
+    const ctx = setup();
+    ctx.store.session = { characterAvatar: 'c5.png', chatId: 'E - 2' };
+    const seen: string[] = [];
+    let reloaded = false;
+    ctx.host.onRequest = async (cmd) => {
+      seen.push(cmd.type);
+      if (cmd.type === 'refreshPage') reloaded = true;
+      if (cmd.type === 'getStatus') {
+        // 重载后页面回到 ST 记录的最近角色，但聊天不是 bot 记着的那个
+        return reloaded && !seen.includes('selectCharacter') ? { characterAvatar: 'c5.png', chatId: 'E - 1' } : { characterAvatar: 'c5.png', chatId: 'E - 2' };
+      }
+      if (cmd.type === 'listCharacters') return [{ avatar: 'c5.png', name: 'E' }];
+      return {};
+    };
+    ctx.browser.startedAt = 1;
+    await ctx.bot.handleUpdate(text('/chars'));
+    expect(seen.indexOf('refreshPage')).toBeGreaterThan(-1);
+    const open = ctx.host.requests.find((r) => r.type === 'openChat');
+    expect(open).toEqual({ type: 'openChat', fileName: 'E - 2' });
+    expect(seen.indexOf('openChat')).toBeLessThan(seen.indexOf('listCharacters'));
+  });
+
+  it('/chats 不刷新页面', async () => {
+    const ctx = setup();
+    ctx.host.onRequest = async (cmd) => (cmd.type === 'listChats' ? [] : { app: 'st', characterName: 'A', generating: false });
+    await ctx.bot.handleUpdate(text('/chats'));
+    expect(ctx.host.requests.map((r) => r.type)).not.toContain('refreshPage');
+  });
+
   it('/preset：刷新失败时仍用现有数据列出', async () => {
     const ctx = setup();
     ctx.host.onRequest = async (cmd) => {
