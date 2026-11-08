@@ -2,7 +2,7 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
-## [0.1.0] - 未发布
+## [0.1.0] - 2026-11-08
 
 首个版本，提供文字对话。
 

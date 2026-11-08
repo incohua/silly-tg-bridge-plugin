@@ -1,0 +1,121 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 960 700" width="960" height="700" role="img" aria-labelledby="t d">
+  <title id="t">silly-tg 架构</title>
+  <desc id="d">Telegram 消息经 Bot API 长轮询到达 SillyTavern 进程里的 silly-tg 服务端插件；插件通过 SSE 下发命令、通过 POST 接收事件，驱动无头 Chromium 里的真实 ST 页面发送消息并读取渲染结果；ST 服务端再请求大模型 API。整条链路只向外连接，不需要开放公网端口。</desc>
+  <style>
+    svg { font-family: -apple-system, BlinkMacSystemFont, "PingFang SC", "Noto Sans CJK SC", "Microsoft YaHei", "Segoe UI", sans-serif; }
+    .t  { fill: #1f2328; font-size: 13px; font-weight: 600; }
+    .m  { fill: #59636e; font-size: 12px; }
+    .s  { fill: #59636e; font-size: 11px; }
+    .hl { fill: #0969da; font-size: 12px; font-weight: 600; }
+    .bg    { fill: #ffffff; stroke: #d1d9e0; stroke-width: 1; }
+    .box   { fill: #f6f8fa; stroke: #8c959f; stroke-width: 1.2; }
+    .zone  { fill: #ffffff; fill-opacity: 0.4; stroke: #afb8c1; stroke-width: 1.2; }
+    .outer { fill: none; stroke: #afb8c1; stroke-width: 1.2; stroke-dasharray: 6 5; }
+    .core  { fill: #ddf4ff; stroke: #0969da; stroke-width: 1.4; }
+    .ln { fill: none; stroke: #59636e; stroke-width: 1.6; }
+    .hx { fill: none; stroke: #0969da; stroke-width: 2.4; }
+    .dh { fill: none; stroke: #59636e; stroke-width: 1.4; stroke-dasharray: 5 4; }
+    .an { fill: #59636e; }
+    .ah { fill: #0969da; }
+    @media (prefers-color-scheme: dark) {
+      .t  { fill: #e6edf3; }
+      .m, .s { fill: #9198a1; }
+      .hl { fill: #58a6ff; }
+      .bg    { fill: #0d1117; stroke: #3d444d; }
+      .box   { fill: #151b23; stroke: #656c76; }
+      .zone  { fill: #0d1117; fill-opacity: 0.5; stroke: #3d444d; }
+      .outer { stroke: #3d444d; }
+      .core  { fill: #0c2d6b; stroke: #58a6ff; }
+      .ln, .dh { stroke: #9198a1; }
+      .hx { stroke: #58a6ff; }
+      .an { fill: #9198a1; }
+      .ah { fill: #58a6ff; }
+    }
+  </style>
+  <defs>
+    <marker id="an" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="an"/></marker>
+    <marker id="ah" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="8" markerHeight="8" orient="auto-start-reverse"><path d="M0 0 L10 5 L0 10 z" class="ah"/></marker>
+  </defs>
+
+  <!-- 自带底板：<img> 里的 SVG 跟随系统深浅色而不是 GitHub 主题，底板保证任何页面背景下都清楚 -->
+  <rect class="bg" x="0.5" y="0.5" width="959" height="699" rx="12"/>
+
+  <!-- 顶部：Telegram 一侧 -->
+  <rect class="box" x="30" y="30" width="160" height="65" rx="10"/>
+  <text class="t" x="110" y="58" text-anchor="middle">你的手机</text>
+  <text class="m" x="110" y="78" text-anchor="middle">Telegram App</text>
+
+  <rect class="box" x="300" y="30" width="180" height="65" rx="10"/>
+  <text class="t" x="390" y="58" text-anchor="middle">Telegram Bot API</text>
+  <text class="m" x="390" y="78" text-anchor="middle">云端，官方服务</text>
+
+  <text class="s" x="245" y="55" text-anchor="middle">消息 / 回复</text>
+  <line class="ln" x1="192" y1="63" x2="298" y2="63" marker-start="url(#an)" marker-end="url(#an)"/>
+
+  <!-- Bot API <-> 插件：只向外连 -->
+  <line class="ln" x1="330" y1="96" x2="330" y2="230" marker-end="url(#an)"/>
+  <text class="hl" x="320" y="124" text-anchor="end">getUpdates 长轮询</text>
+  <text class="m" x="320" y="141" text-anchor="end">只向外连，不需要公网入口</text>
+
+  <line class="ln" x1="390" y1="230" x2="390" y2="97" marker-end="url(#an)"/>
+  <text class="hl" x="402" y="124">sendMessageDraft 流式预览</text>
+  <text class="hl" x="402" y="141">sendRichMessage 正式消息</text>
+
+  <!-- 运行 ST 的机器 -->
+  <rect class="outer" x="20" y="150" width="920" height="440" rx="14"/>
+  <text class="m" x="36" y="173">运行 SillyTavern 的机器</text>
+
+  <!-- ST 进程 -->
+  <rect class="zone" x="40" y="190" width="390" height="375" rx="12"/>
+  <text class="t" x="56" y="212">SillyTavern 进程（Node）</text>
+
+  <rect class="core" x="60" y="232" width="350" height="120" rx="10"/>
+  <text class="t" x="235" y="258" text-anchor="middle">silly-tg 服务端插件</text>
+  <text class="m" x="235" y="282" text-anchor="middle">Telegram 客户端 · 命令 · 会话</text>
+  <text class="m" x="235" y="302" text-anchor="middle">流式草稿节流 · 长回复分段</text>
+  <text class="m" x="235" y="322" text-anchor="middle">看门狗 · 消息映射 state.json</text>
+
+  <rect class="box" x="60" y="440" width="350" height="95" rx="10"/>
+  <text class="t" x="235" y="466" text-anchor="middle">ST 服务端</text>
+  <text class="m" x="235" y="488" text-anchor="middle">聊天记录 · 设置 · 角色卡</text>
+  <text class="m" x="235" y="508" text-anchor="middle">把生成请求转发给 API</text>
+
+  <!-- 无头 Chromium -->
+  <rect class="zone" x="560" y="190" width="360" height="375" rx="12"/>
+  <text class="t" x="576" y="212">无头 Chromium（插件启动并管理）</text>
+
+  <rect class="core" x="580" y="232" width="320" height="120" rx="10"/>
+  <text class="t" x="740" y="258" text-anchor="middle">ST 页面 + silly-tg 扩展</text>
+  <text class="m" x="740" y="282" text-anchor="middle">完整的 ST 前端</text>
+  <text class="m" x="740" y="302" text-anchor="middle">提示词 · 世界书 · 正则 · 酒馆助手</text>
+  <text class="m" x="740" y="322" text-anchor="middle">在页面里发送、生成、读渲染结果</text>
+
+  <text class="m" x="580" y="512">关掉所有普通 ST 页面也能聊天，</text>
+  <text class="m" x="580" y="530">回复由这个无头页面生成并渲染。</text>
+
+  <!-- 插件 <-> 页面：核心机制 -->
+  <text class="hl" x="495" y="256" text-anchor="middle">SSE 下行命令</text>
+  <line class="hx" x1="412" y1="268" x2="578" y2="268" marker-end="url(#ah)"/>
+  <text class="s" x="495" y="285" text-anchor="middle">send · stop · regenerate</text>
+
+  <line class="hx" x1="578" y1="312" x2="412" y2="312" marker-end="url(#ah)"/>
+  <text class="hl" x="495" y="332" text-anchor="middle">POST 上行事件</text>
+  <text class="s" x="495" y="347" text-anchor="middle">streamText · messageFinal</text>
+
+  <!-- 插件 -> Chromium：启动与监视 -->
+  <polyline class="dh" points="380,352 380,384 558,384" marker-end="url(#an)"/>
+  <text class="s" x="495" y="401" text-anchor="middle">puppeteer 启动</text>
+  <text class="s" x="495" y="416" text-anchor="middle">看门狗监视</text>
+
+  <!-- 页面 -> ST 服务端：普通 ST 接口 -->
+  <polyline class="ln" points="740,352 740,487 412,487" marker-end="url(#an)"/>
+  <text class="m" x="575" y="479" text-anchor="middle">普通 ST 接口：读写聊天、设置</text>
+
+  <!-- ST 服务端 -> 大模型 -->
+  <line class="ln" x1="235" y1="537" x2="235" y2="623" marker-end="url(#an)"/>
+  <text class="m" x="249" y="610">流式请求 / 响应</text>
+
+  <rect class="box" x="100" y="625" width="270" height="60" rx="10"/>
+  <text class="t" x="235" y="651" text-anchor="middle">大模型 API</text>
+  <text class="m" x="235" y="671" text-anchor="middle">OpenAI 兼容、Claude 等，在 ST 里配置</text>
+</svg>

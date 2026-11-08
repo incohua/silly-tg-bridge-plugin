@@ -1,14 +1,47 @@
+<div align="center">
+
 # silly-tg-bridge-plugin
 
+**在 Telegram 里和 SillyTavern / Luker 的角色聊天**
+
+流式预览 · 富文本回复 · 关掉所有 ST 页面也能用 · 提示词、世界书、正则、酒馆助手照常运行
+
 [![CI](https://github.com/incohua/silly-tg-bridge-plugin/actions/workflows/ci.yml/badge.svg)](https://github.com/incohua/silly-tg-bridge-plugin/actions/workflows/ci.yml)
+[![Release](https://img.shields.io/github/v/release/incohua/silly-tg-bridge-plugin?display_name=tag&sort=semver)](https://github.com/incohua/silly-tg-bridge-plugin/releases)
+[![License: AGPL-3.0](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
+![Node](https://img.shields.io/badge/node-%E2%89%A5%2020-339933)
+![SillyTavern](https://img.shields.io/badge/SillyTavern-1.19%2B-orange)
 
-在 Telegram 里与 SillyTavern（1.19+）或 Luker 对话。服务端插件负责 Telegram Bot 和无头 Chromium，UI 扩展在无头页面里操作 ST，所以提示词、世界书、正则和酒馆助手都照常运行，关掉所有 ST 页面也能聊天。
+[快速开始](#快速开始) · [Bot 命令](#bot-命令) · [配置](#配置) · [工作原理](#工作原理) · [已知限制](#已知限制) · [路线图](ROADMAP.md) · [更新日志](CHANGELOG.md)
 
-当前版本提供文字对话。前端卡片的截图和 Mini App 尚未提供。
+</div>
 
-本项目是社区项目，与 SillyTavern、Luker、酒馆助手、Telegram 的官方没有关联。
+> [!NOTE]
+> 这是社区项目，与 SillyTavern、Luker、酒馆助手（JS-Slash-Runner）、Telegram 的官方没有关联。
 
-## 前提条件
+## 特性
+
+- **流式预览**：生成过程中在 Telegram 里实时显示，预览上有“停止”按钮。
+- **富文本正式消息**：用 Telegram 的 Rich Message 发送，对话加粗（可改成斜体或高亮），超长回复自动分段，失败时逐级退回纯文本。
+- **ST 原样运行**：回复由真实的 ST 页面生成并渲染，提示词、世界书、正则、酒馆助手、MVU 都照常工作，聊天记录写进 ST 自己的文件。
+- **不依赖浏览器标签页**：插件管理一个无头 Chromium，关掉所有 ST 页面也能聊天。
+- **省内存**：低内存参数，可设置空闲关闭，收到消息再启动。
+- **自动恢复**：看门狗监控页面崩溃、进程退出和心跳超时，自动重启并通知你。
+- **只向外连**：通过长轮询访问 Telegram，ST 端口不需要暴露到公网；只有白名单里的账号能使用。
+
+## 工作原理
+
+<div align="center">
+  <img src="docs/architecture.svg" alt="架构图：Telegram 消息经 Bot API 长轮询到达 SillyTavern 进程里的 silly-tg 服务端插件，插件通过 SSE 下发命令、通过 POST 接收事件，驱动无头 Chromium 里的真实 ST 页面，再由 ST 服务端请求大模型 API" width="860">
+</div>
+
+插件启动一个无头 Chromium 打开 ST 页面，页面里的 UI 扩展接收插件的指令：发送消息、触发生成、读取渲染结果。两边只通过两条通道通信：插件用 **SSE 下发命令**，页面用 **POST 上报事件**。回复经过“仅格式显示”正则渲染后，转成 Telegram 的 Rich Message 发出。
+
+无头页面的地址是 `http://127.0.0.1:8000/#silly_tg_host=...`。你另开的普通 ST 页面里，这个扩展保持静默，不会重复处理消息。
+
+## 快速开始
+
+### 前提条件
 
 | 项目 | 要求 |
 |---|---|
@@ -16,11 +49,11 @@
 | 机器 | 一台常开的机器，ST 和 Chromium 都跑在上面 |
 | 浏览器 | 系统里装有 Chrome 或 Chromium（也可以在配置里指定路径） |
 | 酒馆助手 | 安装 JS-Slash-Runner 并**启用角色脚本**，否则没有 MVU，变量不会初始化。Luker 不自带酒馆助手，需要另外安装 |
-| 内存 | 无头 Chromium 加 ST 约占 0.8–0.85 GB（macOS 上的粗测，不是保证；Linux 和 2 GB 内存的机器请自己实测）。2 GB 内存的机器建议保持 `lowMemory: true`，并设置 `idleShutdownMinutes` |
-| API | 先在普通 ST 页面里配置好并连接一次 API（无头页面启动时读取已保存的设置并自动点一次“连接”，不会修改你的 API 设置；之后改了 API 设置，需要等无头浏览器下次启动，例如重启 ST 或空闲关闭后再被唤醒，才会用上） |
+| API | 先在普通 ST 页面里配置好并连接一次（无头页面启动时读取已保存的设置并点一次“连接”，不会修改你的 API 设置；之后改了 API 设置，要等无头浏览器下次启动，例如重启 ST 或空闲关闭后再被唤醒，才会用上） |
 | Telegram | 用 @BotFather 创建一个 bot，拿到 token；用 @userinfobot 查自己的数字 ID |
+| 内存 | 无头 Chromium 加 ST 约 0.8–0.85 GB（macOS 上的粗测，不是保证；Linux 和 2 GB 内存的机器请自己实测）。2 GB 的机器建议保持 `lowMemory: true` 并设置 `idleShutdownMinutes` |
 
-## 安装
+### 安装
 
 1. 在 ST 根目录执行：
 
@@ -29,40 +62,15 @@
    ```
 
    `dist/` 已包含构建产物，不需要安装 pnpm，也不需要构建。
+
 2. 打开 ST 的 `config.yaml`，设置 `enableServerPlugins: true`。**必须开启：不开启时插件根本不会被加载，也不会有任何提示。**
+
 3. 复制 `plugins/silly-tg/config.example.json` 为 `plugins/silly-tg/config.json`，至少填写 `botToken` 和 `allowedUserIds`。
 4. 重启 ST。日志里应出现 `[silly-tg] UI 扩展已部署到 ...` 和 `Telegram 已连接，bot：@...`。
 5. 在 Telegram 里给你的 bot 发 `/status`，确认 Chromium、ST 页面和当前角色正常。
-6. 首次使用先发 `/chars` 选择一个角色，再发文字。全新安装、还没在 ST 里点选过角色时，直接发文字会被拒绝并提示“请先发 /chars 选择角色”。选过的角色和聊天会被记住，重启后自动恢复。
+6. 首次使用先发 `/chars` 选择一个角色，再发文字。选过的角色和聊天会被记住，重启后自动恢复。
 
-UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-party/silly-tg`，不用单独安装。复制失败时日志会给出手动步骤：把 `plugins/silly-tg/dist/extension` 整个目录复制为 `public/scripts/extensions/third-party/silly-tg`，然后重启 ST。
-
-配置有误时，插件会在 ST 日志里说明要改哪个字段并保持禁用，ST 本身照常启动。
-
-## 配置项
-
-配置文件是 `plugins/silly-tg/config.json`（已被 gitignore，不会被提交）。
-
-| 键 | 默认值 | 说明 |
-|---|---|---|
-| `botToken` | 无，必填 | @BotFather 给出的完整 token |
-| `allowedUserIds` | 无，必填 | 允许使用的 Telegram 用户数字 ID 数组，例如 `[123456789]`。不在名单里的账号发消息没有任何回应。为空时插件不启动 |
-| `stBaseUrl` | `http://127.0.0.1:8000` | 无头 Chromium 访问 ST 的地址。ST 换了端口时修改 |
-| `telegramProxy` | 空 | 访问 Telegram 用的代理，见下一节 |
-| `chromiumPath` | 空 | Chrome/Chromium 可执行文件路径。留空时自动查找系统安装位置和 PATH |
-| `basicAuth` | `null` | ST 开启了 basic auth 时填 `{"username": "...", "password": "..."}` |
-| `idleShutdownMinutes` | `0` | 空闲多少分钟后关闭 Chromium，收到消息时再自动启动。`0` 表示不关闭。生成进行中不会被关闭 |
-| `lowMemory` | `true` | 使用低内存 Chromium 参数 |
-| `dialogueStyle` | `bold` | 对话（带引号的内容）在 Telegram 里的样式：`bold` 加粗，`italic` 斜体，`mark` 高亮，`plain` 只保留引号 |
-| `logLevel` | `info` | `debug` / `info` / `warn` / `error` |
-| `miniAppPort` | `8788` | Mini App 端口，当前版本未使用 |
-| `publicBaseUrl` | 空 | Mini App 的 HTTPS 地址，当前版本未使用 |
-
-## 代理
-
-国内等访问不了 Telegram 的网络，需要配置 `telegramProxy`，例如 `"http://127.0.0.1:7890"`。
-
-只支持 `http://` 和 `https://` 代理。代理软件如果只给了 socks 端口，请在软件里找它的 HTTP（混合）端口。
+UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-party/silly-tg`，不用单独安装。复制失败时日志会给出手动步骤：把 `plugins/silly-tg/dist/extension` 整个目录复制为 `public/scripts/extensions/third-party/silly-tg`，然后重启 ST。配置有误时，插件会在日志里说明要改哪个字段并保持禁用，ST 本身照常启动。
 
 ## Bot 命令
 
@@ -76,60 +84,72 @@ UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-p
 | `/chats` | 分页按钮选择当前角色的聊天 |
 | `/new` | 为当前角色新建聊天 |
 
-直接发文字就是对角色说话。生成过程中会出现流式预览，预览上有“停止”按钮，作用与 `/stop` 相同。生成进行中再发消息会收到提示，这条消息不会发给角色，当前生成不受影响。开头是 `/` 的文字会被当作命令。
+直接发文字就是对角色说话。生成进行中再发消息会收到提示，这条消息不会发给角色，当前生成不受影响。开头是 `/` 的文字会被当作命令。
 
-## 运行机制
+> [!TIP]
+> 流式预览出现时，Telegram 客户端会把发送键换成停止键，所以生成过程中请点预览上的**停止按钮**；`/stop` 在没有流式预览时使用。
 
-插件启动一个无头 Chromium，打开 ST 页面，UI 扩展在这个页面里接收插件的指令：发送消息、触发生成、读取渲染结果。回复经过“仅格式显示”正则渲染后转成 Telegram 的 Rich Message 发出，超长回复会分段，转换或发送失败时退回纯文本。如果你的 API 不支持流式，会显示“正在输入”，结束后发完整消息。
+## 配置
 
-设置了 `idleShutdownMinutes` 后，空闲超时会关闭 Chromium 以节省内存，下一条消息到达时自动重新启动，期间的消息不会丢。
+配置文件是 `plugins/silly-tg/config.json`（已被 gitignore，不会被提交）。
 
-看门狗负责监控：页面崩溃、浏览器进程意外退出、页面连接断开超过 60 秒或心跳超时，都会自动重启 Chromium，并通知白名单用户。短时间内接连出事时等待时间逐次变长（立即、5 秒、30 秒、2 分钟、5 分钟）；连续 5 次之后停止自动重启，直到你再发一条消息时才会重新尝试。ST 退出时会同时关闭 Chromium。
+| 键 | 默认值 | 说明 |
+|---|---|---|
+| `botToken` | 无，必填 | @BotFather 给出的完整 token |
+| `allowedUserIds` | 无，必填 | 允许使用的 Telegram 用户数字 ID 数组，例如 `[123456789]`。不在名单里的账号发消息没有任何回应。为空时插件不启动 |
+| `dialogueStyle` | `bold` | 对话（带引号的内容）的样式：`bold` 加粗，`italic` 斜体，`mark` 高亮，`plain` 只保留引号 |
+| `stBaseUrl` | `http://127.0.0.1:8000` | 无头 Chromium 访问 ST 的地址。ST 换了端口时修改 |
+| `telegramProxy` | 空 | 访问 Telegram 用的代理，见[代理](#代理) |
+| `chromiumPath` | 空 | Chrome/Chromium 可执行文件路径。留空时自动查找系统安装位置和 PATH |
+| `basicAuth` | `null` | ST 开启了 basic auth 时填 `{"username": "...", "password": "..."}` |
+| `idleShutdownMinutes` | `0` | 空闲多少分钟后关闭 Chromium，收到消息时再自动启动。`0` 表示不关闭。生成进行中不会被关闭 |
+| `lowMemory` | `true` | 使用低内存 Chromium 参数 |
+| `logLevel` | `info` | `debug` / `info` / `warn` / `error` |
+| `miniAppPort` | `8788` | Mini App 端口，当前版本未使用 |
+| `publicBaseUrl` | 空 | Mini App 的 HTTPS 地址，当前版本未使用 |
 
-无头页面的地址是 `http://127.0.0.1:8000/#silly_tg_host=...`。你另开的普通 ST 页面里，这个扩展保持静默，不会重复处理消息。
+### 代理
+
+国内等访问不了 Telegram 的网络，需要配置 `telegramProxy`，例如 `"http://127.0.0.1:7890"`。只支持 `http://` 和 `https://` 代理；代理软件如果只给了 socks 端口，请在软件里找它的 HTTP（混合）端口。
+
+## 已知限制
+
+> [!WARNING]
+> **酒馆助手会改写 ST 的全局世界书设置。** 酒馆助手的“强制使用推荐的世界书全局设置”（`extension_settings.tavern_helper.optimize.force_recommended_worldbook_global_settings`，默认开启）会在每次页面加载时，把世界书的 `context_percentage` 改成 100、`include_names` 和 `match_whole_words` 改成 `false` 等，并由 ST 写入 `settings.json`。无头页面每次启动都会加载一次，所以你自己调过的世界书参数会被覆盖，在 ST 里用别的卡时也会看到。
+>
+> 这是酒馆助手的行为，不用本插件、在普通 ST 页面里同样会发生。想保持自己的世界书设置，请在酒馆助手设置的“优化”里关掉这一项，并重新设一次世界书参数。依赖 MVU 的卡在变量初始化后也会调用 `setLorebookSettings` 强制同样的值，换卡后可能再次被改。想保险，可先备份 `data/<用户>/settings.json`。
+
+> [!WARNING]
+> **多端写入风险。** 你另开 ST 页面并在同一个聊天里写入时，可能触发聊天完整性冲突，或互相覆盖。用 Telegram 聊天时，请不要同时在 ST 网页里操作同一个聊天。当前没有多端同步。
+
+> [!CAUTION]
+> **不要在 ST 首页地址后面加查询参数**（例如 `?xxx=1`）。ST 1.19 在这种地址下页面会重复，出现两份角色编辑表单，之后新建或打开聊天会把角色卡写坏。无头页面使用 `#` 标记就是为了避开这个问题。若检测到表单重复，`/chats` 和 `/new` 会暂停并在 `/status` 里警告，重启 ST 可恢复。
+
+- 不支持 ST 的多账户模式，不支持群聊。
+- 当前版本不支持 swipe、编辑或删除历史消息、发送图片和语音，只处理文字消息。
+- `/regen` 只能重新生成 bot 在 Telegram 里发出的上一条回复。
+- 流式预览是未经正则处理的原始文字，生成完成后的正式消息才是渲染后的结果。
+- 前端卡片（状态栏等）暂时看不到：正文照常发送，卡片的源码代码块会被去掉。截图和 Mini App 见[路线图](ROADMAP.md)。
+- 2 GB 内存的机器比较紧，部署后请自己观察。
 
 ## 隐私和安全
 
-- **聊天内容会经过 Telegram 服务器，不是端到端加密**（bot 对话不支持端到端加密）。后续提供的卡片截图也一样。不希望内容经过第三方时不要使用。
+> [!IMPORTANT]
+> **聊天内容会经过 Telegram 服务器，不是端到端加密**（bot 对话不支持端到端加密）。不希望内容经过第三方时不要使用。
+
 - bot token 只保存在服务端的 `config.json` 里，日志中会隐去。不要把 `config.json` 发给别人或提交到仓库。
 - 只有 `allowedUserIds` 里的用户可以使用 bot，其他账号发消息不会得到任何回应。
 - ST 端口不需要暴露到公网。插件通过长轮询访问 Telegram，不需要公网入口；无头 Chromium 只访问本机的 ST。
 - 插件不修改 ST 的文件，也不改变聊天数据格式，只在 `third-party/silly-tg` 放入扩展。
 
-## 已知限制和风险
-
-- **多端写入风险**：你另开 ST 页面并在同一个聊天里写入时，可能触发聊天完整性冲突，或互相覆盖。用 Telegram 聊天时，请不要同时在 ST 网页里操作同一个聊天。当前没有多端同步。
-- **酒馆助手会改写 ST 的全局世界书设置**：酒馆助手的“强制使用推荐的世界书全局设置”（`extension_settings.tavern_helper.optimize.force_recommended_worldbook_global_settings`，默认开启）会在每次页面加载时，把世界书的 `context_percentage` 改成 100、`include_names` 和 `match_whole_words` 改成 `false` 等，并由 ST 写入 `settings.json`。无头页面每次启动都会加载一次，所以世界书预算、两个复选框会变成这些值，你在 ST 里用别的卡时也会看到。这是酒馆助手的行为，不用本插件、在普通 ST 页面里同样会发生。想保持自己的世界书设置，请在酒馆助手设置的“优化”里关掉这一项，并重新设一次世界书参数。另外，依赖 MVU 的卡在变量初始化后也会调用 `setLorebookSettings` 强制同样的值，换卡后可能再次被改。想保险，可先备份 `data/<用户>/settings.json`。
-- **不要在 ST 首页地址后面加查询参数**（例如 `?xxx=1`）。ST 1.19 在这种地址下页面会重复，出现两份角色编辑表单，之后新建或打开聊天会把角色卡写坏。无头页面使用 `#` 标记就是为了避开这个问题。若检测到表单重复，`/chats` 和 `/new` 会暂停并在 `/status` 里警告，重启 ST 可恢复。
-- 不支持 ST 的多账户模式，不支持群聊。
-- 当前版本不支持 swipe、编辑或删除历史消息、发送图片和语音，只处理文字消息。
-- `/regen` 只能重新生成 bot 在 Telegram 里发出的上一条回复。
-- Mini App 和卡片功能尚未提供。含前端卡片的消息，正文照常发送，卡片的源码代码块会被去掉，卡片本身暂时看不到。
-- 内存余量：2 GB 的机器比较紧，部署后请自己观察。
-
-## 卸载
-
-1. 删除 `plugins/silly-tg`。其中的 `data/state.json` 存有消息映射和最近使用的角色、聊天，一并删除。
-2. 删除 `public/scripts/extensions/third-party/silly-tg`。
-3. 如不再需要其他服务端插件，可把 `enableServerPlugins` 改回 `false`。重启 ST。
-
-ST 恢复原状，聊天数据不受影响。
+发现安全问题请看 [SECURITY.md](SECURITY.md)。
 
 ## 故障排查
 
-日志在 ST 的控制台输出里，所有行以 `[silly-tg]` 开头。需要更多细节时把 `logLevel` 改成 `debug` 后重启。
+日志在 ST 的控制台输出里，所有行以 `[silly-tg]` 开头。需要更多细节时把 `logLevel` 改成 `debug` 后重启。启动时的配置错误会写明字段和改法。
 
-启动时的配置错误会写明字段和改法。页面里的自检结果显示在日志（“页面自检 xxx”）和 `/status` 里：
-
-| 自检项 | 含义 | 处理办法 |
-|---|---|---|
-| `csrf` | 无头页面访问需要 CSRF 校验的接口失败。失败时提示词会被组装成空的，**回复会与你的设定无关**，这一项是错误级别。正常情况下几乎不会失败 | 通常说明 ST 首页地址被加了查询参数（例如 `stBaseUrl` 带了 `?...`），或 ST 版本改动了行为。去掉查询参数、重启 ST；仍失败时打开 `logLevel: debug`，带日志反馈 |
-| `mvu` | 没有检测到 MVU 变量系统 | 在酒馆助手里启用角色脚本；纯文字对话不受影响 |
-| `tavernHelper` | 没有检测到酒馆助手 | 安装并启用 JS-Slash-Runner；Luker 需要单独安装。纯文字对话不受影响 |
-| `api` | 当前 API 没有连接，或连接超时 | 在 ST 里配置并连接一次 API，检查地址和密钥 |
-| 表单重复字段 | ST 页面出现两份角色编辑表单，`/chats` 和 `/new` 已拒绝执行 | 重启 ST；确认没有给 ST 首页地址加查询参数 |
-
-常见现象：
+<details>
+<summary><b>常见现象</b></summary>
 
 | 现象 | 可能原因 |
 |---|---|
@@ -141,17 +161,56 @@ ST 恢复原状，聊天数据不受影响。
 | 第一次启动很久 | 全新的 ST 首次启动有欢迎弹窗，插件会自动点掉，需要等一会 |
 | 提示无头浏览器多次异常 | 看看日志里看门狗的原因，修复后再发一条消息即可重试 |
 
-## 开发
+</details>
+
+<details>
+<summary><b>自检项（日志里的“页面自检 xxx”和 <code>/status</code>）</b></summary>
+
+| 自检项 | 含义 | 处理办法 |
+|---|---|---|
+| `csrf` | 无头页面访问需要 CSRF 校验的接口失败。失败时提示词会被组装成空的，**回复会与你的设定无关**，这一项是错误级别。正常情况下几乎不会失败 | 通常说明 ST 首页地址被加了查询参数（例如 `stBaseUrl` 带了 `?...`），或 ST 版本改动了行为。去掉查询参数、重启 ST；仍失败时打开 `logLevel: debug`，带日志反馈 |
+| `mvu` | 没有检测到 MVU 变量系统 | 在酒馆助手里启用角色脚本；纯文字对话不受影响 |
+| `tavernHelper` | 没有检测到酒馆助手 | 安装并启用 JS-Slash-Runner；Luker 需要单独安装。纯文字对话不受影响 |
+| `api` | 当前 API 没有连接，或连接超时 | 在 ST 里配置并连接一次 API，检查地址和密钥 |
+| 表单重复字段 | ST 页面出现两份角色编辑表单，`/chats` 和 `/new` 已拒绝执行 | 重启 ST；确认没有给 ST 首页地址加查询参数 |
+
+</details>
+
+<details>
+<summary><b>看门狗和空闲关闭的细节</b></summary>
+
+设置了 `idleShutdownMinutes` 后，空闲超时会关闭 Chromium 以节省内存，下一条消息到达时自动重新启动，期间的消息不会丢。
+
+看门狗负责监控：页面崩溃、浏览器进程意外退出、页面连接断开超过 60 秒或心跳超时，都会自动重启 Chromium，并通知白名单用户。短时间内接连出事时等待时间逐次变长（立即、5 秒、30 秒、2 分钟、5 分钟）；连续 5 次之后停止自动重启，直到你再发一条消息时才会重新尝试。ST 退出时会同时关闭 Chromium。
+
+</details>
+
+## 路线图
+
+当前版本（0.1）提供文字对话。接下来的重点是前端卡片的截图和 Mini App、更完整的 Luker 与 Linux 验证，以及对酒馆助手世界书设置的自检提示。详见 [ROADMAP.md](ROADMAP.md)。
+
+## 卸载
+
+<details>
+<summary>展开步骤</summary>
+
+1. 删除 `plugins/silly-tg`。其中的 `data/state.json` 存有消息映射和最近使用的角色、聊天，一并删除。
+2. 删除 `public/scripts/extensions/third-party/silly-tg`。
+3. 如不再需要其他服务端插件，可把 `enableServerPlugins` 改回 `false`。重启 ST。
+
+ST 恢复原状，聊天数据不受影响。
+
+</details>
+
+## 开发与贡献
 
 ```bash
 pnpm install
 pnpm typecheck && pnpm lint && pnpm test && pnpm build
 ```
 
-贡献前请先读 [`CONTRIBUTING.md`](CONTRIBUTING.md)，安全问题见 [`SECURITY.md`](SECURITY.md)，版本变化见 [`CHANGELOG.md`](CHANGELOG.md)。
-
-`dist/` 需要提交：ST 的服务端插件自动更新只做 git 更新，不会构建，用户机器上也不一定有 pnpm。联调用环境变量：`SILLY_TG_CONFIG`（配置文件路径）、`SILLY_TG_OFFLINE=1`（不连接 Telegram）、`SILLY_TG_DATA_DIR`（数据目录）。
+欢迎 Issue 和 PR，请先读 [CONTRIBUTING.md](CONTRIBUTING.md)。`dist/` 需要提交：ST 的服务端插件自动更新只做 git 更新，不会构建，用户机器上也不一定有 pnpm。联调用环境变量：`SILLY_TG_CONFIG`（配置文件路径）、`SILLY_TG_OFFLINE=1`（不连接 Telegram）、`SILLY_TG_DATA_DIR`（数据目录）。
 
 ## 许可
 
-AGPL-3.0-only，见 `LICENSE`。
+[AGPL-3.0-only](LICENSE)
