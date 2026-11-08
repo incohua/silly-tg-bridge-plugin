@@ -1,0 +1,45 @@
+# gitleaks 配置：在默认规则之上加本项目关心的几类泄露。
+# 本地提交钩子（.githooks/pre-commit）和 CI（.github/workflows/ci.yml）都读这份文件。
+title = "silly-tg gitleaks"
+
+[extend]
+useDefault = true
+
+# 默认的 Telegram 规则要求附近出现 telegram 字样，对变量名叫 TOKEN、BOT_TOKEN 的写法漏报。
+# 这里直接匹配 token 本身的形状：8~10 位数字 + 冒号 + AA 开头的 35 位字符。
+[[rules]]
+id = "silly-tg-telegram-bot-token"
+description = "Telegram bot token"
+regex = '''\b[0-9]{8,10}:AA[A-Za-z0-9_-]{33}\b'''
+keywords = [":aa"]
+
+# 测试里的假 token 必须带 AAFake / AAExample 前缀才会放行，真 token 不会误放。
+[[rules.allowlists]]
+description = "测试用的假 token"
+regexes = ['''AA(Fake|Example)''']
+
+# 代理地址里的账号密码：http://user:password@host
+[[rules]]
+id = "silly-tg-url-credentials"
+description = "URL 中内嵌的账号密码（例如 telegramProxy）"
+regex = '''(?i)\bhttps?://[^/\s:@"'<>]{1,64}:[^/\s@"'<>]{1,128}@[\w.\-\[\]]+'''
+keywords = ["http://", "https://"]
+
+[[rules.allowlists]]
+description = "测试里的代理样例"
+paths = ['''^test/''']
+
+[[rules.allowlists]]
+description = "文档里的占位写法"
+regexes = ['''://(user|username|u|name|foo)(:|%3A)(pass|password|pw|secret|xxx|x+|\*+|<[^>]+>|\$\{[^}]+\})@''']
+
+# 本机用户目录路径，容易随调试输出、构建产物、截图说明一起带进仓库。
+[[rules]]
+id = "silly-tg-local-user-path"
+description = "本机用户目录路径"
+regex = '''(?:/Users/|[A-Za-z]:\\Users\\)[A-Za-z0-9._-]+[/\\]'''
+keywords = ["/users/", "\\users\\"]
+
+[[rules.allowlists]]
+description = "文档里的占位路径"
+regexes = ['''(?:/Users/|\\Users\\)(you|your-?name|name|user|username|me|<[^>]+>)[/\\]''']

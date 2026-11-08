@@ -1,0 +1,41 @@
+#!/usr/bin/env bash
+# 提交前检查：禁入文件、作者邮箱、暂存内容里的密钥（gitleaks）。
+# 启用：pnpm hooks（等价于 git config core.hooksPath .githooks）。
+# 紧急跳过：git commit --no-verify（CI 仍会再扫一遍）。
+set -u
+cd "$(git rev-parse --show-toplevel)"
+fail=0
+
+# 1. 不该进仓库的文件（.gitignore 之外的第二道闸，防 git add -f）
+banned='^(config\.json|\.env(\..*)?|choice-rules\.json|\.local/|\.claude/|\.cursor/|\.trellis/|AGENTS\.md|data/|spike/)'
+bad=$(git diff --cached --name-only --diff-filter=ACMR | grep -E "$banned" || true)
+if [ -n "$bad" ]; then
+  echo "✗ 暂存区里有不该提交的文件："
+  echo "$bad" | sed 's/^/    /'
+  echo "  请 git restore --staged <文件>。"
+  fail=1
+fi
+
+# 2. 作者邮箱必须是 GitHub noreply，避免把个人邮箱写进公开历史
+email=$(git config user.email || true)
+case "$email" in
+  *@users.noreply.github.com) ;;
+  *)
+    echo "✗ 当前 git user.email 是「${email:-未设置}」，不是 GitHub noreply 地址。"
+    echo "  用 git config user.email <id>+<用户名>@users.noreply.github.com 设置。"
+    fail=1
+    ;;
+esac
+
+# 3. 密钥扫描（只扫暂存的改动）
+if command -v gitleaks >/dev/null 2>&1; then
+  if ! gitleaks git --staged --redact --no-banner --log-level warn; then
+    echo "✗ gitleaks 在暂存内容里发现疑似密钥（上面已打码）。"
+    echo "  真密钥：从文件里删掉并换一个新的；测试假数据：按 .gitleaks.toml 里的约定命名。"
+    fail=1
+  fi
+else
+  echo "⚠ 没安装 gitleaks，跳过密钥扫描（brew install gitleaks）。CI 仍会扫描。"
+fi
+
+exit $fail

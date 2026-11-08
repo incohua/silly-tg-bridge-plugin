@@ -32,7 +32,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "node build.mjs",
-    "choices:test": "node scripts/choices-test.mjs"
+    "choices:test": "node scripts/choices-test.mjs",
+    "hooks": "git config core.hooksPath .githooks",
+    "scan:secrets": "gitleaks git --redact --no-banner"
   },
   "devDependencies": {
     "@eslint/js": "^10.0.1",
