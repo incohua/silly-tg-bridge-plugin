@@ -12,7 +12,7 @@
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2020-339933)
 ![SillyTavern](https://img.shields.io/badge/SillyTavern-1.19%2B-orange)
 
-[快速开始](#快速开始) · [更新与卸载](#更新与卸载) · [Linux 无头部署](#无头服务器与-linux) · [Bot 命令](#bot-命令) · [配置](#配置) · [工作原理](#工作原理) · [已知限制](#已知限制) · [路线图](ROADMAP.md) · [更新日志](CHANGELOG.md)
+[快速开始](#快速开始) · [使用提醒](#使用提醒) · [更新与卸载](#更新与卸载) · [Linux 无头部署](#无头服务器与-linux) · [Bot 命令](#bot-命令) · [配置](#配置) · [工作原理](#工作原理) · [已知限制](#已知限制) · [路线图](ROADMAP.md) · [更新日志](CHANGELOG.md)
 
 </div>
 
@@ -23,9 +23,9 @@
 > **本项目由两部分组成：服务端插件 + UI 扩展，缺一不可。只装 UI 扩展不能用。**
 > 服务端插件才是核心（连接 Telegram、管理无头浏览器），UI 扩展负责在无头页面里处理消息。
 >
-> **服务端插件需要在 ST 的 `config.yaml` 里把 `enableServerPlugins` 改成 `true`。** 它默认是 `false`，不开启时插件根本不会被加载，也不会有任何提示。改完要重启 ST。
+> **服务端插件需要在 ST 的 `config.yaml` 里把 `enableServerPlugins` 改成 `true`。** 它默认是 `false`，不开启时插件根本不会被加载，也不会有任何提示。（如果文件里已经是 `true`，例如装过小白X 的后台，就不用改。）
 >
-> 从“安装”一节开始，按步骤做即可。
+> 整个安装只需要**重启一次 ST**：克隆、开启开关、重启，然后在“扩展”设置栏里填 Bot Token 并保存，保存后自动连接，不用再重启。从“安装”一节开始，按步骤做即可。
 
 ## 特性
 
@@ -35,6 +35,7 @@
 - **不依赖浏览器标签页**：插件管理一个无头 Chromium，关掉所有 ST 页面也能聊天。
 - **省内存**：低内存参数，可设置空闲关闭，收到消息再启动。
 - **自动恢复**：看门狗监控页面崩溃、进程退出和心跳超时，自动重启并通知你。
+- **保存即生效**：在酒馆“扩展”设置栏里填写并保存，插件当场连接 Telegram 并启动无头浏览器；没填配置时插件待命，面板照常可用。
 - **只向外连**：通过长轮询访问 Telegram，ST 端口不需要暴露到公网；只有白名单里的账号能使用。
 
 ## 工作原理
@@ -63,45 +64,28 @@
 
 ### 安装
 
-有两条路径，装完的结果一样。**推荐路径 A**：先在 ST 里粘贴链接装 UI 扩展，再按页面里的引导补装服务端插件。
-
-#### 路径 A：在 ST 里粘贴链接（推荐）
-
-1. 打开 ST 的“扩展”面板，点 **Install extension**（安装扩展），粘贴本仓库地址 `https://github.com/incohua/silly-tg-bridge-plugin`，安装。
-   - 机器上需要装有 git；面板克隆的是仓库默认分支。
-   - 这个扩展不会出现在官方的“Download Extensions & Assets”列表里（依赖服务端插件的扩展不被收录），只能这样粘贴链接安装。
-   - 重复安装会报“目录已存在”，要先在面板里删除旧的，或直接用“更新”。
-2. 安装后在“扩展”设置栏里会出现“Silly TG”，里面提示还需要安装服务端插件。在 ST 根目录执行：
-
-   ```bash
-   git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg
-   ```
-
-   `dist/` 已包含构建产物，不需要安装 pnpm，也不需要构建。命令里的 `plugins/silly-tg` 不能省：不写的话目录会叫仓库名 `silly-tg-bridge-plugin`；用 `pnpm plugins:install` 之类按仓库名克隆的方式也一样，克隆完请把目录改名为 `silly-tg`。**不要在克隆地址里带 token 或密码**：`.git/config` 会保存地址，而 ST 会把 `public/` 下的文件静态公开。
-3. 打开 ST 的 `config.yaml`，设置 `enableServerPlugins: true`。**必须开启：不开启时插件根本不会被加载，也不会有任何提示。**
-4. 重启 ST，刷新页面，回到“扩展”设置栏的“Silly TG”，填写 Bot Token 和允许的用户 ID，保存。（也可以复制 `plugins/silly-tg/config.example.json` 为 `plugins/silly-tg/config.json` 手动编辑。）
-5. 保存配置后再重启一次 ST，日志里应出现 `[silly-tg] Telegram 已连接，bot：@...`。
-6. 在 Telegram 里给你的 bot 发 `/status`，确认 Chromium、ST 页面和当前角色正常。
-7. 首次使用先发 `/chars` 选择一个角色，再发文字。选过的角色和聊天会被记住，重启后自动恢复。
-
-#### 路径 B：直接 `git clone`，UI 扩展自动部署
-
 1. 在 ST 根目录执行：
 
    ```bash
    git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg
    ```
 
-2. 打开 ST 的 `config.yaml`，设置 `enableServerPlugins: true`。**必须开启，原因同上。**
-3. 复制 `plugins/silly-tg/config.example.json` 为 `plugins/silly-tg/config.json`，至少填写 `botToken` 和 `allowedUserIds`。
-4. 重启 ST。日志里应出现 `[silly-tg] UI 扩展已部署到 ...` 和 `Telegram 已连接，bot：@...`。
-5. 之后同路径 A 的第 6、7 步。
+   `dist/` 已包含构建产物，不需要安装 pnpm，也不需要构建。命令里的 `plugins/silly-tg` 不能省：不写的话目录会叫仓库名 `silly-tg-bridge-plugin`；用 `pnpm plugins:install` 之类按仓库名克隆的方式也一样，克隆完请把目录改名为 `silly-tg`。**不要在克隆地址里带 token 或密码**：`.git/config` 会保存地址，而 ST 会把 `public/` 下的文件静态公开。
+2. 打开 ST 根目录的 `config.yaml`，设置 `enableServerPlugins: true`。**必须开启：不开启时插件根本不会被加载，也不会有任何提示。** 如果文件里已经是 `true`（例如装过小白X 的后台），不用改。
+3. **重启 ST（整个流程只需要这一次）**，然后刷新页面。插件启动时会把 UI 扩展自动部署到 `public/scripts/extensions/third-party/silly-tg`；此时还没有 `config.json`，插件会在日志里写明“已待命”，不连接 Telegram。
+4. 在 ST 的“扩展”设置栏里找到“Silly TG”，填写 Bot Token 和允许的用户 ID，点保存。**保存后插件会立即连接 Telegram 并启动无头浏览器，不需要再重启 ST**，面板会显示连接结果；日志里应出现 `[silly-tg] Telegram 已连接，bot：@...`。（也可以在第 3 步重启之前，复制 `plugins/silly-tg/config.example.json` 为 `plugins/silly-tg/config.json` 并填好，启动时就直接连接。）
+5. 在 Telegram 里给你的 bot 发 `/status`，确认 Chromium、ST 页面和当前角色正常。
+6. 首次使用先发 `/chars` 选择一个角色，再发文字。选过的角色和聊天会被记住，重启后自动恢复。
 
-插件启动时会把 UI 扩展自动复制到 `public/scripts/extensions/third-party/silly-tg`，内容没变时不会重复复制。复制失败时日志会给出手动步骤：把 `plugins/silly-tg/dist/extension` 整个目录复制为 `public/scripts/extensions/third-party/silly-tg`，然后重启 ST。配置有误时，插件会在日志里说明要改哪个字段并保持禁用，ST 本身照常启动。
+部署 UI 扩展失败时日志会给出手动步骤：把 `plugins/silly-tg/dist/extension` 整个目录复制为 `public/scripts/extensions/third-party/silly-tg`，然后重启 ST。配置有误时，插件会在日志里说明要改哪个字段并保持待命，ST 本身照常启动；改好后在面板里保存即可恢复。
+
+#### 备选：先在 ST 里粘贴链接装 UI 扩展
+
+也可以先打开 ST 的“扩展”面板，点 **Install extension**（安装扩展），粘贴本仓库地址 `https://github.com/incohua/silly-tg-bridge-plugin` 安装（机器上需要装有 git）。装完后“扩展”设置栏里的“Silly TG”会提示还缺服务端插件，并给出命令；照着做上面的第 1–2 步、重启 ST 即可，之后同第 4 步起。这个扩展不会出现在官方的“Download Extensions & Assets”列表里（依赖服务端插件的扩展不被收录），重复安装会报“目录已存在”，要先在面板里删除旧的，或直接用“更新”。
 
 #### 两种方式同时存在时
 
-如果你先走了路径 B，之后又在面板里装了 UI 扩展（或反过来），插件启动时发现 ST 里已有面板安装的副本，会**跳过自动复制**，并清理掉旧的自动部署副本（`third-party/silly-tg`），日志会写明原因。这样 ST 里只加载一份扩展。运行中新装或删除面板副本，要重启 ST 才会重新判断。
+如果你同时有面板安装的 UI 扩展和服务端插件，插件启动时发现 ST 里已有面板安装的副本，会**跳过自动复制**，并清理掉旧的自动部署副本（`third-party/silly-tg`），日志会写明原因。这样 ST 里只加载一份扩展。运行中新装或删除面板副本，要重启 ST 才会重新判断。
 
 UI 扩展和服务端插件的版本应保持一致：版本不一致时服务端日志会警告（不影响连接），请把两边都更新到同一版本。
 
@@ -110,6 +94,15 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 没有桌面环境的机器也能用，浏览器是无头运行的，不需要显示器：
 
 - **Debian / Ubuntu 服务器、手机 Termux**：见 [docs/install-linux.md](docs/install-linux.md)（Chromium 安装、沙箱、SSH 隧道、systemd、代理）。Termux 是推断路线，待社区验证。
+
+## 使用提醒
+
+无头浏览器是插件自己启动的、你看不见的 ST 页面，它和你平时打开的页面共用同一个 ST，下面几点容易被忽略：
+
+1. **无头浏览器每次启动都会清空数据。** 它用的是临时目录，每次启动都是全新的。小白X 的记忆向量库、画图图库、TTS 缓存放在浏览器的 IndexedDB 里，会随之丢失，向量召回会变差，或需要重新计算（可能再花一次费用）。聊天里的总结文字存放在聊天元数据里，不受影响。
+2. **小白X 的 TTS“自动朗读”和“自动画图”在无头页面里照常触发。** 在 Telegram 里每聊一轮，都可能在看不见的页面里合成语音、画图并**产生费用**；不需要时请在小白X 的设置里关闭。
+3. **小白X 的循环任务**如果设为“初始化”“插件初始化”或“切换聊天”时触发，每次无头页面启动或切换聊天都会执行一次。
+4. **酒馆助手会改写 ST 的全局世界书设置。** 它的“强制使用推荐的世界书全局设置”（`extension_settings.tavern_helper.optimize.force_recommended_worldbook_global_settings`，默认开启）会在每次页面加载时，把世界书的 `context_percentage` 改成 100、`include_names` 和 `match_whole_words` 改成 `false` 等，并由 ST 写入 `settings.json`。无头页面每次启动都会加载一次，所以你自己调过的世界书参数会被覆盖，在 ST 里用别的卡时也会看到。这是酒馆助手的行为，不用本插件、在普通 ST 页面里同样会发生。想保持自己的世界书设置，请在酒馆助手设置的“优化”里关掉这一项，并重新设一次世界书参数。依赖 MVU 的卡在变量初始化后也会调用 `setLorebookSettings` 强制同样的值，换卡后可能再次被改。想保险，可先备份 `data/<用户>/settings.json`。
 
 ## Bot 命令
 
@@ -137,12 +130,17 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 
 ## 配置
 
-可以在 ST 的**扩展**设置栏里找到“Silly TG”，直接填写 bot token、允许的用户 ID、代理、对话样式等，保存后立即生效或提示重启（每项旁边标明）。也可以手动编辑 `plugins/silly-tg/config.json`（已被 gitignore，不会被提交）；`chromiumPath` 只能在文件里改。
+可以在 ST 的**扩展**设置栏里找到“Silly TG”，直接填写 bot token、允许的用户 ID、代理、对话样式等，**保存后无需重启 ST**，面板会显示 Telegram、Chromium 和无头页面的连接状态：
+
+- 对话样式、预览方式和刷新间隔、行动选项排版、日志级别、空闲关闭时间、允许的用户 ID **立即生效**（`lowMemory` 要等下次启动 Chromium 才用上）。
+- Bot Token、代理、ST 地址、basic auth 保存后插件**自动重新连接**：停掉旧的轮询和无头浏览器，用新配置重新拉起。连接失败（例如 token 被拒绝）时面板会显示原因，改正后再保存一次即可。
+
+也可以手动编辑 `plugins/silly-tg/config.json`（已被 gitignore，不会被提交）；`chromiumPath` 只能在文件里改。手动改文件后需要重启 ST 才会重新加载。
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
 | `botToken` | 无，必填 | @BotFather 给出的完整 token |
-| `allowedUserIds` | 无，必填 | 允许使用的 Telegram 用户数字 ID 数组，例如 `[123456789]`。不在名单里的账号发消息没有任何回应。为空时插件不启动 |
+| `allowedUserIds` | 无，必填 | 允许使用的 Telegram 用户数字 ID 数组，例如 `[123456789]`。不在名单里的账号发消息没有任何回应。为空时配置无效，插件保持待命、不连接 Telegram。面板里保存后立即生效 |
 | `dialogueStyle` | `bold` | 对话（带引号的内容）的样式：`bold` 加粗，`italic` 斜体，`mark` 高亮，`plain` 只保留引号 |
 | `draftIntervalSeconds` | `1` | 生成时草稿的刷新间隔（秒），0.5–30。聊天窗口上下滚动明显时调大 |
 | `draftMode` | `live` | 生成时的草稿：`live` 逐步显示正文，`progress` 只显示“正在生成… 已写 N 字”（不滚动） |
@@ -166,9 +164,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 ## 已知限制
 
 > [!WARNING]
-> **酒馆助手会改写 ST 的全局世界书设置。** 酒馆助手的“强制使用推荐的世界书全局设置”（`extension_settings.tavern_helper.optimize.force_recommended_worldbook_global_settings`，默认开启）会在每次页面加载时，把世界书的 `context_percentage` 改成 100、`include_names` 和 `match_whole_words` 改成 `false` 等，并由 ST 写入 `settings.json`。无头页面每次启动都会加载一次，所以你自己调过的世界书参数会被覆盖，在 ST 里用别的卡时也会看到。
->
-> 这是酒馆助手的行为，不用本插件、在普通 ST 页面里同样会发生。想保持自己的世界书设置，请在酒馆助手设置的“优化”里关掉这一项，并重新设一次世界书参数。依赖 MVU 的卡在变量初始化后也会调用 `setLorebookSettings` 强制同样的值，换卡后可能再次被改。想保险，可先备份 `data/<用户>/settings.json`。
+> **无头浏览器每次启动都会清空数据，酒馆助手会改写世界书设置，小白X 的自动朗读 / 自动画图 / 循环任务在无头页面里照常触发并可能计费。** 详见[使用提醒](#使用提醒)。
 
 > [!WARNING]
 > **多端写入风险。** 你另开 ST 页面并在同一个聊天里写入时，可能触发聊天完整性冲突，或互相覆盖。用 Telegram 聊天时，请不要同时在 ST 网页里操作同一个聊天。当前没有多端同步。
@@ -198,7 +194,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 
 ## 故障排查
 
-日志在 ST 的控制台输出里，所有行以 `[silly-tg]` 开头。需要更多细节时把 `logLevel` 改成 `debug` 后重启。启动时的配置错误会写明字段和改法。
+日志在 ST 的控制台输出里，所有行以 `[silly-tg]` 开头。需要更多细节时把 `logLevel` 改成 `debug`（在面板里保存即生效）。配置错误会写明字段和改法；也可以在“扩展”设置栏的 Silly TG 里查看 Telegram、Chromium 和无头页面的连接状态。
 
 <details>
 <summary><b>常见现象</b></summary>
@@ -206,10 +202,12 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 | 现象 | 可能原因 |
 |---|---|
 | 日志里完全没有 `[silly-tg]` | 没开启 `enableServerPlugins`，或插件目录位置不对 |
-| “扩展”设置栏里的 Silly TG 显示“还需要安装服务端插件” | 没装服务端插件，或没开启 `enableServerPlugins`（默认 `false`），或装好后没有重启 ST |
+| 日志写“插件已待命” | 还没有 `config.json`（或配置有误）。在“扩展”设置栏的 Silly TG 里填写 Bot Token 和允许的用户 ID 并保存，不用重启 ST；配置有误时日志会写明字段 |
+| “扩展”设置栏里的 Silly TG 显示“服务端插件没有加载” | 页面访问不到服务端插件的接口：没装服务端插件（目录应为 `plugins/silly-tg`），或没开启 `enableServerPlugins`（默认 `false`），或装好后没有重启 ST |
+| 保存后面板显示连接 Telegram 失败 | 面板会写明原因：token 被拒绝（检查 `botToken`），或网络不通（配置 `telegramProxy`）。改正后再保存一次即可，不用重启 ST |
 | 面板安装扩展时报错“目录已存在” | 已经装过一份：先在面板里删除旧的，或直接点“更新” |
 | 日志提示 UI 扩展与服务端插件版本不一致 | 两边没有一起更新：面板里更新 UI 扩展，同时更新 `plugins/silly-tg`（`git pull`），然后重启 ST |
-| 日志提示“扩展没有连接” | 到 ST 的“扩展”管理里确认 Silly TG 存在且没有被停用。面板安装的 `silly-tg-bridge-plugin` 或自动部署的 `silly-tg`，有一份可用就行；两份都没有时，重启 ST 让插件重新部署，或按“安装”一节重新装一份 |
+| 日志提示“扩展没有连接” | 到 ST 的“扩展”管理里确认 Silly TG 存在且没有被停用。面板安装的 `silly-tg-bridge-plugin` 或自动部署的 `silly-tg`，有一份可用就行；两份都没有时，重启 ST 让插件重新部署，或按[安装](#安装)一节重新装一份 |
 | 日志提示找不到 Chrome/Chromium，或浏览器启动报错 | 安装 Chrome/Chromium，或设置 `chromiumPath`。Linux 服务器见 [docs/install-linux.md](docs/install-linux.md)（Ubuntu 请用 Google Chrome 的 deb，不要用 snap 版）。报错后面的 `💡 修法` 会说明具体怎么改 |
 | 连接 Telegram 失败 | 网络访问不了 Telegram，配置 `telegramProxy`（仅支持 HTTP 代理）。代理的配置和验证方法见 [docs/install-linux.md](docs/install-linux.md#代理) |
 | 提示“请先发 /chars 选择角色” | 还没选过角色，发 `/chars` 选一个 |
@@ -243,7 +241,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 
 ## 路线图
 
-当前版本（0.1）提供文字对话。接下来的重点是前端卡片的截图和 Mini App、更完整的 Luker 与 Linux 验证，以及对酒馆助手世界书设置的自检提示。Linux 的部署文档已写好，实测结果见路线图。详见 [ROADMAP.md](ROADMAP.md)。
+当前版本提供文字对话、菜单与预设切换、行动选项按钮和扩展栏配置面板。接下来的重点是前端卡片的截图和 Mini App、更完整的 Luker 与 Linux 验证，以及对酒馆助手世界书设置的自检提示；基于小白X / 酒馆助手的语音、画图等扩展服务只是候选，本期不做。Linux 的部署文档已写好，实测结果见路线图。详见 [ROADMAP.md](ROADMAP.md)。
 
 ## 更新与卸载
 
@@ -251,8 +249,8 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 
 UI 扩展和服务端插件各自更新，节奏不同，升级后请两边都检查一下，保持同一版本（版本不一致时服务端日志会警告）。
 
-- **路径 A（面板安装）**：UI 扩展在“扩展”面板里点更新。清单里带 `auto_update`，ST 升级后也会自动更新，并会提示有新版本。服务端插件（`plugins/silly-tg`）是 git 仓库，ST 默认（`enableServerPluginsAutoUpdate: true`）会在启动时自动 `git pull`，也可以手动在目录里 `git pull`，然后重启 ST。
-- **路径 B（只 `git clone`）**：`git pull` 更新 `plugins/silly-tg` 后重启 ST，UI 扩展会随插件启动自动覆盖，不需要另外操作。
+- **UI 扩展是面板安装的**：UI 扩展在“扩展”面板里点更新。清单里带 `auto_update`，ST 升级后也会自动更新，并会提示有新版本。服务端插件（`plugins/silly-tg`）是 git 仓库，ST 默认（`enableServerPluginsAutoUpdate: true`）会在启动时自动 `git pull`，也可以手动在目录里 `git pull`，然后重启 ST。
+- **只 `git clone` 了服务端插件**：`git pull` 更新 `plugins/silly-tg` 后重启 ST，UI 扩展会随插件启动自动覆盖，不需要另外操作。
 - **自动部署出来的 `third-party/silly-tg` 不是 git 仓库，不要在面板里点它的“更新”**（会报错）。它随服务端插件更新。
 
 ### 卸载
