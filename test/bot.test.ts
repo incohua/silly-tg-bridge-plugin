@@ -173,6 +173,7 @@ const status = (): PluginStatus => ({
   telegram: 'ok',
   botUsername: 'testbot',
   chromium: { path: '/chrome', source: 'system' },
+  proxy: { source: 'none', description: '无（直连）' },
   extension: { ok: true },
   hostChecks: [],
 });
@@ -264,6 +265,21 @@ describe('Bot 路由', () => {
     expect(out).toMatch(/API：openai（已连接）/);
     expect(out).toMatch(/mvu 未通过：没有 MVU/);
     expect(browser.ensureCalls).toBe(0);
+  });
+
+  it('/status：显示 Telegram 代理的来源（配置 / 环境变量 / 无），不含凭据', async () => {
+    const cases: Array<[PluginStatus['proxy'], RegExp]> = [
+      [{ source: 'config', description: '配置 telegramProxy（10.0.0.1:7890）' }, /Telegram 代理：配置 telegramProxy（10\.0\.0\.1:7890）/],
+      [{ source: 'env', description: '环境变量 HTTPS_PROXY（10.0.0.2:8080）' }, /Telegram 代理：环境变量 HTTPS_PROXY（10\.0\.0\.2:8080）/],
+      [{ source: 'none', description: '无（直连）' }, /Telegram 代理：无（直连）/],
+    ];
+    for (const [proxy, re] of cases) {
+      const { bot, telegram } = setup();
+      (bot as unknown as { opts: { status: PluginStatus } }).opts.status.proxy = proxy;
+      await bot.handleUpdate(text('/status'));
+      expect(telegram.texts()[0]).toMatch(re);
+      expect(telegram.texts()[0]).not.toMatch(/pw|:\/\/\w+:\w+@/);
+    }
   });
 
   it('/status：浏览器已关闭、页面未连接', async () => {

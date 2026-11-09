@@ -46,9 +46,18 @@ const FIXED: Partial<Record<NodeJS.Platform, string[]>> = {
 };
 
 const HINTS: Partial<Record<NodeJS.Platform, string>> = {
-  linux: '安装 Chromium，例如 Debian/Ubuntu：apt install chromium（或 chromium-browser），也可以在 config.json 的 chromiumPath 里写可执行文件路径。',
+  linux:
+    '安装 Chromium，例如 Debian：apt install chromium；Ubuntu 的 chromium-browser 会装 snap 版，建议装 Google Chrome 的 deb 包。也可以在 config.json 的 chromiumPath 里写可执行文件路径。详细步骤见 docs/install-linux.md。',
   darwin: '安装 Google Chrome，或在 config.json 的 chromiumPath 里写可执行文件路径。',
+  // Termux 里 process.platform 是 android；原生 Termux 里的 Chromium 沙箱起不来，走 proot-distro 里的 Debian
+  android:
+    '原生 Termux 不支持（没有可用的 Chrome/Chromium）。请用 proot-distro 安装 Debian，在 Debian 里 apt install chromium，并在那里运行 SillyTavern，步骤见 docs/install-linux.md。',
 };
+
+/** 没找到浏览器时的安装提示（按平台）。 */
+export function chromiumInstallHint(platform: NodeJS.Platform): string {
+  return HINTS[platform] ?? '安装 Chrome 或 Chromium，并在 config.json 的 chromiumPath 里写可执行文件路径。';
+}
 
 /** 优先用配置路径，其次系统查找（固定安装位置、PATH）。 */
 export function findChromium(configured?: string, env: ChromiumLookupEnv = defaultEnv()): ChromiumLookup {
@@ -63,5 +72,5 @@ export function findChromium(configured?: string, env: ChromiumLookupEnv = defau
   }
   const found = candidates.find((c) => env.exists(c));
   if (found) return { path: found, source: 'system', warning };
-  return { warning, hint: HINTS[env.platform] ?? '安装 Chrome 或 Chromium，并在 config.json 的 chromiumPath 里写可执行文件路径。' };
+  return { warning, hint: chromiumInstallHint(env.platform) };
 }

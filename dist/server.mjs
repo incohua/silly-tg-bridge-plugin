@@ -49167,7 +49167,7 @@ var init_Cache = __esm({
 // node_modules/.pnpm/@puppeteer+browsers@3.2.6/node_modules/@puppeteer/browsers/lib/launch.js
 import childProcess from "node:child_process";
 import { EventEmitter as EventEmitter3 } from "node:events";
-import { accessSync } from "node:fs";
+import { accessSync as accessSync2 } from "node:fs";
 import os4 from "node:os";
 import readline from "node:readline";
 function computeExecutablePath(options) {
@@ -49188,7 +49188,7 @@ function computeSystemExecutablePath(options, validatePath = true) {
   const paths = resolveSystemExecutablePaths2(options.browser, options.platform, options.channel);
   for (const path14 of paths) {
     try {
-      accessSync(path14);
+      accessSync2(path14);
       return path14;
     } catch {
     }
@@ -51270,7 +51270,7 @@ var init_fs = __esm({
 
 // node_modules/.pnpm/@puppeteer+browsers@3.2.6/node_modules/@puppeteer/browsers/lib/fileUtil.js
 import { spawnSync, spawn, execFile } from "node:child_process";
-import { constants as constants2, createReadStream, createWriteStream as createWriteStream2 } from "node:fs";
+import { constants as constants3, createReadStream, createWriteStream as createWriteStream2 } from "node:fs";
 import { lstat as lstat2, mkdir as mkdir2, readdir as readdir2, symlink as symlink2 } from "node:fs/promises";
 import * as path9 from "node:path";
 import { Stream, Writable as Writable2 } from "node:stream";
@@ -51482,7 +51482,7 @@ function isValidSymlinkTarget(linkTarget, depth) {
   return true;
 }
 async function extractZipEntry(zipFile, entry, folderPath) {
-  const { S_IFMT, S_IFDIR, S_IFLNK } = constants2;
+  const { S_IFMT, S_IFDIR, S_IFLNK } = constants3;
   const unixMode = entry.externalFileAttributes >>> 16;
   const isDirectory = (unixMode & S_IFMT) === S_IFDIR || entry.fileName.endsWith("/") || entry.versionMadeBy >> 8 === 0 && entry.externalFileAttributes === 16;
   const isSymlink = (unixMode & S_IFMT) === S_IFLNK;
@@ -54224,7 +54224,7 @@ var require_get_caller_file = __commonJS({
 import { notStrictEqual, strictEqual } from "assert";
 import { inspect } from "util";
 import { fileURLToPath } from "url";
-import { basename as basename2, dirname as dirname5, extname, relative as relative2, resolve as resolve6, join as join4 } from "path";
+import { basename as basename2, dirname as dirname5, extname, relative as relative2, resolve as resolve6, join as join5 } from "path";
 import { createRequire as createRequire2 } from "node:module";
 import { readFileSync as readFileSync6, readdirSync as readdirSync2 } from "node:fs";
 var import_get_caller_file, __dirname, mainFilename, require3, esm_default;
@@ -54261,7 +54261,7 @@ var init_esm = __esm({
         extname,
         relative: relative2,
         resolve: resolve6,
-        join: join4
+        join: join5
       },
       process: {
         argv: () => process.argv,
@@ -69358,7 +69358,7 @@ var require_env_http_proxy_agent = __commonJS({
       "http:": 80,
       "https:": 443
     };
-    var EnvHttpProxyAgent = class extends DispatcherBase {
+    var EnvHttpProxyAgent2 = class extends DispatcherBase {
       #noProxyValue = null;
       #noProxyEntries = null;
       #opts = null;
@@ -69465,7 +69465,7 @@ var require_env_http_proxy_agent = __commonJS({
         return process.env.no_proxy ?? process.env.NO_PROXY ?? "";
       }
     };
-    module.exports = EnvHttpProxyAgent;
+    module.exports = EnvHttpProxyAgent2;
   }
 });
 
@@ -84912,7 +84912,7 @@ var require_undici = __commonJS({
     var Agent = require_agent();
     var ProxyAgent2 = require_proxy_agent();
     var Socks5ProxyAgent = require_socks5_proxy_agent();
-    var EnvHttpProxyAgent = require_env_http_proxy_agent();
+    var EnvHttpProxyAgent2 = require_env_http_proxy_agent();
     var RetryAgent = require_retry_agent();
     var H2CClient = require_h2c_client();
     var errors = require_errors();
@@ -84939,7 +84939,7 @@ var require_undici = __commonJS({
     module.exports.Agent = Agent;
     module.exports.ProxyAgent = ProxyAgent2;
     module.exports.Socks5ProxyAgent = Socks5ProxyAgent;
-    module.exports.EnvHttpProxyAgent = EnvHttpProxyAgent;
+    module.exports.EnvHttpProxyAgent = EnvHttpProxyAgent2;
     module.exports.RetryAgent = RetryAgent;
     module.exports.H2CClient = H2CClient;
     module.exports.RetryHandler = RetryHandler;
@@ -85161,7 +85161,7 @@ function createLogger(opts = {}) {
 }
 
 // src/server/bridge.ts
-import { dirname as dirname7, join as join6 } from "node:path";
+import { dirname as dirname7, join as join7 } from "node:path";
 
 // src/server/bot.ts
 import { randomBytes as randomBytes2, randomInt, randomUUID as randomUUID2 } from "node:crypto";
@@ -89495,6 +89495,7 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
     const { status, browser, host } = this.opts;
     const lines = ["\u{1F4CA} silly-tg \u72B6\u6001"];
     lines.push(`${status.telegram === "ok" ? "\u{1F7E2}" : status.telegram === "error" ? "\u{1F534}" : "\u26AA"} Telegram\uFF1A${status.telegram === "ok" ? `\u5DF2\u8FDE\u63A5${status.botUsername ? ` @${status.botUsername}` : ""}` : status.telegram === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u672A\u8FDE\u63A5\uFF08\u79BB\u7EBF\u6A21\u5F0F\uFF09"}`);
+    lines.push(`\u{1F310} Telegram \u4EE3\u7406\uFF1A${status.proxy.description}`);
     if (!status.chromium.path) lines.push("\u{1F534} Chromium\uFF1A\u672A\u627E\u5230 Chrome/Chromium");
     else {
       const up = browser.startedAt ? `\uFF0C\u5DF2\u8FD0\u884C ${Math.max(0, Math.round((this.now() - browser.startedAt) / 6e4))} \u5206\u949F` : "";
@@ -89754,7 +89755,7 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
 // src/server/browser.ts
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join as join2 } from "node:path";
 
 // src/extension/adapter.ts
 var READY_CONSOLE_PATTERNS = ["Event emitted: app_ready", "[init] firstLoadInit complete"];
@@ -89778,6 +89779,87 @@ function isKnownNoise(n) {
 // src/extension/host-mode.ts
 var HOST_PARAM = "silly_tg_host";
 var SKIP_CSRF_PATCH_PARAM = "silly_tg_test_skip_csrf_patch";
+
+// src/server/chromium-path.ts
+import { accessSync, constants } from "node:fs";
+import { delimiter, join } from "node:path";
+var defaultEnv = () => ({
+  platform: process.platform,
+  pathEnv: process.env.PATH ?? "",
+  exists: (p) => {
+    try {
+      accessSync(p, constants.X_OK);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+});
+var BIN_NAMES = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser", "chrome", "microsoft-edge"];
+var FIXED = {
+  darwin: [
+    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+    "/Applications/Chromium.app/Contents/MacOS/Chromium",
+    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
+  ],
+  win32: [
+    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
+    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
+  ]
+};
+var HINTS = {
+  linux: "\u5B89\u88C5 Chromium\uFF0C\u4F8B\u5982 Debian\uFF1Aapt install chromium\uFF1BUbuntu \u7684 chromium-browser \u4F1A\u88C5 snap \u7248\uFF0C\u5EFA\u8BAE\u88C5 Google Chrome \u7684 deb \u5305\u3002\u4E5F\u53EF\u4EE5\u5728 config.json \u7684 chromiumPath \u91CC\u5199\u53EF\u6267\u884C\u6587\u4EF6\u8DEF\u5F84\u3002\u8BE6\u7EC6\u6B65\u9AA4\u89C1 docs/install-linux.md\u3002",
+  darwin: "\u5B89\u88C5 Google Chrome\uFF0C\u6216\u5728 config.json \u7684 chromiumPath \u91CC\u5199\u53EF\u6267\u884C\u6587\u4EF6\u8DEF\u5F84\u3002",
+  // Termux 里 process.platform 是 android；原生 Termux 里的 Chromium 沙箱起不来，走 proot-distro 里的 Debian
+  android: "\u539F\u751F Termux \u4E0D\u652F\u6301\uFF08\u6CA1\u6709\u53EF\u7528\u7684 Chrome/Chromium\uFF09\u3002\u8BF7\u7528 proot-distro \u5B89\u88C5 Debian\uFF0C\u5728 Debian \u91CC apt install chromium\uFF0C\u5E76\u5728\u90A3\u91CC\u8FD0\u884C SillyTavern\uFF0C\u6B65\u9AA4\u89C1 docs/install-linux.md\u3002"
+};
+function chromiumInstallHint(platform) {
+  return HINTS[platform] ?? "\u5B89\u88C5 Chrome \u6216 Chromium\uFF0C\u5E76\u5728 config.json \u7684 chromiumPath \u91CC\u5199\u53EF\u6267\u884C\u6587\u4EF6\u8DEF\u5F84\u3002";
+}
+function findChromium(configured, env2 = defaultEnv()) {
+  let warning;
+  if (configured) {
+    if (env2.exists(configured)) return { path: configured, source: "config" };
+    warning = `chromiumPath \u6307\u5411\u7684\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u6267\u884C\uFF1A${configured}\uFF0C\u6539\u4E3A\u81EA\u52A8\u67E5\u627E\u7CFB\u7EDF\u91CC\u7684 Chrome/Chromium\u3002`;
+  }
+  const candidates = [...FIXED[env2.platform] ?? []];
+  for (const dir of env2.pathEnv.split(delimiter).filter(Boolean)) {
+    for (const name of BIN_NAMES) candidates.push(join(dir, env2.platform === "win32" ? `${name}.exe` : name));
+  }
+  const found = candidates.find((c) => env2.exists(c));
+  if (found) return { path: found, source: "system", warning };
+  return { warning, hint: chromiumInstallHint(env2.platform) };
+}
+
+// src/server/browser-diagnose.ts
+var NO_SANDBOX_ENV = "\u5728\u542F\u52A8 SillyTavern \u7684\u73AF\u5883\u91CC\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF PUPPETEER_DANGEROUS_NO_SANDBOX=true \u540E\u91CD\u542F ST\uFF08systemd \u5199 Environment=\uFF0C\u5BB9\u5668\u5199\u8FDB\u73AF\u5883\u53D8\u91CF\u8BBE\u7F6E\uFF09\u3002\u8FD9\u4F1A\u5173\u95ED Chromium \u6C99\u7BB1\uFF0C\u964D\u4F4E\u6D4F\u89C8\u5668\u4E0E\u7CFB\u7EDF\u7684\u9694\u79BB\uFF0C\u53EA\u5728\u8BBF\u95EE\u4F60\u81EA\u5DF1\u7684 ST \u9875\u9762\u65F6\u53EF\u4EE5\u63A5\u53D7";
+var ANDROID_NOTE = "\u5F53\u524D\u662F Termux\uFF08android\uFF09\uFF0C\u539F\u751F Termux \u4E0D\u53D7\u652F\u6301\uFF0C\u8BF7\u6539\u7528 proot-distro \u91CC\u7684 Debian\uFF08\u89C1 docs/install-linux.md\uFF09\u3002";
+var MISSING_LIBS_RE = /error while loading shared libraries|cannot open shared object file/i;
+var ROOT_RE = /running as root without --no-sandbox/i;
+var SANDBOX_RE = /no usable sandbox|failed to move to new namespace|(?:setuid|suid) sandbox|(?:sandbox|namespace)[^\n]*(?:not permitted|permission denied|operation not permitted|unprivileged)|(?:not permitted|permission denied|unprivileged)[^\n]*(?:sandbox|namespace)/i;
+var SNAP_RE = /(?:^|[\s'"(])\/snap\/|\bsnap-confine\b|requires the chromium snap|\bsnap install\b/i;
+var NOT_FOUND_RE = /could not find (?:chrome|chromium|browser)|no usable (?:chrome|chromium)|browser was not found|spawn [^\n]*ENOENT|ENOENT[^\n]*(?:chrome|chromium)/i;
+function diagnoseBrowserError(message, ctx) {
+  const android = ctx.platform === "android" ? ANDROID_NOTE : "";
+  const done = (kind, hint) => ({ kind, hint: android && kind !== "snap" && kind !== "not-found" ? `${hint}\u3002${android}` : hint });
+  if (MISSING_LIBS_RE.test(message)) {
+    return done("missing-libs", "\u7F3A\u5C11 Chromium \u8FD0\u884C\u9700\u8981\u7684\u7CFB\u7EDF\u5E93\u3002\u6700\u7701\u4E8B\u7684\u529E\u6CD5\u662F\u7528\u53D1\u884C\u7248\u81EA\u5E26\u7684\u5305\u5B89\u88C5\uFF08Debian/Ubuntu\uFF1Aapt install chromium \u4F1A\u8FDE\u4F9D\u8D56\u4E00\u8D77\u88C5\u597D\uFF09\uFF0C\u4E0D\u8981\u624B\u52A8\u62F7\u8D1D\u6D4F\u89C8\u5668\u6587\u4EF6");
+  }
+  if (ctx.chromiumPath?.includes("/snap/") || SNAP_RE.test(message)) {
+    return done("snap", "\u5F53\u524D\u7528\u7684\u662F snap \u7248 Chromium\uFF0C\u5B83\u7684\u6C99\u7BB1\u548C\u4E34\u65F6\u76EE\u5F55\u9650\u5236\u4F1A\u8BA9\u65E0\u5934\u542F\u52A8\u5931\u8D25\u3002\u8BF7\u6539\u88C5 deb \u7248\uFF1ADebian \u7528 apt install chromium\uFF1BUbuntu \u7528 Google Chrome \u7684 deb \u5305\uFF08\u89C1 docs/install-linux.md\uFF09\uFF0C\u7136\u540E\u5378\u8F7D snap \u7248\u6216\u5728 config.json \u7684 chromiumPath \u91CC\u6307\u5411 deb \u7248");
+  }
+  if (ROOT_RE.test(message)) {
+    return done("root", `\u4EE5 root \u8FD0\u884C\u65F6 Chromium \u62D2\u7EDD\u542F\u52A8\u6C99\u7BB1\uFF08\u63D2\u4EF6\u901A\u5E38\u4F1A\u81EA\u52A8\u52A0 --no-sandbox\uFF0C\u8FD9\u6B21\u6CA1\u6709\u751F\u6548\uFF09\u3002${NO_SANDBOX_ENV}`);
+  }
+  if (SANDBOX_RE.test(message)) {
+    return done("sandbox", `Chromium \u6C99\u7BB1\u5728\u5F53\u524D\u73AF\u5883\u4E0D\u53EF\u7528\uFF08\u5E38\u89C1\u4E8E\u5BB9\u5668\u3001\u6CA1\u6709\u7528\u6237\u547D\u540D\u7A7A\u95F4\u6743\u9650\u7684\u7CFB\u7EDF\u6216\u975E root \u7684\u5BB9\u5668\u6A21\u5F0F\uFF09\u3002${NO_SANDBOX_ENV}`);
+  }
+  if (NOT_FOUND_RE.test(message)) {
+    return done("not-found", `\u627E\u4E0D\u5230\u53EF\u6267\u884C\u7684\u6D4F\u89C8\u5668\u3002${chromiumInstallHint(ctx.platform)}`);
+  }
+  return null;
+}
 
 // src/server/browser.ts
 function chromiumArgs(opts) {
@@ -89811,6 +89893,7 @@ var BrowserStartError = class extends Error {
     this.name = "BrowserStartError";
   }
 };
+var GENERIC_LAUNCH_HINT = "\u5982\u679C\u662F\u5728\u6CA1\u6709\u684C\u9762\u7684\u670D\u52A1\u5668\u6216\u5BB9\u5668\u91CC\uFF0C\u8BF7\u5BF9\u7167 docs/install-linux.md \u6392\u67E5\uFF1B\u628A\u4E0A\u9762\u7684\u539F\u59CB\u62A5\u9519\u53D1\u7ED9\u5F00\u53D1\u8005\u4E5F\u6709\u5E2E\u52A9\u3002";
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 var BrowserManager = class {
   constructor(opts) {
@@ -89980,16 +90063,19 @@ var BrowserManager = class {
       throw new BrowserStartError(msg);
     }
     this.stateValue = "starting";
+    let launching = false;
     try {
       await this.waitForSt();
       const nonce = this.opts.host.rotateNonce();
-      this.userDataDir = await mkdtemp(join(tmpdir(), "silly-tg-chrome-"));
+      this.userDataDir = await mkdtemp(join2(tmpdir(), "silly-tg-chrome-"));
       const isRoot = this.opts.isRoot ?? process.getuid?.() === 0;
+      launching = true;
       const browser = await this.opts.launcher({
         executablePath: this.opts.executablePath,
         args: chromiumArgs({ lowMemory: this.opts.lowMemory, isRoot }),
         userDataDir: this.userDataDir
       });
+      launching = false;
       this.browser = browser;
       browser.onDisconnected(() => this.handleDisconnected(browser));
       log.info(`\u65E0\u5934\u6D4F\u89C8\u5668\u5DF2\u542F\u52A8\uFF08PID ${browser.pid ?? "\u672A\u77E5"}${this.opts.lowMemory ? "\uFF0C\u4F4E\u5185\u5B58\u53C2\u6570" : ""}\uFF09\uFF0C\u6253\u5F00 ST \u9875\u9762\u2026`);
@@ -90017,7 +90103,17 @@ var BrowserManager = class {
       log.info("\u65E0\u5934 ST \u9875\u9762\u5DF2\u8FDE\u63A5");
       this.emit({ type: "started", pid: browser.pid });
     } catch (e) {
-      this.lastError = e.message;
+      let message = e.message;
+      if (launching && !(e instanceof BrowserStartError)) {
+        const d = diagnoseBrowserError(message, {
+          platform: this.opts.platform ?? process.platform,
+          isRoot: this.opts.isRoot ?? process.getuid?.() === 0,
+          chromiumPath: this.opts.executablePath
+        });
+        message = `${message}
+\u{1F4A1} \u4FEE\u6CD5\uFF1A${d ? d.hint : GENERIC_LAUNCH_HINT}`;
+      }
+      this.lastError = message;
       log.error(`\u65E0\u5934\u6D4F\u89C8\u5668\u542F\u52A8\u5931\u8D25\uFF1A${this.lastError}`);
       await this.doStop("\u542F\u52A8\u5931\u8D25", false);
       throw e instanceof BrowserStartError ? e : new BrowserStartError(this.lastError);
@@ -90275,9 +90371,9 @@ init_Errors();
 init_util();
 init_incremental_id_generator();
 init_NodeWebSocketTransport();
-import { accessSync as accessSync2, constants as constants3, existsSync as existsSync2, rmSync } from "node:fs";
+import { accessSync as accessSync3, constants as constants4, existsSync as existsSync2, rmSync } from "node:fs";
 import { tmpdir as tmpdir2 } from "node:os";
-import { join as join5 } from "node:path";
+import { join as join6 } from "node:path";
 
 // node_modules/.pnpm/puppeteer-core@25.16.0/node_modules/puppeteer-core/lib/puppeteer/node/PipeTransport.js
 init_Debug();
@@ -90359,7 +90455,7 @@ var PipeTransport = class {
 // node_modules/.pnpm/puppeteer-core@25.16.0/node_modules/puppeteer-core/lib/puppeteer/node/BrowserLauncher.js
 function isWritableDirectory(directory) {
   try {
-    accessSync2(directory, constants3.W_OK);
+    accessSync3(directory, constants4.W_OK);
     return true;
   } catch {
     return !existsSync2(directory);
@@ -90527,7 +90623,7 @@ var BrowserLauncher = class {
       const logs = browserProcess.getRecentLogs().join("\n");
       if (logs.includes("Failed to create a ProcessSingleton for your profile directory") || // On Windows we will not get logs due to the singleton process handover. See
       // https://source.chromium.org/chromium/chromium/src/+/main:chrome/browser/process_singleton_win.cc;l=46;drc=fc7952f0422b5073515a205a04ec9c3a1ae81658
-      process.platform === "win32" && existsSync2(join5(launchArgs.userDataDir, "lockfile"))) {
+      process.platform === "win32" && existsSync2(join6(launchArgs.userDataDir, "lockfile"))) {
         if (!isWritableDirectory(launchArgs.userDataDir)) {
           throw new Error(`The browser cannot write to ${launchArgs.userDataDir}. Make the \`userDataDir\` writable or use a different one.`);
         }
@@ -90665,7 +90761,7 @@ var BrowserLauncher = class {
    */
   async getProfilePath() {
     const config2 = await this.puppeteer.configuration();
-    return join5(config2.temporaryDirectory ?? tmpdir2(), `puppeteer_dev_${this.browser}_profile-`);
+    return join6(config2.temporaryDirectory ?? tmpdir2(), `puppeteer_dev_${this.browser}_profile-`);
   }
   /**
    * @internal
@@ -91710,6 +91806,47 @@ import { dirname as dirname6 } from "node:path";
 
 // src/server/config.ts
 import { readFileSync as readFileSync7 } from "node:fs";
+
+// src/server/http.ts
+var import_undici = __toESM(require_undici(), 1);
+var PROXY_ENV_KEYS = ["HTTPS_PROXY", "https_proxy", "HTTP_PROXY", "http_proxy", "ALL_PROXY", "all_proxy"];
+var NO_PROXY_ENV_KEYS = ["NO_PROXY", "no_proxy"];
+function parseUrl(raw) {
+  try {
+    return new URL(raw);
+  } catch {
+    return null;
+  }
+}
+function resolveProxy(configProxy, env2 = process.env) {
+  if (configProxy) return { source: "config", url: configProxy };
+  const envName = PROXY_ENV_KEYS.find((k) => env2[k]?.trim());
+  if (!envName) return { source: "none" };
+  const raw = env2[envName].trim();
+  const u = parseUrl(raw);
+  if (!u || u.protocol !== "http:" && u.protocol !== "https:") {
+    return { source: "none", ignored: `${envName}=${u && u.host ? `${u.protocol}//${u.host}` : "\uFF08\u65E0\u6CD5\u8BC6\u522B\u7684\u5730\u5740\uFF09"}` };
+  }
+  const noProxyKey = NO_PROXY_ENV_KEYS.find((k) => env2[k]?.trim());
+  return { source: "env", url: raw, envName, noProxy: noProxyKey ? env2[noProxyKey].trim() : void 0 };
+}
+function describeProxy(r) {
+  const host = r.url ? parseUrl(r.url)?.host : void 0;
+  if (r.source === "config") return `\u914D\u7F6E telegramProxy\uFF08${host ?? "\u5730\u5740\u65E0\u6548"}\uFF09`;
+  if (r.source === "env") return `\u73AF\u5883\u53D8\u91CF ${r.envName}\uFF08${host ?? "\u5730\u5740\u65E0\u6548"}\uFF09`;
+  return r.ignored ? `\u65E0\uFF08\u76F4\u8FDE\uFF1B\u5DF2\u5FFD\u7565 ${r.ignored}\uFF0C\u53EA\u652F\u6301 http/https \u4EE3\u7406\uFF09` : "\u65E0\uFF08\u76F4\u8FDE\uFF09";
+}
+function createFetch(proxy) {
+  const r = typeof proxy === "string" ? { source: "config", url: proxy } : proxy ?? { source: "none" };
+  if (r.source === "none" || !r.url) return (input2, init2) => fetch(input2, init2);
+  const dispatcher = r.source === "env" ? (
+    // 显式传入全部三项，不让 undici 再去读一遍环境变量；noProxy 为空串表示没有例外
+    new import_undici.EnvHttpProxyAgent({ httpProxy: r.url, httpsProxy: r.url, noProxy: r.noProxy ?? "" })
+  ) : new import_undici.ProxyAgent(r.url);
+  return (input2, init2) => (0, import_undici.fetch)(input2, { ...init2, dispatcher });
+}
+
+// src/server/config.ts
 var KNOWN_KEYS = /* @__PURE__ */ new Set([
   "botToken",
   "allowedUserIds",
@@ -91732,7 +91869,7 @@ var TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
 var LOG_LEVELS = ["debug", "info", "warn", "error"];
 var isRecord2 = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
 var unset = (v2) => v2 === void 0 || v2 === null || v2 === "";
-function parseUrl(raw) {
+function parseUrl2(raw) {
   try {
     return new URL(raw);
   } catch {
@@ -91770,7 +91907,7 @@ function validateConfig(raw, source2 = "config.json") {
   }
   let stBaseUrl = "http://127.0.0.1:8000";
   if (!unset(raw.stBaseUrl)) {
-    const u = typeof raw.stBaseUrl === "string" ? parseUrl(raw.stBaseUrl) : null;
+    const u = typeof raw.stBaseUrl === "string" ? parseUrl2(raw.stBaseUrl) : null;
     if (!u || u.protocol !== "http:" && u.protocol !== "https:") {
       err("stBaseUrl", 'stBaseUrl \u5FC5\u987B\u662F http:// \u6216 https:// \u5F00\u5934\u7684\u5730\u5740\uFF0C\u4F8B\u5982 "http://127.0.0.1:8000"\u3002');
     } else {
@@ -91779,7 +91916,7 @@ function validateConfig(raw, source2 = "config.json") {
   }
   let telegramProxy;
   if (!unset(raw.telegramProxy)) {
-    const u = typeof raw.telegramProxy === "string" ? parseUrl(raw.telegramProxy) : null;
+    const u = typeof raw.telegramProxy === "string" ? parseUrl2(raw.telegramProxy) : null;
     if (!u) {
       err("telegramProxy", 'telegramProxy \u4E0D\u662F\u5408\u6CD5\u5730\u5740\uFF0C\u4F8B\u5982 "http://127.0.0.1:7890"\u3002');
     } else if (u.protocol !== "http:" && u.protocol !== "https:") {
@@ -91813,7 +91950,7 @@ function validateConfig(raw, source2 = "config.json") {
   }
   let publicBaseUrl;
   if (!unset(raw.publicBaseUrl)) {
-    const u = typeof raw.publicBaseUrl === "string" ? parseUrl(raw.publicBaseUrl) : null;
+    const u = typeof raw.publicBaseUrl === "string" ? parseUrl2(raw.publicBaseUrl) : null;
     if (!u || u.protocol !== "https:") {
       err("publicBaseUrl", "publicBaseUrl \u5FC5\u987B\u662F https:// \u5F00\u5934\u7684\u5730\u5740\uFF08Telegram Mini App \u8981\u6C42 HTTPS\uFF09\u3002\u4E0D\u9700\u8981 Mini App \u65F6\u7559\u7A7A\u3002");
     } else {
@@ -91859,7 +91996,7 @@ function validateConfig(raw, source2 = "config.json") {
   }
   let telegramApiBase;
   if (!unset(raw.telegramApiBase)) {
-    const u = typeof raw.telegramApiBase === "string" ? parseUrl(raw.telegramApiBase) : null;
+    const u = typeof raw.telegramApiBase === "string" ? parseUrl2(raw.telegramApiBase) : null;
     if (!u || u.protocol !== "http:" && u.protocol !== "https:") {
       err("telegramApiBase", "telegramApiBase \u5FC5\u987B\u662F http:// \u6216 https:// \u5730\u5740\u3002\u8FD9\u4E2A\u914D\u7F6E\u9879\u53EA\u7528\u4E8E\u6D4B\u8BD5\uFF0C\u6B63\u5E38\u4F7F\u7528\u65F6\u4E0D\u8981\u586B\u3002");
     } else {
@@ -91893,13 +92030,22 @@ function loadConfigFile(path14, read = (p) => readFileSync7(p, "utf8")) {
   }
   return validateConfig(raw, path14);
 }
-function configSecrets(c) {
+function configSecrets(c, env2) {
   const out = [c.botToken];
   if (c.basicAuth?.password) out.push(c.basicAuth.password);
-  if (c.telegramProxy) {
-    const u = parseUrl(c.telegramProxy);
-    if (u?.password) out.push(decodeURIComponent(u.password));
-    if (u?.username) out.push(decodeURIComponent(u.username));
+  const proxies = [c.telegramProxy];
+  if (env2) for (const k of PROXY_ENV_KEYS) proxies.push(env2[k]);
+  for (const p of proxies) {
+    const u = p ? parseUrl2(p.trim()) : null;
+    for (const v2 of [u?.password, u?.username]) {
+      if (!v2) continue;
+      out.push(v2);
+      try {
+        const d = decodeURIComponent(v2);
+        if (d !== v2) out.push(d);
+      } catch {
+      }
+    }
   }
   return out;
 }
@@ -92244,14 +92390,14 @@ function attachBridge(rt, opts = {}) {
     testSkipCsrfPatch: process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === "1"
   });
   if (process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === "1") log.warn("SILLY_TG_TEST_SKIP_CSRF_PATCH=1\uFF1A\u9875\u9762\u4E0D\u5B89\u88C5 CSRF \u8865\u4E01\uFF08\u4EC5\u7528\u4E8E\u6D4B\u8BD5\uFF09\u3002");
-  const store = new BridgeStore(join6(rt.dataDir, "state.json"), log);
+  const store = new BridgeStore(join7(rt.dataDir, "state.json"), log);
   const notify = async (text2) => {
     for (const id of config2.allowedUserIds) {
       await telegram.sendMessage({ chat_id: id, text: text2 }).catch((e) => log.warn(`\u901A\u77E5\u7528\u6237\u5931\u8D25\uFF1A${e.message}`));
     }
   };
   const watchdog = new Watchdog({ browser, host: channel, log, notify });
-  const choiceRules = new ChoiceRuleStore(join6(dirname7(rt.configPath), "choice-rules.json"), log);
+  const choiceRules = new ChoiceRuleStore(join7(dirname7(rt.configPath), "choice-rules.json"), log);
   const bot = new Bot({
     telegram,
     host: channel,
@@ -92317,53 +92463,6 @@ function isAllowedUpdate(update, allowedUserIds) {
   return id !== void 0 && allowedUserIds.includes(id);
 }
 
-// src/server/chromium-path.ts
-import { accessSync as accessSync3, constants as constants4 } from "node:fs";
-import { delimiter, join as join7 } from "node:path";
-var defaultEnv = () => ({
-  platform: process.platform,
-  pathEnv: process.env.PATH ?? "",
-  exists: (p) => {
-    try {
-      accessSync3(p, constants4.X_OK);
-      return true;
-    } catch {
-      return false;
-    }
-  }
-});
-var BIN_NAMES = ["google-chrome-stable", "google-chrome", "chromium", "chromium-browser", "chrome", "microsoft-edge"];
-var FIXED = {
-  darwin: [
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-    "/Applications/Chromium.app/Contents/MacOS/Chromium",
-    "/Applications/Microsoft Edge.app/Contents/MacOS/Microsoft Edge"
-  ],
-  win32: [
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Microsoft\\Edge\\Application\\msedge.exe"
-  ]
-};
-var HINTS = {
-  linux: "\u5B89\u88C5 Chromium\uFF0C\u4F8B\u5982 Debian/Ubuntu\uFF1Aapt install chromium\uFF08\u6216 chromium-browser\uFF09\uFF0C\u4E5F\u53EF\u4EE5\u5728 config.json \u7684 chromiumPath \u91CC\u5199\u53EF\u6267\u884C\u6587\u4EF6\u8DEF\u5F84\u3002",
-  darwin: "\u5B89\u88C5 Google Chrome\uFF0C\u6216\u5728 config.json \u7684 chromiumPath \u91CC\u5199\u53EF\u6267\u884C\u6587\u4EF6\u8DEF\u5F84\u3002"
-};
-function findChromium(configured, env2 = defaultEnv()) {
-  let warning;
-  if (configured) {
-    if (env2.exists(configured)) return { path: configured, source: "config" };
-    warning = `chromiumPath \u6307\u5411\u7684\u6587\u4EF6\u4E0D\u5B58\u5728\u6216\u4E0D\u53EF\u6267\u884C\uFF1A${configured}\uFF0C\u6539\u4E3A\u81EA\u52A8\u67E5\u627E\u7CFB\u7EDF\u91CC\u7684 Chrome/Chromium\u3002`;
-  }
-  const candidates = [...FIXED[env2.platform] ?? []];
-  for (const dir of env2.pathEnv.split(delimiter).filter(Boolean)) {
-    for (const name of BIN_NAMES) candidates.push(join7(dir, env2.platform === "win32" ? `${name}.exe` : name));
-  }
-  const found = candidates.find((c) => env2.exists(c));
-  if (found) return { path: found, source: "system", warning };
-  return { warning, hint: HINTS[env2.platform] ?? "\u5B89\u88C5 Chrome \u6216 Chromium\uFF0C\u5E76\u5728 config.json \u7684 chromiumPath \u91CC\u5199\u53EF\u6267\u884C\u6587\u4EF6\u8DEF\u5F84\u3002" };
-}
-
 // src/server/deploy-extension.ts
 import { existsSync as existsSync4 } from "node:fs";
 import { cp, rm as rm5 } from "node:fs/promises";
@@ -92397,15 +92496,12 @@ async function deployExtension(opts) {
   }
 }
 
-// src/server/http.ts
-var import_undici = __toESM(require_undici(), 1);
-function createFetch(proxyUrl) {
-  if (!proxyUrl) return (input2, init2) => fetch(input2, init2);
-  const dispatcher = new import_undici.ProxyAgent(proxyUrl);
-  return (input2, init2) => (0, import_undici.fetch)(input2, { ...init2, dispatcher });
-}
-
 // src/server/plugin.ts
+function proxyFailureHint(proxy) {
+  if (proxy.source === "config") return "\u5DF2\u914D\u7F6E telegramProxy\uFF0C\u68C0\u67E5\u4EE3\u7406\u662F\u5426\u53EF\u7528\u3002";
+  if (proxy.source === "env") return `\u6B63\u5728\u4F7F\u7528\u73AF\u5883\u53D8\u91CF ${proxy.envName} \u91CC\u7684\u4EE3\u7406\uFF0C\u68C0\u67E5\u4EE3\u7406\u662F\u5426\u53EF\u7528\uFF1B\u4E0D\u60F3\u8D70\u4EE3\u7406\u5C31\u53D6\u6D88\u8FD9\u4E2A\u73AF\u5883\u53D8\u91CF\uFF0C\u6216\u5728 config.json \u91CC\u8BBE\u7F6E telegramProxy \u8986\u76D6\u5B83\u3002`;
+  return "\u5982\u679C\u4F60\u6240\u5728\u7F51\u7EDC\u8BBF\u95EE\u4E0D\u4E86 Telegram\uFF0C\u5728 config.json \u91CC\u914D\u7F6E telegramProxy\uFF08\u6216\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF HTTPS_PROXY\uFF09\u3002";
+}
 async function startPlugin(opts) {
   const env2 = opts.env ?? process.env;
   const bootLog = opts.log ?? createLogger();
@@ -92431,10 +92527,13 @@ async function startPlugin(opts) {
     return null;
   }
   const config2 = loaded.config;
-  const secrets = configSecrets(config2);
+  const secrets = configSecrets(config2, env2);
   const log = opts.log ?? createLogger({ level: config2.logLevel, secrets });
   runtimeLog = log;
   for (const w2 of loaded.warnings) log.warn(`\u914D\u7F6E\u63D0\u793A [${w2.field}]\uFF1A${w2.message}`);
+  const proxy = resolveProxy(config2.telegramProxy, env2);
+  if (proxy.source !== "none") log.info(`Telegram \u4EE3\u7406\uFF1A${describeProxy(proxy)}${proxy.noProxy ? `\uFF0CNO_PROXY=${proxy.noProxy}` : ""}`);
+  else if (proxy.ignored) log.warn(`\u73AF\u5883\u53D8\u91CF\u91CC\u7684\u4EE3\u7406 ${proxy.ignored} \u534F\u8BAE\u4E0D\u53D7\u652F\u6301\uFF08\u53EA\u652F\u6301 http/https\uFF09\uFF0C\u5DF2\u5FFD\u7565\uFF0C\u5C06\u76F4\u8FDE Telegram\u3002\u4EE3\u7406\u8F6F\u4EF6\u5982\u679C\u6709 HTTP\uFF08\u6DF7\u5408\uFF09\u7AEF\u53E3\uFF0C\u8BF7\u6539\u7528\u90A3\u4E2A\u7AEF\u53E3\u3002`);
   const channel = new HostChannel({ log });
   channel.register(opts.router);
   const shutdownHooks = [];
@@ -92442,6 +92541,7 @@ async function startPlugin(opts) {
   const status = {
     telegram: "skipped",
     chromium: findChromium(config2.chromiumPath),
+    proxy: { source: proxy.source, description: describeProxy(proxy) },
     extension: await deployExtension({ pluginDir: opts.pluginDir }),
     hostChecks: []
   };
@@ -92466,7 +92566,7 @@ async function startPlugin(opts) {
   });
   const telegram = new TelegramClient({
     token: config2.botToken,
-    fetch: opts.fetch ?? createFetch(config2.telegramProxy),
+    fetch: opts.fetch ?? createFetch(proxy),
     log,
     secrets,
     apiRoot: config2.telegramApiBase
@@ -92483,7 +92583,8 @@ async function startPlugin(opts) {
       log.info(`Telegram \u5DF2\u8FDE\u63A5\uFF0Cbot\uFF1A@${me2.username ?? me2.id}`);
     } catch (e) {
       status.telegram = "error";
-      log.error(`\u8FDE\u63A5 Telegram \u5931\u8D25\uFF1A${e.message}\u3002${config2.telegramProxy ? "\u5DF2\u914D\u7F6E telegramProxy\uFF0C\u68C0\u67E5\u4EE3\u7406\u662F\u5426\u53EF\u7528\u3002" : "\u5982\u679C\u4F60\u6240\u5728\u7F51\u7EDC\u8BBF\u95EE\u4E0D\u4E86 Telegram\uFF0C\u5728 config.json \u91CC\u914D\u7F6E telegramProxy\u3002"}\u5C06\u7EE7\u7EED\u5728\u540E\u53F0\u91CD\u8BD5\u3002`);
+      const hint = e instanceof TelegramApiError ? e.errorCode === 401 ? "Telegram \u5DF2\u54CD\u5E94\uFF0C\u7F51\u7EDC\u548C\u4EE3\u7406\u6CA1\u95EE\u9898\uFF0C\u662F botToken \u88AB\u62D2\u7EDD\uFF0C\u68C0\u67E5 config.json \u91CC\u7684 botToken\u3002" : "" : proxyFailureHint(proxy);
+      log.error(`\u8FDE\u63A5 Telegram \u5931\u8D25\uFF1A${e.message}\u3002${hint}\u5C06\u7EE7\u7EED\u5728\u540E\u53F0\u91CD\u8BD5\u3002`);
     }
     polling = pollUpdates({
       client: telegram,

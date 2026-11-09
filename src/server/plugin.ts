@@ -6,17 +6,19 @@ import { findChromium, type ChromiumLookup } from './chromium-path';
 import { configSecrets, loadConfigFile, type Config } from './config';
 import { deployExtension, type DeployResult } from './deploy-extension';
 import { HostChannel } from './host-channel';
-import { createFetch, type FetchLike } from './http';
+import { createFetch, describeProxy, resolveProxy, type FetchLike } from './http';
 import { createLogger, type Logger } from './logger';
 import { redactError } from './redact';
 import { assignHotFields, registerSettingsRoutes } from './settings-api';
-import { pollUpdates, TelegramClient, type TelegramUpdate } from './telegram';
+import { pollUpdates, TelegramApiError, TelegramClient, type TelegramUpdate } from './telegram';
 
 /** 启动自检的汇总，供 /status 展示（bot 命令在后续步骤接入）。 */
 export interface PluginStatus {
   telegram: 'ok' | 'skipped' | 'error';
   botUsername?: string;
   chromium: ChromiumLookup;
+  /** Telegram 代理的来源和可读描述（不含账号密码），启动时记录一次。 */
+  proxy: { source: 'config' | 'env' | 'none'; description: string };
   extension: DeployResult;
   /** 扩展上报的页面自检（CSRF、Mvu 等）。 */
   hostChecks: SelfCheckItem[];
@@ -48,6 +50,13 @@ export interface StartOptions {
   env?: NodeJS.ProcessEnv;
   fetch?: FetchLike;
   log?: Logger;
+}
+
+/** 连接 Telegram 失败时，按代理来源给出下一步建议。 */
+function proxyFailureHint(proxy: ReturnType<typeof resolveProxy>): string {
+  if (proxy.source === 'config') return '已配置 telegramProxy，检查代理是否可用。';
+  if (proxy.source === 'env') return `正在使用环境变量 ${proxy.envName} 里的代理，检查代理是否可用；不想走代理就取消这个环境变量，或在 config.json 里设置 telegramProxy 覆盖它。`;
+  return '如果你所在网络访问不了 Telegram，在 config.json 里配置 telegramProxy（或设置环境变量 HTTPS_PROXY）。';
 }
 
 /**
@@ -85,10 +94,16 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
     return null;
   }
   const config = loaded.config;
-  const secrets = configSecrets(config);
+  // 环境变量里的代理地址也可能带账号密码，一并从日志中隐去
+  const secrets = configSecrets(config, env);
   const log = opts.log ?? createLogger({ level: config.logLevel, secrets });
   runtimeLog = log;
   for (const w of loaded.warnings) log.warn(`配置提示 [${w.field}]：${w.message}`);
+
+  // Telegram 代理：config.json 的 telegramProxy 优先，其次环境变量（HTTPS_PROXY 等）
+  const proxy = resolveProxy(config.telegramProxy, env);
+  if (proxy.source !== 'none') log.info(`Telegram 代理：${describeProxy(proxy)}${proxy.noProxy ? `，NO_PROXY=${proxy.noProxy}` : ''}`);
+  else if (proxy.ignored) log.warn(`环境变量里的代理 ${proxy.ignored} 协议不受支持（只支持 http/https），已忽略，将直连 Telegram。代理软件如果有 HTTP（混合）端口，请改用那个端口。`);
 
   const channel = new HostChannel({ log });
   channel.register(opts.router);
@@ -99,6 +114,7 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
   const status: PluginStatus = {
     telegram: 'skipped',
     chromium: findChromium(config.chromiumPath),
+    proxy: { source: proxy.source, description: describeProxy(proxy) },
     extension: await deployExtension({ pluginDir: opts.pluginDir }),
     hostChecks: [],
   };
@@ -132,7 +148,7 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
   // Telegram
   const telegram = new TelegramClient({
     token: config.botToken,
-    fetch: opts.fetch ?? createFetch(config.telegramProxy),
+    fetch: opts.fetch ?? createFetch(proxy),
     log,
     secrets,
     apiRoot: config.telegramApiBase,
@@ -149,7 +165,14 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
       log.info(`Telegram 已连接，bot：@${me.username ?? me.id}`);
     } catch (e) {
       status.telegram = 'error';
-      log.error(`连接 Telegram 失败：${(e as Error).message}。${config.telegramProxy ? '已配置 telegramProxy，检查代理是否可用。' : '如果你所在网络访问不了 Telegram，在 config.json 里配置 telegramProxy。'}将继续在后台重试。`);
+      // Telegram 已经回应（带错误码）说明网络和代理是通的，不要再让用户去查代理。
+      const hint =
+        e instanceof TelegramApiError
+          ? e.errorCode === 401
+            ? 'Telegram 已响应，网络和代理没问题，是 botToken 被拒绝，检查 config.json 里的 botToken。'
+            : ''
+          : proxyFailureHint(proxy);
+      log.error(`连接 Telegram 失败：${(e as Error).message}。${hint}将继续在后台重试。`);
     }
     polling = pollUpdates({
       client: telegram,

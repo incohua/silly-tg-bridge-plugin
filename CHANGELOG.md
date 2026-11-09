@@ -2,6 +2,22 @@
 
 格式参考 [Keep a Changelog](https://keepachangelog.com/zh-CN/1.1.0/)。
 
+## [未发布]
+
+### 修复
+- 连接 Telegram 收到 401 时，不再提示“检查代理是否可用”（收到 401 说明网络和代理是通的），改为指向 botToken。
+
+### 新增
+- Telegram 代理支持环境变量兜底：`config.json` 的 `telegramProxy` 为空时，读取 `HTTPS_PROXY`、`https_proxy`、`HTTP_PROXY`、`http_proxy`、`ALL_PROXY`、`all_proxy`（按此顺序取第一个非空值）以及 `NO_PROXY`；只支持 http/https，socks 等协议会警告并忽略（直连）。`telegramProxy` 优先于环境变量。
+- 无头浏览器启动失败时，在原始报错后追加一句可操作的修法（沙箱不可用、缺系统库、snap 版 Chromium、以 root 运行、找不到浏览器），同时出现在日志和 `/status`；认不出的报错保留原文并附通用提示。
+- 找不到浏览器的提示新增 `android`（Termux）：原生 Termux 不支持，请用 proot-distro 里的 Debian；Linux 的提示补充了 Ubuntu snap 的说明。
+- `/status` 增加“Telegram 代理”一行，显示来源（配置 / 环境变量 / 无）和主机，不显示账号密码。
+- 文档 `docs/install-linux.md`：Debian、Ubuntu（用 Google Chrome 的 deb，不用 snap）、Termux（经 proot-distro 的 Debian，推断路线，待社区验证）的安装步骤，以及沙箱开关 `PUPPETEER_DANGEROUS_NO_SANDBOX`、SSH 隧道配置 API、systemd 托管、代理验证。
+- README 增加“无头服务器与 Linux”入口，故障排查指向新文档，配置一节说明代理环境变量兜底。
+
+### 变更
+- 行为变化：设了 `HTTPS_PROXY` 等环境变量、且没有配置 `telegramProxy` 的机器上，访问 Telegram 会改走该代理（之前一律直连）。启动日志会写明代理来源；不想走代理时取消环境变量，或用 `NO_PROXY` 排除。
+
 ## [0.2.0] - 2026-11-08
 
 ### 新增

@@ -12,7 +12,7 @@
 ![Node](https://img.shields.io/badge/node-%E2%89%A5%2020-339933)
 ![SillyTavern](https://img.shields.io/badge/SillyTavern-1.19%2B-orange)
 
-[快速开始](#快速开始) · [Bot 命令](#bot-命令) · [配置](#配置) · [工作原理](#工作原理) · [已知限制](#已知限制) · [路线图](ROADMAP.md) · [更新日志](CHANGELOG.md)
+[快速开始](#快速开始) · [Linux 无头部署](#无头服务器与-linux) · [Bot 命令](#bot-命令) · [配置](#配置) · [工作原理](#工作原理) · [已知限制](#已知限制) · [路线图](ROADMAP.md) · [更新日志](CHANGELOG.md)
 
 </div>
 
@@ -72,6 +72,12 @@
 
 UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-party/silly-tg`，不用单独安装。复制失败时日志会给出手动步骤：把 `plugins/silly-tg/dist/extension` 整个目录复制为 `public/scripts/extensions/third-party/silly-tg`，然后重启 ST。配置有误时，插件会在日志里说明要改哪个字段并保持禁用，ST 本身照常启动。
 
+### 无头服务器与 Linux
+
+没有桌面环境的机器也能用，浏览器是无头运行的，不需要显示器：
+
+- **Debian / Ubuntu 服务器、手机 Termux**：见 [docs/install-linux.md](docs/install-linux.md)（Chromium 安装、沙箱、SSH 隧道、systemd、代理）。Termux 是推断路线，待社区验证。
+
 ## Bot 命令
 
 | 命令 | 作用 |
@@ -122,6 +128,8 @@ UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-p
 
 国内等访问不了 Telegram 的网络，需要配置 `telegramProxy`，例如 `"http://127.0.0.1:7890"`。只支持 `http://` 和 `https://` 代理；代理软件如果只给了 socks 端口，请在软件里找它的 HTTP（混合）端口。
 
+`telegramProxy` 为空时，插件会读取环境变量 `HTTPS_PROXY`、`https_proxy`、`HTTP_PROXY`、`http_proxy`、`ALL_PROXY`、`all_proxy`（按此顺序取第一个非空值）和 `NO_PROXY`；两者都有时以 `telegramProxy` 为准。环境变量里写 socks 等协议会警告并直连。启动日志和 `/status` 会写明代理来源（配置 / 环境变量 / 无），不显示账号密码。注意无头 Chromium 也会继承这些环境变量，ST 地址不是本机时请用 `NO_PROXY` 排除。服务器上的写法见 [docs/install-linux.md](docs/install-linux.md#代理)。
+
 ## 已知限制
 
 > [!WARNING]
@@ -165,8 +173,8 @@ UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-p
 | 现象 | 可能原因 |
 |---|---|
 | 日志里完全没有 `[silly-tg]` | 没开启 `enableServerPlugins`，或插件目录位置不对 |
-| 日志提示找不到 Chrome/Chromium | 安装 Chrome/Chromium，或设置 `chromiumPath` |
-| 连接 Telegram 失败 | 网络访问不了 Telegram，配置 `telegramProxy`（仅支持 HTTP 代理） |
+| 日志提示找不到 Chrome/Chromium，或浏览器启动报错 | 安装 Chrome/Chromium，或设置 `chromiumPath`。Linux 服务器见 [docs/install-linux.md](docs/install-linux.md)（Ubuntu 请用 Google Chrome 的 deb，不要用 snap 版）。报错后面的 `💡 修法` 会说明具体怎么改 |
+| 连接 Telegram 失败 | 网络访问不了 Telegram，配置 `telegramProxy`（仅支持 HTTP 代理）。代理的配置和验证方法见 [docs/install-linux.md](docs/install-linux.md#代理) |
 | 提示“请先发 /chars 选择角色” | 还没选过角色，发 `/chars` 选一个 |
 | bot 不回复 | 你的数字 ID 不在 `allowedUserIds` 里，或 token 不对 |
 | 第一次启动很久 | 全新的 ST 首次启动有欢迎弹窗，插件会自动点掉，需要等一会 |
@@ -198,7 +206,7 @@ UI 扩展会在插件启动时自动复制到 `public/scripts/extensions/third-p
 
 ## 路线图
 
-当前版本（0.1）提供文字对话。接下来的重点是前端卡片的截图和 Mini App、更完整的 Luker 与 Linux 验证，以及对酒馆助手世界书设置的自检提示。详见 [ROADMAP.md](ROADMAP.md)。
+当前版本（0.1）提供文字对话。接下来的重点是前端卡片的截图和 Mini App、更完整的 Luker 与 Linux 验证，以及对酒馆助手世界书设置的自检提示。Linux 的部署文档已写好，实测结果见路线图。详见 [ROADMAP.md](ROADMAP.md)。
 
 ## 卸载
 

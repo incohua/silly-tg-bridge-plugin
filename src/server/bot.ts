@@ -690,6 +690,7 @@ export class Bot {
     const { status, browser, host } = this.opts;
     const lines = ['📊 silly-tg 状态'];
     lines.push(`${status.telegram === 'ok' ? '🟢' : status.telegram === 'error' ? '🔴' : '⚪'} Telegram：${status.telegram === 'ok' ? `已连接${status.botUsername ? ` @${status.botUsername}` : ''}` : status.telegram === 'error' ? '连接失败' : '未连接（离线模式）'}`);
+    lines.push(`🌐 Telegram 代理：${status.proxy.description}`);
     if (!status.chromium.path) lines.push('🔴 Chromium：未找到 Chrome/Chromium');
     else {
       const up = browser.startedAt ? `，已运行 ${Math.max(0, Math.round((this.now() - browser.startedAt) / 60_000))} 分钟` : '';

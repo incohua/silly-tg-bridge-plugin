@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { PROXY_ENV_KEYS } from './http';
 import type { LogLevel } from './logger';
 
 export interface Config {
@@ -266,14 +267,28 @@ export function loadConfigFile(path: string, read: (p: string) => string = (p) =
   return validateConfig(raw, path);
 }
 
-/** 配置里所有需要从日志中隐去的字符串。 */
-export function configSecrets(c: Config): string[] {
+/**
+ * 配置里所有需要从日志中隐去的字符串。
+ * 传入 env 时，把环境变量代理（HTTPS_PROXY 等）地址里的账号密码也算上；不传则只看配置。
+ */
+export function configSecrets(c: Config, env?: NodeJS.ProcessEnv): string[] {
   const out = [c.botToken];
   if (c.basicAuth?.password) out.push(c.basicAuth.password);
-  if (c.telegramProxy) {
-    const u = parseUrl(c.telegramProxy);
-    if (u?.password) out.push(decodeURIComponent(u.password));
-    if (u?.username) out.push(decodeURIComponent(u.username));
+  const proxies = [c.telegramProxy];
+  if (env) for (const k of PROXY_ENV_KEYS) proxies.push(env[k]);
+  for (const p of proxies) {
+    const u = p ? parseUrl(p.trim()) : null;
+    // URL 里的账号密码是百分号编码形式；错误信息可能带编码前或编码后的写法，两种都隐去
+    for (const v of [u?.password, u?.username]) {
+      if (!v) continue;
+      out.push(v);
+      try {
+        const d = decodeURIComponent(v);
+        if (d !== v) out.push(d);
+      } catch {
+        // 百分号编码不合法时只保留原文
+      }
+    }
   }
   return out;
 }

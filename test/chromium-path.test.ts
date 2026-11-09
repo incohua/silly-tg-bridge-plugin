@@ -25,4 +25,9 @@ describe('findChromium', () => {
     expect(r.path).toBeUndefined();
     expect(r.hint).toMatch(/apt install chromium/);
   });
+  it('android（Termux）：提示用 proot-distro Debian，说明原生不支持', () => {
+    const r = findChromium(undefined, env([], 'android'));
+    expect(r.hint).toMatch(/proot-distro/);
+    expect(r.hint).toMatch(/原生 Termux 不支持/);
+  });
 });

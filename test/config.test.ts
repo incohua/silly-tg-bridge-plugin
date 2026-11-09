@@ -134,4 +134,11 @@ describe('configSecrets', () => {
     if (!r.ok) throw new Error('unexpected');
     expect(configSecrets(r.config)).toEqual(expect.arrayContaining([FAKE_TOKEN, 'pw-1234', 'pp-9999']));
   });
+  it('传入 env 时包含环境变量代理里的账号密码；不传则不看环境变量', () => {
+    const r = validateConfig(base);
+    if (!r.ok) throw new Error('unexpected');
+    const env = { HTTPS_PROXY: 'http://eu:ep%40ss@10.0.0.1:7890', all_proxy: 'socks5://su:sp-5555@10.0.0.1:1080' };
+    expect(configSecrets(r.config, env)).toEqual(expect.arrayContaining(['eu', 'ep@ss', 'ep%40ss', 'su', 'sp-5555']));
+    expect(configSecrets(r.config)).not.toContain('ep@ss');
+  });
 });

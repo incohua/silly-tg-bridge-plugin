@@ -107,6 +107,92 @@ describe('startPlugin', () => {
     await rt!.stop();
   });
 
+  it('Telegram 返回 401：说明网络和代理是通的，不提示检查代理，指向 botToken', async () => {
+    const log = captureLogger();
+    const rt = await startPlugin({
+      router: express.Router(),
+      pluginDir: dirWithConfig({ botToken: FAKE_TOKEN, allowedUserIds: [1] }),
+      env: { HTTPS_PROXY: 'http://9.9.9.9:7897' },
+      fetch: async () => json({ ok: false, error_code: 401, description: 'Unauthorized' }),
+      log,
+    });
+    const out = log.lines.join('\n');
+    expect(out).toMatch(/401 Unauthorized/);
+    expect(out).toMatch(/botToken 被拒绝/);
+    expect(out).not.toMatch(/检查代理是否可用/);
+    expect(out).not.toContain(FAKE_TOKEN);
+    await rt?.stop();
+  });
+
+  describe('Telegram 代理来源', () => {
+    const start = (env: NodeJS.ProcessEnv, config: object = {}) => {
+      const log = captureLogger();
+      return startPlugin({
+        router: express.Router(),
+        pluginDir: dirWithConfig({ botToken: FAKE_TOKEN, allowedUserIds: [1], ...config }),
+        env: { SILLY_TG_OFFLINE: '1', ...env },
+        log,
+      }).then((rt) => ({ rt: rt!, log }));
+    };
+
+    it('配置：status 与日志显示来源和主机，不含凭据', async () => {
+      const { rt, log } = await start({ HTTPS_PROXY: 'http://env-u:env-pw@9.9.9.9:1' }, { telegramProxy: 'http://u:cfg-pw@10.0.0.1:7890' });
+      expect(rt.status.proxy).toEqual({ source: 'config', description: '配置 telegramProxy（10.0.0.1:7890）' });
+      const out = log.lines.join('\n');
+      expect(out).toContain('Telegram 代理：配置 telegramProxy（10.0.0.1:7890）');
+      expect(out).not.toMatch(/cfg-pw|env-pw/);
+      await rt.stop();
+    });
+
+    it('环境变量：来源为 env，日志写出变量名和主机', async () => {
+      const { rt, log } = await start({ https_proxy: 'http://u:env-pw@10.0.0.2:8080', NO_PROXY: 'localhost' });
+      expect(rt.status.proxy).toEqual({ source: 'env', description: '环境变量 https_proxy（10.0.0.2:8080）' });
+      const out = log.lines.join('\n');
+      expect(out).toMatch(/Telegram 代理：环境变量 https_proxy（10\.0\.0\.2:8080），NO_PROXY=localhost/);
+      expect(out).not.toContain('env-pw');
+      await rt.stop();
+    });
+
+    it('无：来源为 none，没有代理日志', async () => {
+      const { rt, log } = await start({});
+      expect(rt.status.proxy).toEqual({ source: 'none', description: '无（直连）' });
+      expect(log.lines.join('\n')).not.toContain('Telegram 代理');
+      await rt.stop();
+    });
+
+    it('socks 环境变量：警告并直连，不泄露凭据', async () => {
+      const { rt, log } = await start({ ALL_PROXY: 'socks5://u:socks-pw@127.0.0.1:1080' });
+      expect(rt.status.proxy.source).toBe('none');
+      expect(rt.status.proxy.description).toMatch(/已忽略 ALL_PROXY=socks5:\/\/127\.0\.0\.1:1080/);
+      const warn = log.lines.find((l) => l.startsWith('warn') && l.includes('ALL_PROXY'));
+      expect(warn).toMatch(/只支持 http\/https/);
+      expect(log.lines.join('\n')).not.toContain('socks-pw');
+      await rt.stop();
+    });
+
+    it('连接失败的提示按来源区分，且错误里的代理凭据被隐去', async () => {
+      const run = async (env: NodeJS.ProcessEnv, config: object = {}) => {
+        const log = captureLogger();
+        const rt = await startPlugin({
+          router: express.Router(),
+          pluginDir: dirWithConfig({ botToken: FAKE_TOKEN, allowedUserIds: [1], ...config }),
+          env,
+          fetch: async () => {
+            throw new TypeError('fetch failed: proxy http://u:leak-pw@10.0.0.2:8080 refused');
+          },
+          log,
+        });
+        await rt!.stop();
+        return log.lines.filter((l) => l.startsWith('error')).join('\n');
+      };
+      expect(await run({}, { telegramProxy: 'http://10.0.0.1:7890' })).toMatch(/已配置 telegramProxy/);
+      const envOut = await run({ HTTPS_PROXY: 'http://u:leak-pw@10.0.0.2:8080' });
+      expect(envOut).toMatch(/环境变量 HTTPS_PROXY 里的代理/);
+      expect(envOut).not.toContain('leak-pw');
+      expect(await run({})).toMatch(/telegramProxy（或设置环境变量 HTTPS_PROXY）/);
+    });
+  });
+
   it('配置面板保存：热生效字段直接改到运行中的配置对象，其余字段保持不变', async () => {
     const log = captureLogger();
     const router = express.Router();

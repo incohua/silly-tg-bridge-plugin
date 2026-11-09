@@ -7,6 +7,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { isKnownNoise, isReadyConsoleLine } from '../extension/adapter';
 import { HOST_PARAM, SKIP_CSRF_PATCH_PARAM } from '../extension/host-mode';
+import { diagnoseBrowserError } from './browser-diagnose';
 import type { FetchLike } from './http';
 import type { Logger } from './logger';
 
@@ -79,6 +80,8 @@ export interface BrowserManagerOptions {
   /** 已在运行但页面未连接时，最多等多久再重启，默认 30 秒。 */
   reconnectGraceMs?: number;
   isRoot?: boolean;
+  /** 运行平台，默认 process.platform；启动失败诊断用。 */
+  platform?: NodeJS.Platform;
   /** 只用于测试：让扩展跳过 CSRF 补丁（环境变量 SILLY_TG_TEST_SKIP_CSRF_PATCH=1）。 */
   testSkipCsrfPatch?: boolean;
 }
@@ -120,6 +123,9 @@ export class BrowserStartError extends Error {
     this.name = 'BrowserStartError';
   }
 }
+
+/** 启动失败但认不出原因时附上的通用提示。 */
+const GENERIC_LAUNCH_HINT = '如果是在没有桌面的服务器或容器里，请对照 docs/install-linux.md 排查；把上面的原始报错发给开发者也有帮助。';
 
 const sleep = (ms: number): Promise<void> => new Promise((r) => setTimeout(r, ms));
 
@@ -304,16 +310,20 @@ export class BrowserManager {
       throw new BrowserStartError(msg);
     }
     this.stateValue = 'starting';
+    // 只有 launcher 本身抛出的错才做浏览器启动诊断（等 ST、打开页面等阶段的错有各自的提示）
+    let launching = false;
     try {
       await this.waitForSt();
       const nonce = this.opts.host.rotateNonce();
       this.userDataDir = await mkdtemp(join(tmpdir(), 'silly-tg-chrome-'));
       const isRoot = this.opts.isRoot ?? process.getuid?.() === 0;
+      launching = true;
       const browser = await this.opts.launcher({
         executablePath: this.opts.executablePath,
         args: chromiumArgs({ lowMemory: this.opts.lowMemory, isRoot }),
         userDataDir: this.userDataDir,
       });
+      launching = false;
       this.browser = browser;
       browser.onDisconnected(() => this.handleDisconnected(browser));
       log.info(`无头浏览器已启动（PID ${browser.pid ?? '未知'}${this.opts.lowMemory ? '，低内存参数' : ''}），打开 ST 页面…`);
@@ -342,7 +352,17 @@ export class BrowserManager {
       log.info('无头 ST 页面已连接');
       this.emit({ type: 'started', pid: browser.pid });
     } catch (e) {
-      this.lastError = (e as Error).message;
+      let message = (e as Error).message;
+      if (launching && !(e instanceof BrowserStartError)) {
+        const d = diagnoseBrowserError(message, {
+          platform: this.opts.platform ?? process.platform,
+          isRoot: this.opts.isRoot ?? process.getuid?.() === 0,
+          chromiumPath: this.opts.executablePath,
+        });
+        // 保留原始报错，把修法追加在后面
+        message = `${message}\n💡 修法：${d ? d.hint : GENERIC_LAUNCH_HINT}`;
+      }
+      this.lastError = message;
       log.error(`无头浏览器启动失败：${this.lastError}`);
       await this.doStop('启动失败', false);
       throw e instanceof BrowserStartError ? e : new BrowserStartError(this.lastError);

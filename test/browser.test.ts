@@ -162,6 +162,37 @@ describe('BrowserManager', () => {
     await m.dispose();
   });
 
+  it('launcher 抛出沙箱错误：原始报错保留，lastError、日志和异常都带修法', async () => {
+    const host = new FakeHost();
+    const raw = 'Failed to launch the browser process!\n[1:1:0101/000000:FATAL:zygote_host_impl_linux.cc(128)] No usable sandbox!';
+    const { m, log } = make(host, async () => {
+      throw new Error(raw);
+    });
+    await expect(m.ensureRunning()).rejects.toThrow(/No usable sandbox[\s\S]*PUPPETEER_DANGEROUS_NO_SANDBOX=true/);
+    expect(m.lastError).toContain(raw);
+    expect(m.lastError).toMatch(/修法：.*PUPPETEER_DANGEROUS_NO_SANDBOX=true/);
+    expect(log.lines.join('\n')).toMatch(/PUPPETEER_DANGEROUS_NO_SANDBOX/);
+    await m.dispose();
+  });
+
+  it('launcher 抛出认不出的错误：保留原文并附通用提示', async () => {
+    const host = new FakeHost();
+    const { m } = make(host, async () => {
+      throw new Error('something weird');
+    });
+    await expect(m.ensureRunning()).rejects.toThrow(/something weird[\s\S]*docs\/install-linux\.md/);
+    await m.dispose();
+  });
+
+  it('启动后阶段的错误（扩展没连接）不做浏览器诊断', async () => {
+    const host = new FakeHost();
+    const { launcher } = fakeLauncher(host, { connect: false });
+    const { m } = make(host, launcher, { hostReadyTimeoutMs: 50 });
+    await expect(m.ensureRunning()).rejects.toThrow(/扩展没有连接/);
+    expect(m.lastError).not.toMatch(/修法/);
+    await m.dispose();
+  });
+
   it('扩展一直不连接：超时报错并关闭浏览器', async () => {
     const host = new FakeHost();
     const { launcher, launched } = fakeLauncher(host, { connect: false });
