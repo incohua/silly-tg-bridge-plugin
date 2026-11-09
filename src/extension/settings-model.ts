@@ -33,6 +33,8 @@ export interface SettingsResponse {
   reloaded?: string[];
   /** 这次保存是否重新加载了运行时；待命时即使没有改动也会按现有 config.json 重新启动一次。 */
   reloadedRuntime?: boolean;
+  /** POST /reload（面板的“重新连接”按钮）的响应：按磁盘上的 config.json 重新加载了运行时。 */
+  reconnected?: boolean;
   /** 服务端运行状态（GET/POST /config 与 GET /status 都带）。 */
   runtime?: RuntimeStatus;
 }
@@ -115,7 +117,7 @@ export function saveResultMessage(r: SettingsResponse): string {
   const reloaded = r.reloaded ?? [];
   const rt = r.runtime;
   // 待命时没有改动也会重新启动一次（例如手动改好了 config.json，在面板里点保存让它生效）
-  const head = changed.length > 0 ? '已保存' : r.reloadedRuntime ? '没有改动，已按现有 config.json 重新启动' : '没有改动';
+  const head = r.reconnected ? '已按 config.json 重新连接' : changed.length > 0 ? '已保存' : r.reloadedRuntime ? '没有改动，已按现有 config.json 重新启动' : '没有改动';
   const parts: string[] = [`${head}。`];
   if (hot.length > 0) parts.push(`已立即生效：${hot.map(fieldLabel).join('、')}。`);
   // 只有重新加载过、或者当前不在正常运行时，才补一句运行状态

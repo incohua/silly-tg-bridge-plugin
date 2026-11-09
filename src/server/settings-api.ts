@@ -270,6 +270,47 @@ export function registerSettingsRoutes(router: Router, opts: SettingsRouteOption
     res.json({ ok: true, runtime: opts.runtime.status() });
   });
 
+  /** 重新加载运行时，最多等 reloadWaitMs；到点还没稳定就先返回当前状态（面板继续轮询 /status）。 */
+  const reloadCapped = async (): Promise<RuntimeStatus> => {
+    let timer: NodeJS.Timeout | undefined;
+    const capped = new Promise<RuntimeStatus>((resolve) => {
+      timer = setTimeout(() => resolve(opts.runtime.status()), opts.reloadWaitMs ?? 25_000);
+      timer.unref?.();
+    });
+    const done = opts.runtime.reload().catch((e: unknown) => {
+      log.error(`重新加载失败：${redactError(e, opts.secrets?.() ?? [])}`);
+      return opts.runtime.status();
+    });
+    const runtime = await Promise.race([done, capped]);
+    clearTimeout(timer);
+    return runtime;
+  };
+
+  // 手动改过 config.json 之后，让面板的“重新连接”按钮按磁盘上的文件重新加载，不用重启 ST。
+  // 先校验：文件不存在、不是合法 JSON、校验失败都拒绝，不去拆掉正在运行的实例。
+  router.post('/reload', async (req, res) => {
+    if (denied(req, res)) return;
+    let existing: { raw: Record<string, unknown>; exists: boolean };
+    try {
+      existing = readRawConfig(configPath);
+    } catch (e) {
+      fail(res, 409, (e as Error).message);
+      return;
+    }
+    if (!existing.exists) {
+      fail(res, 409, '还没有 config.json：先在上面填写 Bot Token 和允许的用户 ID 并保存。');
+      return;
+    }
+    const v = validateConfig(existing.raw, 'config.json');
+    if (!v.ok) {
+      res.status(422).json({ ok: false, errors: v.errors });
+      return;
+    }
+    log.info('收到面板的“重新连接”请求，按 config.json 重新加载');
+    const runtime = await reloadCapped();
+    res.json({ ok: true, reconnected: true, reloadedRuntime: true, changed: [], hot: [], reloaded: [], warnings: v.warnings, runtime, ...viewSettings(existing.raw, true) });
+  });
+
   router.post('/config', async (req, res) => {
     if (denied(req, res)) return;
     let existing: { raw: Record<string, unknown>; exists: boolean };
@@ -301,20 +342,7 @@ export function registerSettingsRoutes(router: Router, opts: SettingsRouteOption
     log.info(
       `配置已通过面板保存：${r.changed.length ? r.changed.join('、') : '无变化'}${hot.length ? `（立即生效：${hot.join('、')}）` : ''}${needReload ? `（重新加载${reloaded.length ? `：${reloaded.join('、')}` : ''}）` : ''}`,
     );
-    let runtime = opts.runtime.status();
-    if (needReload) {
-      let timer: NodeJS.Timeout | undefined;
-      const capped = new Promise<RuntimeStatus>((resolve) => {
-        timer = setTimeout(() => resolve(opts.runtime.status()), opts.reloadWaitMs ?? 25_000);
-        timer.unref?.();
-      });
-      const done = opts.runtime.reload().catch((e: unknown) => {
-        log.error(`重新加载失败：${redactError(e, opts.secrets?.() ?? [])}`);
-        return opts.runtime.status();
-      });
-      runtime = await Promise.race([done, capped]);
-      clearTimeout(timer);
-    }
+    const runtime = needReload ? await reloadCapped() : opts.runtime.status();
     // reloadedRuntime：这次保存是否重新加载了运行时（待命时即使没有改动也会按现有文件重新启动一次）
     res.json({ ok: true, changed: r.changed, hot, reloaded, reloadedRuntime: needReload, lowMemoryNote: r.changed.includes('lowMemory'), warnings: r.warnings, runtime, ...viewSettings(r.raw, true) });
   });

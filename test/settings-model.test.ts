@@ -81,6 +81,21 @@ describe('buildPatch', () => {
 
 const running: RuntimeStatus = { state: 'running', telegram: 'ok', botUsername: 'mybot', chromium: { found: true }, hostConnected: true, hostPage: { stVersion: '1.13.0' } };
 
+describe('saveResultMessage：重新连接', () => {
+  const running = { state: 'running', telegram: 'ok', botUsername: 'testbot', chromium: { found: true }, hostConnected: true } as const;
+  it('点“重新连接”：说明是按 config.json 重新连接，并带上 bot 用户名', () => {
+    const m = saveResultMessage({ ok: true, reconnected: true, reloadedRuntime: true, changed: [], hot: [], reloaded: [], runtime: running });
+    expect(m).toContain('已按 config.json 重新连接');
+    expect(m).toContain('@testbot');
+    expect(m).not.toContain('重启');
+  });
+  it('重新连接失败时给出原因', () => {
+    const m = saveResultMessage({ ok: true, reconnected: true, reloadedRuntime: true, changed: [], hot: [], reloaded: [], runtime: { ...running, telegram: 'error', telegramError: '401 Unauthorized' } });
+    expect(m).toContain('已按 config.json 重新连接');
+    expect(m).toContain('401 Unauthorized');
+  });
+});
+
 describe('saveResultMessage', () => {
   it('没有改动', () => {
     expect(saveResultMessage({ ok: true, changed: [], hot: [], reloaded: [], runtime: running })).toBe('没有改动。');

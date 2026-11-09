@@ -246,6 +246,51 @@ describe('路由', () => {
     expect(JSON.stringify(res.body)).not.toContain(FAKE_TOKEN);
   });
 
+  it('POST /reload：按磁盘上的 config.json 重新加载，返回加载后的状态和最新的字段值（手动改过文件后用）', async () => {
+    writeFileSync(file, JSON.stringify({ ...base, allowedUserIds: [111, 999] }));
+    live = runningConfig();
+    current = runningStatus;
+    const res = await call('POST /reload');
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, reconnected: true, reloadedRuntime: true, changed: [], runtime: { state: 'running' }, values: { allowedUserIds: [111, 999] } });
+    expect(reloads).toBe(1);
+    expect(JSON.stringify(res.body)).not.toContain(FAKE_TOKEN);
+    expect(JSON.stringify(res.body)).not.toContain('secret-pw');
+  });
+
+  it('POST /reload：config.json 手改坏了（校验失败）就拒绝，不重新加载，不拆掉正在运行的实例', async () => {
+    writeFileSync(file, JSON.stringify({ ...base, dialogueStyle: 'huge' }));
+    live = runningConfig();
+    current = runningStatus;
+    const res = await call('POST /reload');
+    expect(res.statusCode).toBe(422);
+    expect(res.body).toMatchObject({ ok: false, errors: [{ field: 'dialogueStyle' }] });
+    expect(reloads).toBe(0);
+  });
+
+  it('POST /reload：不是合法 JSON -> 409；文件不存在 -> 409；都不重新加载', async () => {
+    writeFileSync(file, '{ 坏了');
+    expect((await call('POST /reload')).statusCode).toBe(409);
+    rmSync(file);
+    const none = await call('POST /reload');
+    expect(none.statusCode).toBe(409);
+    expect(JSON.stringify(none.body)).toContain('config.json');
+    expect(reloads).toBe(0);
+  });
+
+  it('POST /reload：重新加载很久没完成，到上限先返回 starting；抛错仍返回 200', async () => {
+    writeFileSync(file, JSON.stringify(base));
+    reloadImpl = () => {
+      current = { ...runningStatus, state: 'starting', telegram: 'pending' };
+      return new Promise(() => {});
+    };
+    expect((await call('POST /reload')).body).toMatchObject({ ok: true, runtime: { state: 'starting' } });
+    reloadImpl = () => Promise.reject(new Error(`炸了 ${FAKE_TOKEN}`));
+    const res = await call('POST /reload');
+    expect(res.statusCode).toBe(200);
+    expect(JSON.stringify(res.body)).not.toContain(FAKE_TOKEN);
+  });
+
   it('GET /status：返回运行状态；非管理员 403', async () => {
     current = runningStatus;
     const res = await call('GET /status');
@@ -256,7 +301,7 @@ describe('路由', () => {
     expect(denied.statusCode).toBe(403);
   });
 
-  it('多用户 ST：非管理员 GET/POST 都是 403，且不写文件、不重新加载；管理员和单用户模式放行', async () => {
+  it('多用户 ST：非管理员 GET/POST（含 /reload）都是 403，且不写文件、不重新加载；管理员和单用户模式放行', async () => {
     const asUser = async (key: string, admin: boolean, body?: unknown) => {
       const res = new FakeRes();
       await handlers[key]({ body, user: { profile: { admin } } }, res);
@@ -267,7 +312,12 @@ describe('路由', () => {
     expect(p.statusCode).toBe(403);
     expect(existsSync(file)).toBe(false);
     expect(reloads).toBe(0);
+    writeFileSync(file, JSON.stringify(base));
+    expect((await asUser('POST /reload', false, {})).statusCode).toBe(403);
+    expect(reloads).toBe(0);
     expect((await asUser('GET /config', true)).statusCode).toBe(200);
+    expect((await asUser('POST /reload', true, {})).statusCode).toBe(200);
+    expect(reloads).toBe(1);
   });
 
   it('config.json 损坏：GET/POST 都拒绝，不覆盖', async () => {

@@ -187,14 +187,15 @@ function buildDrawer(container: HTMLElement): void {
   for (const r of Object.values(rows)) form.append(r.root);
 
   const save = el('input', { type: 'button', class: 'menu_button', value: '保存' });
+  const reconnect = el('input', { type: 'button', class: 'menu_button', value: '重新连接', title: '重新读取 config.json 并重新连接。手动改过文件后用它，不用重启 ST。', style: 'margin-left:6px' });
   const status = el('small', { style: 'margin-left:8px' });
   const foot = el('div', { style: 'margin-top:6px' });
-  foot.append(save, status);
+  foot.append(save, reconnect, status);
   form.append(foot);
   // 运行状态：Telegram、Chromium、无头页面
   const runtimeBox = el('div', { class: 'silly-tg-runtime', style: 'margin-top:8px' });
   form.append(runtimeBox);
-  form.append(el('small', { style: 'opacity:.65;display:block;margin-top:8px' }, 'Chromium 路径等未在此列出的选项只能在 config.json 里修改（手动改文件后要重启 ST 才生效）。行动选项规则见插件目录下的 choice-rules.json（改完无需重启）。'));
+  form.append(el('small', { style: 'opacity:.65;display:block;margin-top:8px' }, 'Chromium 路径等未在此列出的选项只能在 config.json 里修改（手动改文件后点“重新连接”即可生效，不用重启 ST）。行动选项规则见插件目录下的 choice-rules.json（改完无需重启）。'));
 
   let original: SettingsValues | undefined;
 
@@ -358,6 +359,30 @@ function buildDrawer(container: HTMLElement): void {
         else pollToken++;
       } catch (e) {
         status.textContent = `保存失败：${e instanceof Error ? e.message : String(e)}`;
+      }
+    })();
+  });
+
+  // 手动改过 config.json 后，按文件重新连接（服务端会先校验，文件有误就拒绝，不影响正在运行的实例）。
+  reconnect.addEventListener('click', () => {
+    void (async () => {
+      clearErrors();
+      status.textContent = '重新连接中…';
+      try {
+        const r = await request('POST', {}, '/reload');
+        if (!r.ok) {
+          if (r.errors?.length) status.textContent = `config.json 有误，没有重新连接：${r.errors.map((e) => `${fieldLabel(e.field)}：${e.message}`).join('；')}`;
+          else status.textContent = r.error ?? (r.serverMissing ? '服务端插件未安装或未启用，请刷新页面查看安装引导。' : '重新连接失败');
+          return;
+        }
+        status.textContent = saveResultMessage(r);
+        if (r.values) fill(r.values);
+        showBanner({ ...r, exists: true });
+        renderRuntime(r.runtime);
+        if (r.runtime && runtimeInProgress(r.runtime)) pollRuntime(r);
+        else pollToken++;
+      } catch (e) {
+        status.textContent = `重新连接失败：${e instanceof Error ? e.message : String(e)}`;
       }
     })();
   });

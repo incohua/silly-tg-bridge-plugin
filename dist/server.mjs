@@ -88972,7 +88972,7 @@ async function pollUpdates(opts) {
     } catch (e) {
       if (signal.aborted) break;
       if (e instanceof TelegramApiError && e.errorCode === 401) {
-        log.error("Telegram \u62D2\u7EDD\u4E86 botToken\uFF08401\uFF09\uFF0C\u8F6E\u8BE2\u5DF2\u505C\u6B62\u3002\u5728 ST \u6269\u5C55\u8BBE\u7F6E\u680F\u7684 Silly TG \u9762\u677F\u91CC\u6539\u597D botToken \u5E76\u4FDD\u5B58\u5373\u53EF\uFF0C\u65E0\u9700\u91CD\u542F ST\uFF08\u76F4\u63A5\u6539 config.json \u7684\u8BDD\u8981\u91CD\u542F ST \u624D\u4F1A\u91CD\u65B0\u8BFB\u53D6\uFF09\u3002");
+        log.error("Telegram \u62D2\u7EDD\u4E86 botToken\uFF08401\uFF09\uFF0C\u8F6E\u8BE2\u5DF2\u505C\u6B62\u3002\u5728 ST \u6269\u5C55\u8BBE\u7F6E\u680F\u7684 Silly TG \u9762\u677F\u91CC\u6539\u597D botToken \u5E76\u4FDD\u5B58\u5373\u53EF\uFF0C\u65E0\u9700\u91CD\u542F ST\uFF08\u76F4\u63A5\u6539\u4E86 config.json \u7684\u8BDD\uFF0C\u5728\u540C\u4E00\u4E2A\u9762\u677F\u91CC\u70B9\u201C\u91CD\u65B0\u8FDE\u63A5\u201D\uFF09\u3002");
         return "unauthorized";
       }
       if (e instanceof TelegramApiError && e.errorCode === 409) {
@@ -92304,6 +92304,42 @@ function registerSettingsRoutes(router, opts) {
     if (denied(req, res)) return;
     res.json({ ok: true, runtime: opts.runtime.status() });
   });
+  const reloadCapped = async () => {
+    let timer2;
+    const capped = new Promise((resolve9) => {
+      timer2 = setTimeout(() => resolve9(opts.runtime.status()), opts.reloadWaitMs ?? 25e3);
+      timer2.unref?.();
+    });
+    const done = opts.runtime.reload().catch((e) => {
+      log.error(`\u91CD\u65B0\u52A0\u8F7D\u5931\u8D25\uFF1A${redactError(e, opts.secrets?.() ?? [])}`);
+      return opts.runtime.status();
+    });
+    const runtime = await Promise.race([done, capped]);
+    clearTimeout(timer2);
+    return runtime;
+  };
+  router.post("/reload", async (req, res) => {
+    if (denied(req, res)) return;
+    let existing;
+    try {
+      existing = readRawConfig(configPath);
+    } catch (e) {
+      fail(res, 409, e.message);
+      return;
+    }
+    if (!existing.exists) {
+      fail(res, 409, "\u8FD8\u6CA1\u6709 config.json\uFF1A\u5148\u5728\u4E0A\u9762\u586B\u5199 Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID \u5E76\u4FDD\u5B58\u3002");
+      return;
+    }
+    const v2 = validateConfig(existing.raw, "config.json");
+    if (!v2.ok) {
+      res.status(422).json({ ok: false, errors: v2.errors });
+      return;
+    }
+    log.info("\u6536\u5230\u9762\u677F\u7684\u201C\u91CD\u65B0\u8FDE\u63A5\u201D\u8BF7\u6C42\uFF0C\u6309 config.json \u91CD\u65B0\u52A0\u8F7D");
+    const runtime = await reloadCapped();
+    res.json({ ok: true, reconnected: true, reloadedRuntime: true, changed: [], hot: [], reloaded: [], warnings: v2.warnings, runtime, ...viewSettings(existing.raw, true) });
+  });
   router.post("/config", async (req, res) => {
     if (denied(req, res)) return;
     let existing;
@@ -92334,20 +92370,7 @@ function registerSettingsRoutes(router, opts) {
     log.info(
       `\u914D\u7F6E\u5DF2\u901A\u8FC7\u9762\u677F\u4FDD\u5B58\uFF1A${r.changed.length ? r.changed.join("\u3001") : "\u65E0\u53D8\u5316"}${hot.length ? `\uFF08\u7ACB\u5373\u751F\u6548\uFF1A${hot.join("\u3001")}\uFF09` : ""}${needReload ? `\uFF08\u91CD\u65B0\u52A0\u8F7D${reloaded.length ? `\uFF1A${reloaded.join("\u3001")}` : ""}\uFF09` : ""}`
     );
-    let runtime = opts.runtime.status();
-    if (needReload) {
-      let timer2;
-      const capped = new Promise((resolve9) => {
-        timer2 = setTimeout(() => resolve9(opts.runtime.status()), opts.reloadWaitMs ?? 25e3);
-        timer2.unref?.();
-      });
-      const done = opts.runtime.reload().catch((e) => {
-        log.error(`\u91CD\u65B0\u52A0\u8F7D\u5931\u8D25\uFF1A${redactError(e, opts.secrets?.() ?? [])}`);
-        return opts.runtime.status();
-      });
-      runtime = await Promise.race([done, capped]);
-      clearTimeout(timer2);
-    }
+    const runtime = needReload ? await reloadCapped() : opts.runtime.status();
     res.json({ ok: true, changed: r.changed, hot, reloaded, reloadedRuntime: needReload, lowMemoryNote: r.changed.includes("lowMemory"), warnings: r.warnings, runtime, ...viewSettings(r.raw, true) });
   });
 }

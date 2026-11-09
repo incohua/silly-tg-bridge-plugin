@@ -135,7 +135,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 - 对话样式、预览方式和刷新间隔、行动选项排版、日志级别、空闲关闭时间、允许的用户 ID **立即生效**（`lowMemory` 要等下次启动 Chromium 才用上）。
 - Bot Token、代理、ST 地址、basic auth 保存后插件**自动重新连接**：停掉旧的轮询和无头浏览器，用新配置重新拉起。连接失败（例如 token 被拒绝）时面板会显示原因，改正后再保存一次即可。
 
-也可以手动编辑 `plugins/silly-tg-bridge-plugin/config.json`（已被 gitignore，不会被提交）；`chromiumPath` 只能在文件里改。手动改文件后需要重启 ST 才会重新加载。
+也可以手动编辑 `plugins/silly-tg-bridge-plugin/config.json`（已被 gitignore，不会被提交）；`chromiumPath` 只能在文件里改。手动改文件后，在面板里点**“重新连接”**（旁边的保存按钮）即可按文件重新加载，不用重启 ST；文件有误时会拒绝并说明原因，不影响正在运行的实例。
 
 | 键 | 默认值 | 说明 |
 |---|---|---|

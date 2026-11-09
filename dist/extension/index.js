@@ -570,7 +570,7 @@
     const hot = r.hot ?? [];
     const reloaded = r.reloaded ?? [];
     const rt = r.runtime;
-    const head = changed.length > 0 ? "\u5DF2\u4FDD\u5B58" : r.reloadedRuntime ? "\u6CA1\u6709\u6539\u52A8\uFF0C\u5DF2\u6309\u73B0\u6709 config.json \u91CD\u65B0\u542F\u52A8" : "\u6CA1\u6709\u6539\u52A8";
+    const head = r.reconnected ? "\u5DF2\u6309 config.json \u91CD\u65B0\u8FDE\u63A5" : changed.length > 0 ? "\u5DF2\u4FDD\u5B58" : r.reloadedRuntime ? "\u6CA1\u6709\u6539\u52A8\uFF0C\u5DF2\u6309\u73B0\u6709 config.json \u91CD\u65B0\u542F\u52A8" : "\u6CA1\u6709\u6539\u52A8";
     const parts = [`${head}\u3002`];
     if (hot.length > 0) parts.push(`\u5DF2\u7ACB\u5373\u751F\u6548\uFF1A${hot.map(fieldLabel).join("\u3001")}\u3002`);
     if (!rt || !r.reloadedRuntime && reloaded.length === 0 && rt.state === "running" && rt.telegram !== "error") return parts.join("");
@@ -839,13 +839,14 @@
     f.basicAuthPassword.style.marginTop = "4px";
     for (const r of Object.values(rows)) form.append(r.root);
     const save = el("input", { type: "button", class: "menu_button", value: "\u4FDD\u5B58" });
+    const reconnect = el("input", { type: "button", class: "menu_button", value: "\u91CD\u65B0\u8FDE\u63A5", title: "\u91CD\u65B0\u8BFB\u53D6 config.json \u5E76\u91CD\u65B0\u8FDE\u63A5\u3002\u624B\u52A8\u6539\u8FC7\u6587\u4EF6\u540E\u7528\u5B83\uFF0C\u4E0D\u7528\u91CD\u542F ST\u3002", style: "margin-left:6px" });
     const status = el("small", { style: "margin-left:8px" });
     const foot = el("div", { style: "margin-top:6px" });
-    foot.append(save, status);
+    foot.append(save, reconnect, status);
     form.append(foot);
     const runtimeBox = el("div", { class: "silly-tg-runtime", style: "margin-top:8px" });
     form.append(runtimeBox);
-    form.append(el("small", { style: "opacity:.65;display:block;margin-top:8px" }, "Chromium \u8DEF\u5F84\u7B49\u672A\u5728\u6B64\u5217\u51FA\u7684\u9009\u9879\u53EA\u80FD\u5728 config.json \u91CC\u4FEE\u6539\uFF08\u624B\u52A8\u6539\u6587\u4EF6\u540E\u8981\u91CD\u542F ST \u624D\u751F\u6548\uFF09\u3002\u884C\u52A8\u9009\u9879\u89C4\u5219\u89C1\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 choice-rules.json\uFF08\u6539\u5B8C\u65E0\u9700\u91CD\u542F\uFF09\u3002"));
+    form.append(el("small", { style: "opacity:.65;display:block;margin-top:8px" }, "Chromium \u8DEF\u5F84\u7B49\u672A\u5728\u6B64\u5217\u51FA\u7684\u9009\u9879\u53EA\u80FD\u5728 config.json \u91CC\u4FEE\u6539\uFF08\u624B\u52A8\u6539\u6587\u4EF6\u540E\u70B9\u201C\u91CD\u65B0\u8FDE\u63A5\u201D\u5373\u53EF\u751F\u6548\uFF0C\u4E0D\u7528\u91CD\u542F ST\uFF09\u3002\u884C\u52A8\u9009\u9879\u89C4\u5219\u89C1\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 choice-rules.json\uFF08\u6539\u5B8C\u65E0\u9700\u91CD\u542F\uFF09\u3002"));
     let original;
     const clearErrors = () => {
       for (const r of Object.values(rows)) r.error.textContent = "";
@@ -994,6 +995,28 @@
           else pollToken++;
         } catch (e) {
           status.textContent = `\u4FDD\u5B58\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`;
+        }
+      })();
+    });
+    reconnect.addEventListener("click", () => {
+      void (async () => {
+        clearErrors();
+        status.textContent = "\u91CD\u65B0\u8FDE\u63A5\u4E2D\u2026";
+        try {
+          const r = await request("POST", {}, "/reload");
+          if (!r.ok) {
+            if (r.errors?.length) status.textContent = `config.json \u6709\u8BEF\uFF0C\u6CA1\u6709\u91CD\u65B0\u8FDE\u63A5\uFF1A${r.errors.map((e) => `${fieldLabel(e.field)}\uFF1A${e.message}`).join("\uFF1B")}`;
+            else status.textContent = r.error ?? (r.serverMissing ? "\u670D\u52A1\u7AEF\u63D2\u4EF6\u672A\u5B89\u88C5\u6216\u672A\u542F\u7528\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u67E5\u770B\u5B89\u88C5\u5F15\u5BFC\u3002" : "\u91CD\u65B0\u8FDE\u63A5\u5931\u8D25");
+            return;
+          }
+          status.textContent = saveResultMessage(r);
+          if (r.values) fill(r.values);
+          showBanner({ ...r, exists: true });
+          renderRuntime(r.runtime);
+          if (r.runtime && runtimeInProgress(r.runtime)) pollRuntime(r);
+          else pollToken++;
+        } catch (e) {
+          status.textContent = `\u91CD\u65B0\u8FDE\u63A5\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`;
         }
       })();
     });
