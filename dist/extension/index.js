@@ -565,12 +565,61 @@
     else patch.draftIntervalSeconds = draft;
     return errors.length > 0 ? { ok: false, errors } : { ok: true, patch };
   }
-  function saveSummary(r) {
-    if (!r.changed || r.changed.length === 0) return "\u6CA1\u6709\u6539\u52A8\u3002";
-    const parts = ["\u5DF2\u4FDD\u5B58\u3002"];
-    if (r.hot && r.hot.length > 0) parts.push(`\u5DF2\u7ACB\u5373\u751F\u6548\uFF1A${r.hot.map(fieldLabel).join("\u3001")}\u3002`);
-    if (r.restart && r.restart.length > 0) parts.push(`\u9700\u8981\u91CD\u542F ST \u624D\u751F\u6548\uFF1A${r.restart.map(fieldLabel).join("\u3001")}\u3002`);
+  function saveResultMessage(r) {
+    const changed = r.changed ?? [];
+    const hot = r.hot ?? [];
+    const reloaded = r.reloaded ?? [];
+    const rt = r.runtime;
+    const head = changed.length > 0 ? "\u5DF2\u4FDD\u5B58" : r.reloadedRuntime ? "\u6CA1\u6709\u6539\u52A8\uFF0C\u5DF2\u6309\u73B0\u6709 config.json \u91CD\u65B0\u542F\u52A8" : "\u6CA1\u6709\u6539\u52A8";
+    const parts = [`${head}\u3002`];
+    if (hot.length > 0) parts.push(`\u5DF2\u7ACB\u5373\u751F\u6548\uFF1A${hot.map(fieldLabel).join("\u3001")}\u3002`);
+    if (!rt || !r.reloadedRuntime && reloaded.length === 0 && rt.state === "running" && rt.telegram !== "error") return parts.join("");
+    if (runtimeSettling(rt)) return `${parts.join("")}\u6B63\u5728\u91CD\u65B0\u8FDE\u63A5\u2026`;
+    if (rt.state === "standby") return `${head}\uFF0C\u4F46\u63D2\u4EF6\u6CA1\u6709\u542F\u52A8\uFF1A${rt.errors?.map((e) => e.message).join("\uFF1B") || "\u8BF7\u68C0\u67E5\u914D\u7F6E"}`;
+    if (rt.telegram === "error") return `${head}\uFF0C\u4F46\u8FDE\u63A5 Telegram \u5931\u8D25\uFF1A${rt.telegramError ?? "\u539F\u56E0\u89C1 ST \u65E5\u5FD7"}`;
+    if (rt.telegram === "ok") parts.push(`\u5DF2\u91CD\u65B0\u8FDE\u63A5${rt.botUsername ? `\uFF0Cbot\uFF1A@${rt.botUsername}` : ""}\u3002`);
+    else parts.push("\u5DF2\u91CD\u65B0\u52A0\u8F7D\u3002");
     return parts.join("");
+  }
+  var LEVEL_ICON = { ok: "\u{1F7E2}", error: "\u{1F534}", pending: "\u23F3", idle: "\u26AA" };
+  function describeRuntime(rt) {
+    const lines = [];
+    const add = (level, text) => void lines.push({ level, text });
+    switch (rt.state) {
+      case "standby":
+        if (rt.standbyReason === "invalid-config") add("error", "\u5F85\u547D\uFF1A\u914D\u7F6E\u6709\u8BEF\uFF0C\u4FEE\u6B63\u540E\u4FDD\u5B58\u5373\u53EF\uFF0C\u65E0\u9700\u91CD\u542F ST\u3002");
+        else if (rt.standbyReason === "start-failed") add("error", "\u5F85\u547D\uFF1A\u4E0A\u6B21\u542F\u52A8\u5931\u8D25\uFF0C\u4FEE\u6B63\u540E\u518D\u4FDD\u5B58\u4E00\u6B21\u5373\u53EF\u91CD\u8BD5\u3002");
+        else add("idle", "\u5F85\u547D\uFF1A\u8FD8\u6CA1\u6709\u914D\u7F6E\u3002\u586B\u5199 Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID \u540E\u4FDD\u5B58\uFF0C\u63D2\u4EF6\u4F1A\u7ACB\u5373\u542F\u52A8\u3002");
+        for (const e of rt.errors ?? []) add("error", `\xB7 ${e.field}\uFF1A${e.message}`);
+        break;
+      case "starting":
+        add("pending", "\u6B63\u5728\u542F\u52A8\u2026");
+        break;
+      case "stopping":
+        add("pending", "\u6B63\u5728\u91CD\u65B0\u52A0\u8F7D\u2026");
+        break;
+      case "running":
+        add("ok", "\u8FD0\u884C\u4E2D");
+        break;
+    }
+    if (rt.telegram === "ok") add("ok", `Telegram\uFF1A\u5DF2\u8FDE\u63A5${rt.botUsername ? ` @${rt.botUsername}` : ""}`);
+    else if (rt.telegram === "error") add("error", `Telegram\uFF1A\u8FDE\u63A5\u5931\u8D25\u3002${rt.telegramError ?? "\u539F\u56E0\u89C1 ST \u65E5\u5FD7"}`);
+    else if (rt.telegram === "pending") add("pending", "Telegram\uFF1A\u8FDE\u63A5\u4E2D\u2026");
+    else add("idle", rt.state === "running" ? "Telegram\uFF1A\u672A\u8FDE\u63A5\uFF08\u79BB\u7EBF\u6A21\u5F0F\uFF09" : "Telegram\uFF1A\u672A\u8FDE\u63A5");
+    if (rt.chromium.found) add("ok", "Chromium\uFF1A\u5DF2\u627E\u5230");
+    else add("error", `Chromium\uFF1A\u672A\u627E\u5230\u3002${rt.chromium.hint ?? ""}`.trim());
+    if (rt.hostConnected) add("ok", `\u65E0\u5934\u9875\u9762\uFF1A\u5DF2\u8FDE\u63A5${rt.hostPage ? `\uFF08ST ${rt.hostPage.stVersion}\uFF09` : ""}`);
+    else if (rt.state === "running" && rt.chromium.found) add("pending", "\u65E0\u5934\u9875\u9762\uFF1A\u672A\u8FDE\u63A5\uFF08\u6B63\u5728\u542F\u52A8\uFF0C\u6216\u5DF2\u7A7A\u95F2\u5173\u95ED\uFF0C\u6536\u5230\u6D88\u606F\u65F6\u4F1A\u81EA\u52A8\u542F\u52A8\uFF09");
+    else add("idle", "\u65E0\u5934\u9875\u9762\uFF1A\u672A\u542F\u52A8");
+    return lines;
+  }
+  function runtimeSettling(rt) {
+    return rt.state === "starting" || rt.state === "stopping" || rt.telegram === "pending";
+  }
+  var POLL_TIMEOUT_NOTE = "30 \u79D2\u5185\u8FD8\u6CA1\u6709\u5B8C\u6210\uFF08\u53EF\u80FD\u662F\u7F51\u7EDC\u6216\u4EE3\u7406\u8F83\u6162\uFF09\u3002\u7A0D\u540E\u91CD\u65B0\u6253\u5F00\u672C\u9762\u677F\u67E5\u770B\u72B6\u6001\uFF0C\u6216\u67E5\u770B ST \u7684\u65E5\u5FD7\u3002";
+  function runtimeInProgress(rt) {
+    if (runtimeSettling(rt)) return true;
+    return rt.state === "running" && rt.chromium.found && !rt.hostConnected;
   }
   var FIELD_LABELS = {
     botToken: "Bot Token",
@@ -591,13 +640,13 @@
     return status === 404 ? "server-missing" : "other";
   }
   var INSTALL_GUIDE = {
-    title: "\u8FD8\u9700\u8981\u5B89\u88C5\u670D\u52A1\u7AEF\u63D2\u4EF6",
-    intro: "\u8FD9\u4E2A\u6269\u5C55\u53EA\u662F Silly TG \u7684\u9875\u9762\u90E8\u5206\uFF0C\u9700\u8981\u914D\u5957\u7684\u670D\u52A1\u7AEF\u63D2\u4EF6\u624D\u80FD\u5DE5\u4F5C\u3002\u8BF7\u6309\u4E0B\u9762\u7684\u6B65\u9AA4\u8865\u88C5\uFF1A",
+    title: "\u670D\u52A1\u7AEF\u63D2\u4EF6\u6CA1\u6709\u52A0\u8F7D",
+    intro: "\u8FD9\u4E2A\u6269\u5C55\u53EA\u662F Silly TG \u7684\u9875\u9762\u90E8\u5206\uFF0C\u9700\u8981\u914D\u5957\u7684\u670D\u52A1\u7AEF\u63D2\u4EF6\u624D\u80FD\u5DE5\u4F5C\u3002\u51FA\u73B0\u8FD9\u6BB5\u8BF4\u660E\uFF0C\u662F\u56E0\u4E3A ST \u6CA1\u6709\u52A0\u8F7D\u5B83\uFF1A\u53EF\u80FD\u8FD8\u6CA1\u88C5\u5230 ST \u7684 plugins \u76EE\u5F55\uFF0C\u6216\u8005 config.yaml \u91CC\u7684 enableServerPlugins \u4E0D\u662F true\u3002\u8BF7\u6309\u4E0B\u9762\u7684\u6B65\u9AA4\u68C0\u67E5\uFF1A",
     command: "git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg",
     steps: [
-      "\u5728 SillyTavern \u7684\u6839\u76EE\u5F55\u6267\u884C\u4E0A\u9762\u7684\u547D\u4EE4\uFF08\u9700\u8981\u5DF2\u5B89\u88C5 git\uFF09\u3002",
-      "\u6253\u5F00 ST \u6839\u76EE\u5F55\u7684 config.yaml\uFF0C\u628A enableServerPlugins \u6539\u6210 true\u3002\u9ED8\u8BA4\u662F false\uFF0C\u4E0D\u5F00\u542F\u65F6\u63D2\u4EF6\u4E0D\u4F1A\u88AB\u52A0\u8F7D\uFF0C\u4E5F\u6CA1\u6709\u4EFB\u4F55\u63D0\u793A\u3002",
-      "\u91CD\u542F ST\uFF0C\u7136\u540E\u5237\u65B0\u672C\u9875\u9762\uFF0C\u56DE\u5230\u8FD9\u91CC\u586B\u5199 Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID\u3002"
+      "\u5728 SillyTavern \u7684\u6839\u76EE\u5F55\u6267\u884C\u4E0A\u9762\u7684\u547D\u4EE4\uFF08\u9700\u8981\u5DF2\u5B89\u88C5 git\uFF09\u3002\u5DF2\u7ECF\u6709 plugins/silly-tg \u76EE\u5F55\u5C31\u4E0D\u7528\u518D\u6267\u884C\u3002",
+      "\u6253\u5F00 ST \u6839\u76EE\u5F55\u7684 config.yaml\uFF0C\u628A enableServerPlugins \u6539\u6210 true\uFF08\u5DF2\u7ECF\u662F true \u5C31\u4E0D\u7528\u6539\uFF09\u3002\u9ED8\u8BA4\u662F false\uFF0C\u4E0D\u5F00\u542F\u65F6\u63D2\u4EF6\u4E0D\u4F1A\u88AB\u52A0\u8F7D\uFF0C\u4E5F\u6CA1\u6709\u4EFB\u4F55\u63D0\u793A\u3002",
+      "\u91CD\u542F ST \u4E00\u6B21\uFF0C\u7136\u540E\u5237\u65B0\u672C\u9875\u9762\uFF0C\u56DE\u5230\u8FD9\u91CC\u586B\u5199 Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID \u5E76\u4FDD\u5B58\u3002\u4FDD\u5B58\u540E\u7ACB\u5373\u751F\u6548\uFF0C\u65E0\u9700\u518D\u91CD\u542F\u3002"
     ],
     readmeUrl: "https://github.com/incohua/silly-tg-bridge-plugin#\u5B89\u88C5",
     readmeText: "\u67E5\u770B\u5B8C\u6574\u5B89\u88C5\u8BF4\u660E"
@@ -650,6 +699,9 @@
 
   // src/extension/settings-ui.ts
   var CONTAINER_ID = "extensions_settings2";
+  var POLL_INTERVAL_MS = 1e3;
+  var POLL_MAX_MS = 3e4;
+  var RECONNECT = "\u4FDD\u5B58\u540E\u81EA\u52A8\u91CD\u65B0\u8FDE\u63A5";
   var ROOT_ID = "silly_tg_settings";
   function el(tag, attrs = {}, text) {
     const e = document.createElement(tag);
@@ -770,11 +822,11 @@
       ])
     };
     const rows = {
-      botToken: row("Bot Token", "\u91CD\u542F ST \u540E\u751F\u6548", f.botToken),
-      allowedUserIds: row("\u5141\u8BB8\u7684\u7528\u6237 ID", "\u91CD\u542F ST \u540E\u751F\u6548", f.allowedUserIds, "\u53EA\u6709\u8FD9\u4E9B Telegram \u8D26\u53F7\u80FD\u4F7F\u7528 bot\u3002"),
-      telegramProxy: row("Telegram \u4EE3\u7406", "\u91CD\u542F ST \u540E\u751F\u6548", f.telegramProxy),
-      stBaseUrl: row("ST \u5730\u5740", "\u91CD\u542F ST \u540E\u751F\u6548", f.stBaseUrl, "\u65E0\u5934\u6D4F\u89C8\u5668\u8BBF\u95EE ST \u7528\u7684\u5730\u5740\u3002"),
-      basicAuth: row("ST \u767B\u5F55\u8D26\u53F7", "\u91CD\u542F ST \u540E\u751F\u6548", f.basicAuthUser),
+      botToken: row("Bot Token", RECONNECT, f.botToken),
+      allowedUserIds: row("\u5141\u8BB8\u7684\u7528\u6237 ID", "\u7ACB\u5373\u751F\u6548", f.allowedUserIds, "\u53EA\u6709\u8FD9\u4E9B Telegram \u8D26\u53F7\u80FD\u4F7F\u7528 bot\u3002"),
+      telegramProxy: row("Telegram \u4EE3\u7406", RECONNECT, f.telegramProxy),
+      stBaseUrl: row("ST \u5730\u5740", RECONNECT, f.stBaseUrl, "\u65E0\u5934\u6D4F\u89C8\u5668\u8BBF\u95EE ST \u7528\u7684\u5730\u5740\u3002"),
+      basicAuth: row("ST \u767B\u5F55\u8D26\u53F7", RECONNECT, f.basicAuthUser),
       idleShutdownMinutes: row("\u7A7A\u95F2\u5173\u95ED\uFF08\u5206\u949F\uFF09", "\u7ACB\u5373\u751F\u6548", f.idleShutdownMinutes, "0 \u8868\u793A\u4E0D\u81EA\u52A8\u5173\u95ED\u65E0\u5934\u6D4F\u89C8\u5668\u3002"),
       lowMemory: row("\u4F4E\u5185\u5B58\u6A21\u5F0F", "\u4E0B\u6B21\u542F\u52A8\u6D4F\u89C8\u5668\u65F6\u751F\u6548", f.lowMemory),
       dialogueStyle: row("\u5BF9\u8BDD\u6837\u5F0F", "\u7ACB\u5373\u751F\u6548", f.dialogueStyle),
@@ -791,7 +843,9 @@
     const foot = el("div", { style: "margin-top:6px" });
     foot.append(save, status);
     form.append(foot);
-    form.append(el("small", { style: "opacity:.65;display:block;margin-top:8px" }, "Chromium \u8DEF\u5F84\u7B49\u672A\u5728\u6B64\u5217\u51FA\u7684\u9009\u9879\u53EA\u80FD\u5728 config.json \u91CC\u4FEE\u6539\u3002\u884C\u52A8\u9009\u9879\u89C4\u5219\u89C1\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 choice-rules.json\uFF08\u6539\u5B8C\u65E0\u9700\u91CD\u542F\uFF09\u3002"));
+    const runtimeBox = el("div", { class: "silly-tg-runtime", style: "margin-top:8px" });
+    form.append(runtimeBox);
+    form.append(el("small", { style: "opacity:.65;display:block;margin-top:8px" }, "Chromium \u8DEF\u5F84\u7B49\u672A\u5728\u6B64\u5217\u51FA\u7684\u9009\u9879\u53EA\u80FD\u5728 config.json \u91CC\u4FEE\u6539\uFF08\u624B\u52A8\u6539\u6587\u4EF6\u540E\u8981\u91CD\u542F ST \u624D\u751F\u6548\uFF09\u3002\u884C\u52A8\u9009\u9879\u89C4\u5219\u89C1\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 choice-rules.json\uFF08\u6539\u5B8C\u65E0\u9700\u91CD\u542F\uFF09\u3002"));
     let original;
     const clearErrors = () => {
       for (const r of Object.values(rows)) r.error.textContent = "";
@@ -823,15 +877,19 @@
     };
     const showBanner = (r) => {
       banner.textContent = "";
-      if (r.exists === false) banner.append(el("div", {}, "\u8FD8\u6CA1\u6709 config.json\uFF1A\u586B\u597D Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID \u540E\u4FDD\u5B58\uFF0C\u7136\u540E\u91CD\u542F ST\u3002"));
-      else if (r.running === false) {
-        banner.append(el("div", {}, "\u63D2\u4EF6\u5F53\u524D\u6CA1\u6709\u542F\u52A8\uFF08\u914D\u7F6E\u6709\u8BEF\uFF09\u3002\u4FEE\u6B63\u540E\u4FDD\u5B58\u5E76\u91CD\u542F ST\uFF1A"));
-        for (const e of r.startErrors ?? []) banner.append(el("div", { style: "opacity:.8" }, `\xB7 ${e.field}\uFF1A${e.message}`));
+      if (r.exists === false) banner.append(el("div", {}, "\u8FD8\u6CA1\u6709 config.json\uFF1A\u586B\u597D Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID \u540E\u4FDD\u5B58\uFF0C\u63D2\u4EF6\u4F1A\u7ACB\u5373\u542F\u52A8\uFF0C\u65E0\u9700\u91CD\u542F ST\u3002"));
+      else if (r.runtime ? r.runtime.state === "standby" && r.runtime.standbyReason !== "no-config" : r.running === false) {
+        banner.append(el("div", {}, "\u63D2\u4EF6\u5904\u4E8E\u5F85\u547D\u72B6\u6001\uFF08\u914D\u7F6E\u6709\u8BEF\u6216\u542F\u52A8\u5931\u8D25\uFF09\u3002\u5728\u4E0B\u9762\u4FEE\u6B63\u540E\u4FDD\u5B58\u5373\u53EF\uFF0C\u65E0\u9700\u91CD\u542F ST\u3002"));
       }
     };
-    const request = async (method, body) => {
+    const renderRuntime = (rt) => {
+      runtimeBox.textContent = "";
+      if (!rt) return;
+      for (const line of describeRuntime(rt)) runtimeBox.append(el("div", { style: line.level === "error" ? "color:var(--SmartThemeQuoteColor,#e66)" : "" }, `${LEVEL_ICON[line.level]} ${line.text}`));
+    };
+    const request = async (method, body, path = "/config") => {
       const headers = ctx().getRequestHeaders();
-      const res = await fetch(`${PLUGIN_BASE}/config`, { method, headers, body: body === void 0 ? void 0 : JSON.stringify(body) });
+      const res = await fetch(`${PLUGIN_BASE}${path}`, { method, headers, body: body === void 0 ? void 0 : JSON.stringify(body) });
       if (classifyConfigFailure(res.status) === "server-missing") return { ok: false, serverMissing: true };
       let json;
       try {
@@ -840,6 +898,33 @@
         return { ok: false, error: `\u670D\u52A1\u7AEF\u8FD4\u56DE\u4E86\u65E0\u6CD5\u89E3\u6790\u7684\u5185\u5BB9\uFF08HTTP ${res.status}\uFF09\u3002\u63D2\u4EF6\u53EF\u80FD\u6CA1\u6709\u52A0\u8F7D\uFF0C\u68C0\u67E5 ST \u7684 enableServerPlugins\u3002` };
       }
       return res.ok ? json : { ...json, ok: false, error: json.error ?? `HTTP ${res.status}` };
+    };
+    let pollToken = 0;
+    const pollRuntime = (saved) => {
+      const token = ++pollToken;
+      const deadline = Date.now() + POLL_MAX_MS;
+      let last = saved?.runtime;
+      const tick = async () => {
+        if (token !== pollToken) return;
+        if (Date.now() > deadline) {
+          if (!last || runtimeSettling(last)) {
+            if (saved) status.textContent = `${saveResultMessage({ ...saved, runtime: last })}${POLL_TIMEOUT_NOTE}`;
+            else runtimeBox.append(el("div", {}, `${LEVEL_ICON.pending} ${POLL_TIMEOUT_NOTE}`));
+          }
+          return;
+        }
+        try {
+          const r = await request("GET", void 0, "/status");
+          if (token !== pollToken || !r.ok || !r.runtime) return;
+          last = r.runtime;
+          renderRuntime(r.runtime);
+          if (saved) status.textContent = saveResultMessage({ ...saved, runtime: r.runtime });
+          if (!runtimeInProgress(r.runtime)) return;
+        } catch {
+        }
+        setTimeout(() => void tick(), POLL_INTERVAL_MS);
+      };
+      setTimeout(() => void tick(), POLL_INTERVAL_MS);
     };
     const load = async () => {
       status.textContent = "\u8BFB\u53D6\u4E2D\u2026";
@@ -860,7 +945,9 @@
         }
         showBanner(r);
         fill(r.values);
+        renderRuntime(r.runtime);
         status.textContent = "";
+        if (r.runtime && runtimeInProgress(r.runtime)) pollRuntime();
       } catch (e) {
         status.textContent = `\u8BFB\u53D6\u914D\u7F6E\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`;
       }
@@ -899,9 +986,12 @@
             } else status.textContent = r.error ?? (r.serverMissing ? "\u670D\u52A1\u7AEF\u63D2\u4EF6\u672A\u5B89\u88C5\u6216\u672A\u542F\u7528\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u67E5\u770B\u5B89\u88C5\u5F15\u5BFC\u3002" : "\u4FDD\u5B58\u5931\u8D25");
             return;
           }
-          status.textContent = saveSummary(r);
+          status.textContent = saveResultMessage(r);
           if (r.values) fill(r.values);
-          showBanner({ ...r, running: void 0, exists: true });
+          showBanner({ ...r, exists: true });
+          renderRuntime(r.runtime);
+          if (r.runtime && runtimeInProgress(r.runtime)) pollRuntime(r);
+          else pollToken++;
         } catch (e) {
           status.textContent = `\u4FDD\u5B58\u5931\u8D25\uFF1A${e instanceof Error ? e.message : String(e)}`;
         }

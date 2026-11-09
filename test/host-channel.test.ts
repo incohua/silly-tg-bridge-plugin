@@ -1,7 +1,7 @@
 import type { AddressInfo } from 'node:net';
 import type { Server } from 'node:http';
 import express from 'express';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HostChannel, HostChannelError } from '../src/server/host-channel';
 import type { HostCommand, HostEvent } from '../src/shared/protocol';
 import { noopLogger } from './helpers';
@@ -12,7 +12,8 @@ let channel: HostChannel;
 const aborts: AbortController[] = [];
 
 beforeEach(async () => {
-  channel = new HostChannel({ log: noopLogger, rpcTimeoutMs: 200, keepAliveMs: 50 });
+  // 默认 RPC 超时设得很长：只有专门测超时的用例才传短的超时，其余用例不能因为 CPU 繁忙而误超时
+  channel = new HostChannel({ log: noopLogger, rpcTimeoutMs: 60_000, keepAliveMs: 50 });
   const app = express();
   app.use(express.json());
   const router = express.Router();
@@ -106,8 +107,7 @@ describe('HostChannel', () => {
     await sse.next();
     sse.ac.abort();
     await expect(p).rejects.toMatchObject({ code: 'disconnected' });
-    await new Promise((r) => setTimeout(r, 20));
-    expect(channel.connected).toBe(false);
+    await vi.waitFor(() => expect(channel.connected).toBe(false), { timeout: 4000, interval: 5 });
   });
 
   it('新连接替换旧连接', async () => {

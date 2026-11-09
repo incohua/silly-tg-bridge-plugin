@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { BrowserManager, chromiumArgs, hostUrl, type BrowserEvent, type HostLink, type LaunchedBrowser, type Launcher, type PageLike } from '../src/server/browser';
 import { captureLogger } from './helpers';
 
@@ -229,8 +229,7 @@ describe('BrowserManager', () => {
     await wait(120);
     expect(m.state).toBe('running');
     release();
-    await wait(150);
-    expect(m.state).toBe('stopped');
+    await vi.waitFor(() => expect(m.state).toBe('stopped'), { timeout: 4000, interval: 5 });
     expect(launched[0].closed).toBe(true);
     expect(events.map((e) => e.type)).toEqual(['started', 'stopped']);
     expect(events[1]).toEqual({ type: 'stopped', reason: 'idle' });
@@ -287,8 +286,10 @@ describe('BrowserManager', () => {
     const { m, events } = make(host, launcher);
     await m.ensureRunning();
     launched[0].crashPage();
-    await wait(10);
+    // 崩溃处理是同步的：事件已发出、关闭已开始。之后等这次关闭完成（stop() 返回进行中的那次），不按固定时长睡
     expect(events.some((e) => e.type === 'crashed')).toBe(true);
+    expect(m.state).toBe('stopping');
+    await m.stop();
     expect(launched[0].closed).toBe(true);
     expect(m.state).toBe('stopped');
     await m.dispose();
@@ -340,5 +341,65 @@ describe('BrowserManager', () => {
     const { m } = make(host, launcher);
     await m.dispose();
     await expect(m.ensureRunning()).rejects.toThrow(/退出/);
+  });
+
+  it('启动中（等扩展连接）dispose：不等连接超时，立即关闭浏览器；不当成故障', async () => {
+    const host = new FakeHost();
+    const { launcher, launched } = fakeLauncher(host, { connect: false });
+    const { m, log, events } = make(host, launcher, { hostReadyTimeoutMs: 60_000 });
+    const starting = m.ensureRunning().catch((e: Error) => e);
+    while (launched.length === 0) await wait(2);
+    await wait(10);
+    const t = Date.now();
+    await m.dispose();
+    expect(Date.now() - t).toBeLessThan(1000);
+    expect(launched[0].closed).toBe(true);
+    expect(m.state).toBe('stopped');
+    expect(String(await starting)).toMatch(/退出|重新加载/);
+    expect(events.some((e) => e.type === 'crashed')).toBe(false);
+    expect(log.lines.some((l) => l.startsWith('error'))).toBe(false);
+  });
+
+  it('等 ST 可访问时 dispose：不再换 nonce（通道跨重新加载共用，换了会踢掉新页面），也不启动浏览器', async () => {
+    const host = new FakeHost();
+    const { launcher, launched } = fakeLauncher(host);
+    let release!: (r: Response) => void;
+    let asked = 0;
+    const gated = () => (asked++, new Promise<Response>((r) => (release = r)));
+    const { m } = make(host, launcher, { fetch: gated });
+    const starting = m.ensureRunning().catch((e: Error) => e);
+    await vi.waitFor(() => expect(asked).toBe(1), { timeout: 4000, interval: 2 });
+    const disposing = m.dispose();
+    release(new Response('ok', { status: 200 }));
+    await disposing;
+    expect(String(await starting)).toMatch(/退出|重新加载/);
+    expect(host.nonces).toEqual([]);
+    expect(launched).toHaveLength(0);
+    expect(m.state).toBe('stopped');
+  });
+
+  it('launcher 进行中 dispose：拉起来的进程立即关掉，不再开页面', async () => {
+    const host = new FakeHost();
+    const inner = fakeLauncher(host);
+    let release!: () => void;
+    let calls = 0;
+    const gate = new Promise<void>((r) => (release = r));
+    const launcher: Launcher = async (o) => {
+      calls++;
+      await gate;
+      return inner.launcher(o);
+    };
+    const { m, log } = make(host, launcher);
+    const starting = m.ensureRunning().catch((e: Error) => e);
+    await vi.waitFor(() => expect(calls).toBe(1), { timeout: 4000, interval: 2 });
+    const disposing = m.dispose();
+    release();
+    await disposing;
+    expect(String(await starting)).toMatch(/退出|重新加载/);
+    expect(inner.launched).toHaveLength(1);
+    expect(inner.launched[0].closed).toBe(true);
+    expect(inner.launched[0].gotoUrl).toBeUndefined();
+    expect(m.state).toBe('stopped');
+    expect(log.lines.some((l) => l.startsWith('error'))).toBe(false);
   });
 });

@@ -217,11 +217,16 @@ describe('恶意与异常输入', () => {
     expect(out).toBe('<video src="https://e.com/v.mp4"></video><audio src="https://e.com/a.mp3"></audio>');
   });
 
+  // 未闭合标签的个数：远超建树上限 MAX_TREE_DEPTH（128），足以覆盖“压平”分支。
+  // 不用 10 万：htmlparser2 的标签栈用 unshift，未闭合标签多时耗时是平方级（10 万个约 1.3 秒），
+  // 并行跑测试、CPU 繁忙时会超过 5 秒的用例超时。
+  const UNCLOSED = 20_000;
+
   it('超深嵌套（块与行内）不抛错，输出深度不超过 16', () => {
     const n = 5000;
     const blocks = '<blockquote><div><ul><li>'.repeat(n) + '深' + '</li></ul></div></blockquote>'.repeat(n);
     const inline = '<p>' + '<b><i>'.repeat(n) + '深' + '</i></b>'.repeat(n) + '</p>';
-    for (const input of [blocks, inline, '<div>'.repeat(100000) + '深']) {
+    for (const input of [blocks, inline, '<div>'.repeat(UNCLOSED) + '深']) {
       const parts = toRichMessages(input);
       expect(parts.length).toBeGreaterThan(0);
       expect(joinedText(parts)).toContain('深');
@@ -436,7 +441,7 @@ describe('失败回退与纯文本', () => {
   });
 
   it('toPlainTexts 对超深嵌套不抛错', () => {
-    const parts = toPlainTexts('<div>'.repeat(100000) + '深');
+    const parts = toPlainTexts('<div>'.repeat(20_000) + '深'); // 规模的取舍见上面 UNCLOSED 的说明
     expect(parts.join('')).toContain('深');
   });
 

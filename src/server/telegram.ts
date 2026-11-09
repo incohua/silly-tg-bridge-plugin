@@ -162,8 +162,8 @@ export class TelegramClient {
     );
   }
 
-  getMe(): Promise<TelegramUser> {
-    return this.call<TelegramUser>('getMe');
+  getMe(signal?: AbortSignal): Promise<TelegramUser> {
+    return this.call<TelegramUser>('getMe', {}, { signal });
   }
 
   getUpdates(
@@ -233,7 +233,7 @@ export async function pollUpdates(opts: PollOptions): Promise<'aborted' | 'unaut
     } catch (e) {
       if (signal.aborted) break;
       if (e instanceof TelegramApiError && e.errorCode === 401) {
-        log.error('Telegram 拒绝了 botToken（401）。检查 config.json 里的 botToken 是否正确，改好后重启 ST。轮询已停止。');
+        log.error('Telegram 拒绝了 botToken（401），轮询已停止。在 ST 扩展设置栏的 Silly TG 面板里改好 botToken 并保存即可，无需重启 ST（直接改 config.json 的话要重启 ST 才会重新读取）。');
         return 'unauthorized';
       }
       if (e instanceof TelegramApiError && e.errorCode === 409) {

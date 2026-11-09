@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import {
   Bot,
   BOT_COMMANDS,
@@ -344,10 +344,29 @@ describe('Bot 对话', () => {
     await bot.idle();
   });
 
+  it('dispose（运行时重新加载或退出）：进行中的一轮立即按中断收尾，不再等页面', async () => {
+    const { bot, telegram, host } = setup({ turnIdleTimeoutMs: 60_000 });
+    await bot.handleUpdate(text('hi'));
+    await vi.waitFor(() => expect(host.requests.some((r) => r.type === 'send')).toBe(true), { timeout: 4000, interval: 2 });
+    expect(bot.busy).toBe(true);
+    bot.dispose();
+    await bot.idle();
+    expect(bot.busy).toBe(false);
+    expect(telegram.texts().at(-1)).toMatch(/这一轮回复没有完成：插件正在重新加载或退出/);
+    // 之后页面再发结果也不会再回复
+    const n = telegram.texts().length;
+    host.emit({ type: 'messageFinal', generationId: host.gen, chatId: 'c', messageId: 1, html: '', text: '迟到的回复', stopped: false, cards: [] });
+    await wait(5);
+    expect(telegram.texts()).toHaveLength(n);
+    // 没有进行中的一轮时 dispose 无副作用
+    bot.dispose();
+  });
+
   it('不支持流式：收到正式消息前一直 typing，没有草稿', async () => {
     const { bot, telegram, host } = setup();
     await bot.handleUpdate(text('hi'));
-    await wait(70);
+    // 等到至少发出 3 次 typing（不按固定时长睡：CPU 繁忙时定时器会被推迟）
+    await vi.waitFor(() => expect(telegram.of('sendChatAction').length).toBeGreaterThanOrEqual(3), { timeout: 4000, interval: 5 });
     host.emit({ type: 'messageFinal', generationId: host.gen, chatId: 'c', messageId: 1, html: '', text: '完整回复', stopped: false, cards: [] });
     await bot.idle();
     expect(telegram.of('sendChatAction').length).toBeGreaterThanOrEqual(3);

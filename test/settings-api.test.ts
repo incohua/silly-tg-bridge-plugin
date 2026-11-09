@@ -3,8 +3,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { Router } from 'express';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
-import { applySettings, maskProxy, MASK, registerSettingsRoutes, saveSettingsPatch, viewSettings } from '../src/server/settings-api';
+import { applySettings, FIELD_EFFECTS, maskProxy, MASK, registerSettingsRoutes, saveSettingsPatch, viewSettings } from '../src/server/settings-api';
 import { validateConfig, type Config } from '../src/server/config';
+import type { RuntimeStatus } from '../src/shared/runtime-status';
 import { FAKE_TOKEN, noopLogger } from './helpers';
 
 const base = {
@@ -58,7 +59,7 @@ describe('applySettings', () => {
     expect(r.raw.telegramProxy).toBe('http://pu:proxy-pw@127.0.0.1:7890');
     expect(r.changed).toEqual(['dialogueStyle']);
     expect(r.hot).toEqual(['dialogueStyle']);
-    expect(r.restart).toEqual([]);
+    expect(r.reload).toEqual([]);
     expect(JSON.stringify(r.raw)).not.toContain(MASK);
   });
 
@@ -76,12 +77,14 @@ describe('applySettings', () => {
     expect(r.raw.logLevel).toBe('debug');
   });
 
-  it('分类：hot / restart', () => {
+  it('分类：hot / reload；allowedUserIds 立即生效；不再有需要重启 ST 的字段', () => {
     const r = applySettings(base, { logLevel: 'warn', lowMemory: false, idleShutdownMinutes: 10, allowedUserIds: [111, 222], stBaseUrl: 'http://127.0.0.1:8001' });
     expect(r.ok).toBe(true);
     if (!r.ok) return;
-    expect(r.hot.sort()).toEqual(['idleShutdownMinutes', 'logLevel', 'lowMemory']);
-    expect(r.restart.sort()).toEqual(['allowedUserIds', 'stBaseUrl']);
+    expect(r.hot.sort()).toEqual(['allowedUserIds', 'idleShutdownMinutes', 'logLevel', 'lowMemory']);
+    expect(r.reload.sort()).toEqual(['stBaseUrl']);
+    expect(Object.values(FIELD_EFFECTS)).not.toContain('restart');
+    expect(FIELD_EFFECTS).toMatchObject({ botToken: 'reload', telegramProxy: 'reload', basicAuth: 'reload', stBaseUrl: 'reload', allowedUserIds: 'hot' });
   });
 
   it('校验失败：返回逐字段错误，不产生结果', () => {
@@ -96,7 +99,7 @@ describe('applySettings', () => {
     expect(r.ok).toBe(true);
     if (!r.ok) return;
     expect(validateConfig(r.raw).ok).toBe(true);
-    expect(r.restart).toContain('botToken');
+    expect(r.reload).toContain('botToken');
   });
 
   it('basicAuth 设为 null 即清除', () => {
@@ -106,7 +109,7 @@ describe('applySettings', () => {
 });
 
 // 极简 router：记录 handler，直接调用
-type Handler = (req: { body?: unknown; user?: { profile?: { admin?: boolean } } }, res: FakeRes) => void;
+type Handler = (req: { body?: unknown; user?: { profile?: { admin?: boolean } } }, res: FakeRes) => void | Promise<void>;
 class FakeRes {
   statusCode = 200;
   body: unknown;
@@ -120,81 +123,162 @@ class FakeRes {
   }
 }
 
+const standbyStatus: RuntimeStatus = { state: 'standby', standbyReason: 'invalid-config', errors: [{ field: 'botToken', message: '缺少' }], telegram: 'skipped', chromium: { found: true }, hostConnected: false };
+const runningStatus: RuntimeStatus = { state: 'running', telegram: 'ok', botUsername: 'testbot', chromium: { found: true }, hostConnected: true };
+
 describe('路由', () => {
   let dir: string;
   let file: string;
   const handlers: Record<string, Handler> = {};
   const router = { get: (p: string, h: Handler) => (handlers[`GET ${p}`] = h), post: (p: string, h: Handler) => (handlers[`POST ${p}`] = h) } as unknown as Router;
   let live: Config | null;
+  let current: RuntimeStatus;
+  let reloads: number;
+  let reloadImpl: () => Promise<RuntimeStatus>;
   const hotCalls: Config[] = [];
   beforeEach(() => {
     dir = mkdtempSync(join(tmpdir(), 'settings-'));
     file = join(dir, 'config.json');
     hotCalls.length = 0;
     live = null;
-    registerSettingsRoutes(router, { configPath: file, log: noopLogger, live: () => live, startErrors: () => [{ field: 'botToken', message: '缺少' }], applyHot: (c) => hotCalls.push(c) });
+    current = standbyStatus;
+    reloads = 0;
+    reloadImpl = async () => (current = runningStatus);
+    registerSettingsRoutes(router, {
+      configPath: file,
+      log: noopLogger,
+      live: () => live,
+      runtime: {
+        status: () => current,
+        reload: () => (reloads++, reloadImpl()),
+      },
+      applyHot: (c) => hotCalls.push(c),
+      reloadWaitMs: 50,
+    });
   });
   afterEach(() => rmSync(dir, { recursive: true, force: true }));
-  const call = (key: string, body?: unknown) => {
+  const call = async (key: string, body?: unknown) => {
     const res = new FakeRes();
-    handlers[key]({ body }, res);
+    await handlers[key]({ body }, res);
     return res;
   };
+  const runningConfig = (): Config => {
+    const v = validateConfig(base);
+    if (!v.ok) throw new Error('fixture');
+    return v.config;
+  };
 
-  it('GET：没有文件时 exists:false，并带出未启动原因；响应无明文', () => {
-    const res = call('GET /config');
+  it('GET：没有文件时 exists:false，并带出待命原因和运行状态；响应无明文', async () => {
+    const res = await call('GET /config');
     expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({ ok: true, exists: false, running: false, startErrors: [{ field: 'botToken' }] });
+    expect(res.body).toMatchObject({ ok: true, exists: false, running: false, startErrors: [{ field: 'botToken' }], runtime: { state: 'standby' }, effects: { botToken: 'reload', allowedUserIds: 'hot' } });
   });
 
-  it('POST 从零创建：写出 600 权限的合法文件，全部提示重启', () => {
-    const res = call('POST /config', { settings: { botToken: FAKE_TOKEN, allowedUserIds: [7] } });
+  it('GET：运行中 running:true，startErrors 为空', async () => {
+    current = runningStatus;
+    const res = await call('GET /config');
+    expect(res.body).toMatchObject({ ok: true, running: true, startErrors: [], runtime: { state: 'running', botUsername: 'testbot' } });
+  });
+
+  it('POST 从零创建（待命）：写出 600 权限的合法文件，触发一次重新加载，返回加载后的状态', async () => {
+    const res = await call('POST /config', { settings: { botToken: FAKE_TOKEN, allowedUserIds: [7] } });
     expect(res.statusCode).toBe(200);
-    expect(res.body).toMatchObject({ ok: true, hot: [], restart: expect.arrayContaining(['botToken', 'allowedUserIds']) });
+    expect(res.body).toMatchObject({ ok: true, hot: [], reloaded: expect.arrayContaining(['botToken', 'allowedUserIds']), reloadedRuntime: true, runtime: { state: 'running' } });
+    expect(res.body).not.toHaveProperty('restart');
+    expect(reloads).toBe(1);
+    expect(hotCalls).toHaveLength(0);
     expect(JSON.stringify(res.body)).not.toContain(FAKE_TOKEN);
     expect(statSync(file).mode & 0o777).toBe(0o600);
     expect(JSON.parse(readFileSync(file, 'utf8'))).toMatchObject({ botToken: FAKE_TOKEN, allowedUserIds: [7] });
     expect(existsSync(`${file}.tmp`)).toBe(false);
   });
 
-  it('POST 校验失败：422，文件不变', () => {
+  it('POST 校验失败：422，文件不变，不重新加载', async () => {
     writeFileSync(file, JSON.stringify(base));
     const before = readFileSync(file, 'utf8');
-    const res = call('POST /config', { settings: { dialogueStyle: 'huge' } });
+    const res = await call('POST /config', { settings: { dialogueStyle: 'huge' } });
     expect(res.statusCode).toBe(422);
     expect(readFileSync(file, 'utf8')).toBe(before);
+    expect(reloads).toBe(0);
   });
 
-  it('POST 运行中：热字段立即应用，其余提示重启', () => {
+  it('POST 运行中只改热字段（含 allowedUserIds）：立即应用，不重新加载', async () => {
     writeFileSync(file, JSON.stringify(base));
-    live = validateConfig(base).ok ? (validateConfig(base) as { config: Config }).config : null;
-    const res = call('POST /config', { settings: { logLevel: 'debug', stBaseUrl: 'http://127.0.0.1:9000' } });
-    expect(res.body).toMatchObject({ ok: true, hot: ['logLevel'], restart: ['stBaseUrl'] });
+    live = runningConfig();
+    current = runningStatus;
+    const res = await call('POST /config', { settings: { logLevel: 'debug', allowedUserIds: [111, 222] } });
+    expect(res.body).toMatchObject({ ok: true, hot: ['allowedUserIds', 'logLevel'], reloaded: [], reloadedRuntime: false, runtime: { state: 'running' } });
+    expect(reloads).toBe(0);
     expect(hotCalls).toHaveLength(1);
-    expect(hotCalls[0].logLevel).toBe('debug');
+    expect(hotCalls[0]).toMatchObject({ logLevel: 'debug', allowedUserIds: [111, 222] });
   });
 
-  it('多用户 ST：非管理员 GET/POST 都是 403，且不写文件；管理员和单用户模式放行', () => {
-    const asUser = (key: string, admin: boolean, body?: unknown) => {
+  it('POST 运行中改了 stBaseUrl：热字段照常应用，并重新加载', async () => {
+    writeFileSync(file, JSON.stringify(base));
+    live = runningConfig();
+    current = runningStatus;
+    const res = await call('POST /config', { settings: { logLevel: 'debug', stBaseUrl: 'http://127.0.0.1:9000' } });
+    expect(res.body).toMatchObject({ ok: true, hot: ['logLevel'], reloaded: ['stBaseUrl'] });
+    expect(reloads).toBe(1);
+    expect(hotCalls).toHaveLength(1);
+  });
+
+  it('POST 重新加载很久没完成：到上限先返回当前状态（starting），不挂起请求', async () => {
+    writeFileSync(file, JSON.stringify(base));
+    live = runningConfig();
+    current = runningStatus;
+    reloadImpl = () => {
+      current = { ...runningStatus, state: 'starting', telegram: 'pending' };
+      return new Promise(() => {});
+    };
+    const t = Date.now();
+    const res = await call('POST /config', { settings: { botToken: '111111111:AAFakeTokenAnotherAnotherAnother_1' } });
+    expect(Date.now() - t).toBeLessThan(1000);
+    expect(res.body).toMatchObject({ ok: true, reloaded: ['botToken'], runtime: { state: 'starting', telegram: 'pending' } });
+  });
+
+  it('POST 重新加载抛错：仍返回 200 和当前状态，错误进日志', async () => {
+    writeFileSync(file, JSON.stringify(base));
+    reloadImpl = () => Promise.reject(new Error(`炸了 ${FAKE_TOKEN}`));
+    const res = await call('POST /config', { settings: { dialogueStyle: 'italic' } });
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toMatchObject({ ok: true, runtime: { state: 'standby' } });
+    expect(JSON.stringify(res.body)).not.toContain(FAKE_TOKEN);
+  });
+
+  it('GET /status：返回运行状态；非管理员 403', async () => {
+    current = runningStatus;
+    const res = await call('GET /status');
+    expect(res.statusCode).toBe(200);
+    expect(res.body).toEqual({ ok: true, runtime: runningStatus });
+    const denied = new FakeRes();
+    await handlers['GET /status']({ user: { profile: { admin: false } } }, denied);
+    expect(denied.statusCode).toBe(403);
+  });
+
+  it('多用户 ST：非管理员 GET/POST 都是 403，且不写文件、不重新加载；管理员和单用户模式放行', async () => {
+    const asUser = async (key: string, admin: boolean, body?: unknown) => {
       const res = new FakeRes();
-      handlers[key]({ body, user: { profile: { admin } } }, res);
+      await handlers[key]({ body, user: { profile: { admin } } }, res);
       return res;
     };
-    expect(asUser('GET /config', false).statusCode).toBe(403);
-    const p = asUser('POST /config', false, { settings: { botToken: FAKE_TOKEN, allowedUserIds: [1] } });
+    expect((await asUser('GET /config', false)).statusCode).toBe(403);
+    const p = await asUser('POST /config', false, { settings: { botToken: FAKE_TOKEN, allowedUserIds: [1] } });
     expect(p.statusCode).toBe(403);
     expect(existsSync(file)).toBe(false);
-    expect(asUser('GET /config', true).statusCode).toBe(200);
+    expect(reloads).toBe(0);
+    expect((await asUser('GET /config', true)).statusCode).toBe(200);
   });
 
-  it('config.json 损坏：GET/POST 都拒绝，不覆盖', () => {
+  it('config.json 损坏：GET/POST 都拒绝，不覆盖', async () => {
     writeFileSync(file, '{坏的 token=' + FAKE_TOKEN);
-    const g = call('GET /config');
+    const g = await call('GET /config');
     expect(g.statusCode).toBe(500);
     expect(JSON.stringify(g.body)).not.toContain(FAKE_TOKEN);
-    const p = call('POST /config', { settings: { botToken: FAKE_TOKEN, allowedUserIds: [1] } });
+    const p = await call('POST /config', { settings: { botToken: FAKE_TOKEN, allowedUserIds: [1] } });
     expect(p.statusCode).toBe(409);
     expect(readFileSync(file, 'utf8')).toContain('坏的');
+    expect(reloads).toBe(0);
   });
 });
 

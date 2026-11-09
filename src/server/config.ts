@@ -251,7 +251,7 @@ export function loadConfigFile(path: string, read: (p: string) => string = (p) =
     const code = (e as NodeJS.ErrnoException).code;
     const message =
       code === 'ENOENT'
-        ? `找不到配置文件 ${path}。把插件目录下的 config.example.json 复制为 config.json，填好 botToken 和 allowedUserIds 后重启 ST。`
+        ? `找不到配置文件 ${path}。在 ST 扩展设置栏的 Silly TG 面板里填写 Bot Token 和允许的用户 ID 并保存（或把插件目录下的 config.example.json 复制为 config.json 填好后在面板里保存一次），无需重启 ST。`
         : `无法读取配置文件 ${path}：${(e as Error).message}`;
     return { ok: false, errors: [{ field: '(file)', message }], warnings: [] };
   }

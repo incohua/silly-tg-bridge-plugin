@@ -1,5 +1,5 @@
-// 把无头浏览器、bot、看门狗和消息映射接到插件运行时上。
-// 与 startPlugin 分开，单元测试启动插件时不会真的拉起 Chromium。
+// 把无头浏览器、bot、看门狗和消息映射接到插件运行时上（plugin.ts 的 startRuntime 调用）。
+// 运行时重新加载时整套重建；BridgeStore 每次修改都同步落盘，新运行时读到的 state.json 是最新的。
 import { dirname, join } from 'node:path';
 import { Bot, BOT_COMMANDS } from './bot';
 import { ChoiceRuleStore } from './choices';
@@ -17,8 +17,9 @@ export interface Bridge {
   store: BridgeStore;
 }
 
-export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher } = {}): Bridge {
+export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher; env?: NodeJS.ProcessEnv } = {}): Bridge {
   const { config, log, channel, telegram, status } = rt;
+  const env = opts.env ?? process.env;
   const browser = new BrowserManager({
     log,
     host: channel,
@@ -34,12 +35,12 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher } = 
     get idleShutdownMs() {
       return config.idleShutdownMinutes * 60_000;
     },
-    testSkipCsrfPatch: process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === '1',
+    testSkipCsrfPatch: env.SILLY_TG_TEST_SKIP_CSRF_PATCH === '1',
   });
-  if (process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === '1') log.warn('SILLY_TG_TEST_SKIP_CSRF_PATCH=1：页面不安装 CSRF 补丁（仅用于测试）。');
+  if (env.SILLY_TG_TEST_SKIP_CSRF_PATCH === '1') log.warn('SILLY_TG_TEST_SKIP_CSRF_PATCH=1：页面不安装 CSRF 补丁（仅用于测试）。');
   const store = new BridgeStore(join(rt.dataDir, 'state.json'), log);
   const notify = async (text: string): Promise<void> => {
-    // 白名单里的都是私聊用户 id，私聊的 chat_id 就是用户 id
+    // 白名单里的都是私聊用户 id，私聊的 chat_id 就是用户 id。每次实时读：面板保存后热生效
     for (const id of config.allowedUserIds) {
       await telegram.sendMessage({ chat_id: id, text }).catch((e) => log.warn(`通知用户失败：${(e as Error).message}`));
     }
@@ -82,12 +83,14 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher } = 
   });
   rt.setUpdateHandler((u) => bot.handleUpdate(u));
   // 命令菜单：输入 / 时可选。失败只记警告，不影响使用。
-  if (process.env.SILLY_TG_OFFLINE !== '1') {
+  if (env.SILLY_TG_OFFLINE !== '1') {
     telegram.setMyCommands([...BOT_COMMANDS]).catch((e) => log.warn(`注册命令菜单失败（不影响使用）：${(e as Error).message}`));
   }
-  // 退出钩子按注册的相反顺序执行：先停看门狗（避免把正在关闭的浏览器当成故障），再关浏览器。
+  // 退出钩子按注册的相反顺序执行：先结束进行中的一轮，再停看门狗（避免把正在关闭的浏览器当成故障），最后关浏览器。
   rt.onShutdown(() => browser.dispose());
   rt.onShutdown(() => watchdog.dispose());
+  // 最先执行：进行中的一轮立即收尾，不等页面（页面马上要关了）
+  rt.onShutdown(() => bot.dispose());
 
   // 启动后在后台打开 host 页面（ST 此时可能还没开始监听，BrowserManager 会等它）。
   // 失败只记日志：收到消息时会再试一次。

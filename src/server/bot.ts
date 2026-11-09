@@ -192,6 +192,8 @@ interface Turn {
   /** 在 requesting 阶段收到停止：页面确认后立即停止。 */
   stopRequested: boolean;
   promise: Promise<void>;
+  /** 不再等页面的结果，按“中断”收尾（运行时停止时用）。 */
+  abandon?: (reason: string) => void;
 }
 
 const short = (id: string): string => id.slice(0, 8);
@@ -228,6 +230,14 @@ export class Bot {
   /** 当前一轮生成结束（测试和退出时用）。 */
   async idle(): Promise<void> {
     while (this.turn) await this.turn.promise;
+  }
+
+  /**
+   * 运行时停止（面板保存后重新加载，或 ST 退出）：进行中的一轮不再等页面结果，立即按“中断”告知用户。
+   * 否则新运行时的页面连上后，旧这一轮会一直等到空闲超时（10 分钟）才用旧的 bot 回复。
+   */
+  dispose(reason = '插件正在重新加载或退出'): void {
+    this.turn?.abandon?.(reason);
   }
 
   get busy(): boolean {
@@ -840,6 +850,7 @@ export class Bot {
 
     let resolveResult!: (r: TurnResult) => void;
     const result = new Promise<TurnResult>((r) => (resolveResult = r));
+    turn.abandon = (reason) => resolveResult({ kind: 'lost', reason });
     let idleTimer: NodeJS.Timeout | null = null;
     const idleMs = this.opts.turnIdleTimeoutMs ?? 10 * 60_000;
     const bump = (): void => {

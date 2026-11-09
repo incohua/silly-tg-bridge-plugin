@@ -1,5 +1,7 @@
-// 酒馆扩展栏里的配置面板对应的服务端接口：GET/POST /api/plugins/silly-tg/config。
+// 酒馆扩展栏里的配置面板对应的服务端接口：GET/POST /api/plugins/silly-tg/config、GET /status。
 // 路由继承 ST 的会话、CSRF 和 basic auth 鉴权。
+// 保存后不再需要重启 ST：热字段直接写进运行中的配置；连接类字段（token、代理、ST 地址、登录账号）
+// 触发运行时重新加载（停掉旧的轮询和浏览器，用新配置拉起），见 supervisor.ts。
 // 安全约定：
 //   - 读取时密码类字段（botToken、basicAuth.password、代理里的密码）一律掩码，响应里没有明文。
 //   - 保存时掩码值或空值表示“不修改”，不会把掩码写进文件。
@@ -9,22 +11,26 @@
 import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs';
 import { dirname } from 'node:path';
 import type { Router } from 'express';
+import type { RuntimeStatus } from '../shared/runtime-status';
 import { validateConfig, type Config, type ConfigIssue } from './config';
 import type { Logger } from './logger';
 import { redactError } from './redact';
 
 export const MASK = '********';
 
-/** 保存后立即生效的字段。 */
-export const HOT_FIELDS = ['dialogueStyle', 'logLevel', 'idleShutdownMinutes', 'lowMemory', 'draftIntervalSeconds', 'draftMode', 'choiceLayout'] as const;
-/** 保存后要重启 ST 才生效的字段。 */
-export const RESTART_FIELDS = ['botToken', 'allowedUserIds', 'telegramProxy', 'basicAuth', 'stBaseUrl'] as const;
-export const MANAGED_FIELDS: readonly string[] = [...RESTART_FIELDS, ...HOT_FIELDS];
+/**
+ * 保存后立即生效的字段（写进运行中的同一个 Config 对象，消费方用 getter 或每次读取）。
+ * allowedUserIds 的读取点只有轮询过滤（plugin.ts）和通知（bridge.ts 的 notify），都是每次实时读。
+ */
+export const HOT_FIELDS = ['allowedUserIds', 'dialogueStyle', 'logLevel', 'idleShutdownMinutes', 'lowMemory', 'draftIntervalSeconds', 'draftMode', 'choiceLayout'] as const;
+/** 保存后触发运行时重新加载的字段（重建 Telegram 客户端、轮询和无头浏览器），无需重启 ST。 */
+export const RELOAD_FIELDS = ['botToken', 'telegramProxy', 'basicAuth', 'stBaseUrl'] as const;
+export const MANAGED_FIELDS: readonly string[] = [...RELOAD_FIELDS, ...HOT_FIELDS];
 
-export type Effect = 'hot' | 'restart';
+export type Effect = 'hot' | 'reload';
 export const FIELD_EFFECTS: Record<string, Effect> = {
   ...Object.fromEntries(HOT_FIELDS.map((f) => [f, 'hot' as const])),
-  ...Object.fromEntries(RESTART_FIELDS.map((f) => [f, 'restart' as const])),
+  ...Object.fromEntries(RELOAD_FIELDS.map((f) => [f, 'reload' as const])),
   // lowMemory 的新值在下次启动 Chromium 时才会用上，界面上单独说明
 };
 
@@ -84,7 +90,7 @@ export function viewSettings(raw: Record<string, unknown>, exists: boolean): Set
 }
 
 export type ApplyResult =
-  | { ok: true; raw: Record<string, unknown>; config: Config; changed: string[]; hot: string[]; restart: string[]; warnings: ConfigIssue[] }
+  | { ok: true; raw: Record<string, unknown>; config: Config; changed: string[]; hot: string[]; reload: string[]; warnings: ConfigIssue[] }
   | { ok: false; errors: ConfigIssue[] };
 
 const same = (a: unknown, b: unknown): boolean => JSON.stringify(a ?? null) === JSON.stringify(b ?? null);
@@ -148,7 +154,7 @@ export function applySettings(existing: Record<string, unknown>, patch: unknown)
     config: result.config,
     changed,
     hot: changed.filter((k) => FIELD_EFFECTS[k] === 'hot'),
-    restart: changed.filter((k) => FIELD_EFFECTS[k] === 'restart'),
+    reload: changed.filter((k) => FIELD_EFFECTS[k] === 'reload'),
     warnings: result.warnings,
   };
 }
@@ -190,13 +196,18 @@ export function writeRawConfig(path: string, raw: Record<string, unknown>): void
 export interface SettingsRouteOptions {
   configPath: string;
   log: Logger;
-  /** 当前运行中的配置；插件因配置错误没启动时为 null。 */
+  /** 当前运行中（或正在启动）的配置；待命时为 null。 */
   live: () => Config | null;
-  /** 插件没启动时的原因，界面上展示。 */
-  startErrors: () => ConfigIssue[];
+  /** 运行时监管（supervisor.ts）：状态与重新加载。 */
+  runtime: {
+    status(): RuntimeStatus;
+    reload(): Promise<RuntimeStatus>;
+  };
   /** 保存成功后让热生效字段立即生效。 */
   applyHot: (config: Config) => void;
   secrets?: () => string[];
+  /** POST 等待重新加载的上限，默认 25 秒；到点先返回当前状态，面板接着轮询 GET /status。 */
+  reloadWaitMs?: number;
 }
 
 /**
@@ -225,23 +236,28 @@ export function saveSettingsPatch(configPath: string, live: Config, patch: Recor
   assignHotFields(live, r.config);
 }
 
-/** 注册 GET/POST /config。 */
+/** 注册 GET/POST /config 与 GET /status。 */
 export function registerSettingsRoutes(router: Router, opts: SettingsRouteOptions): void {
   const { configPath, log } = opts;
   const fail = (res: import('express').Response, status: number, error: string): void => void res.status(status).json({ ok: false, error });
+  const denied = (req: import('express').Request, res: import('express').Response): boolean => {
+    if (isAdmin(req)) return false;
+    fail(res, 403, '只有 ST 管理员可以查看或修改 Silly TG 配置。');
+    return true;
+  };
 
   router.get('/config', (req, res) => {
-    if (!isAdmin(req)) {
-      fail(res, 403, '只有 ST 管理员可以查看或修改 Silly TG 配置。');
-      return;
-    }
+    if (denied(req, res)) return;
     try {
       const { raw, exists } = readRawConfig(configPath);
+      const runtime = opts.runtime.status();
       res.json({
         ok: true,
-        running: opts.live() !== null,
-        startErrors: opts.live() ? [] : opts.startErrors(),
+        running: runtime.state === 'running',
+        // 旧版面板读这个字段；新版面板看 runtime
+        startErrors: runtime.state === 'standby' ? (runtime.errors ?? []) : [],
         effects: FIELD_EFFECTS,
+        runtime,
         ...viewSettings(raw, exists),
       });
     } catch (e) {
@@ -249,11 +265,13 @@ export function registerSettingsRoutes(router: Router, opts: SettingsRouteOption
     }
   });
 
-  router.post('/config', (req, res) => {
-    if (!isAdmin(req)) {
-      fail(res, 403, '只有 ST 管理员可以查看或修改 Silly TG 配置。');
-      return;
-    }
+  router.get('/status', (req, res) => {
+    if (denied(req, res)) return;
+    res.json({ ok: true, runtime: opts.runtime.status() });
+  });
+
+  router.post('/config', async (req, res) => {
+    if (denied(req, res)) return;
     let existing: { raw: Record<string, unknown>; exists: boolean };
     try {
       existing = readRawConfig(configPath);
@@ -275,11 +293,29 @@ export function registerSettingsRoutes(router: Router, opts: SettingsRouteOption
       return;
     }
     const live = opts.live();
-    // 没启动（之前配置有误）时所有字段都要重启后才生效
+    // 待命（没有配置或配置有误）时无论改了什么都重新加载；运行中只有连接类字段变化才重新加载
+    const needReload = !live || r.reload.length > 0;
     const hot = live ? r.hot : [];
-    const restart = live ? r.restart : r.changed;
+    const reloaded = needReload ? (live ? r.reload : r.changed) : [];
     if (live && hot.length > 0) opts.applyHot(r.config);
-    log.info(`配置已通过面板保存：${r.changed.length ? r.changed.join('、') : '无变化'}${hot.length ? `（立即生效：${hot.join('、')}）` : ''}${restart.length ? `（需重启 ST：${restart.join('、')}）` : ''}`);
-    res.json({ ok: true, changed: r.changed, hot, restart, lowMemoryNote: r.changed.includes('lowMemory'), warnings: r.warnings, ...viewSettings(r.raw, true) });
+    log.info(
+      `配置已通过面板保存：${r.changed.length ? r.changed.join('、') : '无变化'}${hot.length ? `（立即生效：${hot.join('、')}）` : ''}${needReload ? `（重新加载${reloaded.length ? `：${reloaded.join('、')}` : ''}）` : ''}`,
+    );
+    let runtime = opts.runtime.status();
+    if (needReload) {
+      let timer: NodeJS.Timeout | undefined;
+      const capped = new Promise<RuntimeStatus>((resolve) => {
+        timer = setTimeout(() => resolve(opts.runtime.status()), opts.reloadWaitMs ?? 25_000);
+        timer.unref?.();
+      });
+      const done = opts.runtime.reload().catch((e: unknown) => {
+        log.error(`重新加载失败：${redactError(e, opts.secrets?.() ?? [])}`);
+        return opts.runtime.status();
+      });
+      runtime = await Promise.race([done, capped]);
+      clearTimeout(timer);
+    }
+    // reloadedRuntime：这次保存是否重新加载了运行时（待命时即使没有改动也会按现有文件重新启动一次）
+    res.json({ ok: true, changed: r.changed, hot, reloaded, reloadedRuntime: needReload, lowMemoryNote: r.changed.includes('lowMemory'), warnings: r.warnings, runtime, ...viewSettings(r.raw, true) });
   });
 }

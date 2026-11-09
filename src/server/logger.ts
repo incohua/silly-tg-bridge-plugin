@@ -50,3 +50,21 @@ export function createLogger(opts: LoggerOptions = {}): Logger {
     setLevel: (level) => void (min = ORDER[level]),
   };
 }
+
+export interface SwitchableLogger extends Logger {
+  /** 换成另一个输出目标（运行时重新加载后用新配置的级别和脱敏列表）。 */
+  use(target: Logger): void;
+}
+
+/** 转发到可替换目标的日志器。外壳（设置路由、host 通道、监管）用它，运行时重建后跟着换。 */
+export function switchableLogger(initial: Logger): SwitchableLogger {
+  let t = initial;
+  return {
+    debug: (m, ...x) => t.debug(m, ...x),
+    info: (m, ...x) => t.info(m, ...x),
+    warn: (m, ...x) => t.warn(m, ...x),
+    error: (m, ...x) => t.error(m, ...x),
+    setLevel: (level) => t.setLevel?.(level),
+    use: (next) => void (t = next),
+  };
+}

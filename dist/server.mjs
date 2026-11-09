@@ -85159,6 +85159,44 @@ function createLogger(opts = {}) {
     setLevel: (level) => void (min = ORDER[level])
   };
 }
+function switchableLogger(initial) {
+  let t = initial;
+  return {
+    debug: (m, ...x2) => t.debug(m, ...x2),
+    info: (m, ...x2) => t.info(m, ...x2),
+    warn: (m, ...x2) => t.warn(m, ...x2),
+    error: (m, ...x2) => t.error(m, ...x2),
+    setLevel: (level) => t.setLevel?.(level),
+    use: (next) => void (t = next)
+  };
+}
+
+// src/server/plugin.ts
+import { existsSync as existsSync5 } from "node:fs";
+import { join as join9 } from "node:path";
+
+// src/shared/version.ts
+var VERSION = true ? "0.3.0" : "dev";
+function versionMismatchWarning(serverVersion, extVersion) {
+  if (extVersion === void 0 || extVersion === serverVersion) return null;
+  if (serverVersion === "dev" || extVersion === "dev") return null;
+  return `UI \u6269\u5C55\u7248\u672C\uFF08${extVersion}\uFF09\u4E0E\u670D\u52A1\u7AEF\u63D2\u4EF6\u7248\u672C\uFF08${serverVersion}\uFF09\u4E0D\u4E00\u81F4\uFF0C\u8BF7\u628A\u4E24\u8FB9\u90FD\u66F4\u65B0\u5230\u540C\u4E00\u7248\u672C\uFF0C\u5426\u5219\u90E8\u5206\u529F\u80FD\u53EF\u80FD\u5F02\u5E38\u3002`;
+}
+
+// src/server/access.ts
+function getSenderId(update) {
+  const id = update.message?.from?.id ?? update.edited_message?.from?.id ?? update.callback_query?.from?.id;
+  if (typeof id === "number") return id;
+  const stop = update.stopped_message_generation;
+  if (stop?.chat?.type === "private" && typeof stop.chat.id === "number") return stop.chat.id;
+  return void 0;
+}
+function isAllowedUpdate(update, allowedUserIds) {
+  const chat = (update.message ?? update.edited_message ?? update.callback_query?.message)?.chat;
+  if (chat && chat.type !== "private") return false;
+  const id = getSenderId(update);
+  return id !== void 0 && allowedUserIds.includes(id);
+}
 
 // src/server/bridge.ts
 import { dirname as dirname7, join as join7 } from "node:path";
@@ -88894,8 +88932,8 @@ var TelegramClient = class {
       r.parameters?.retry_after
     );
   }
-  getMe() {
-    return this.call("getMe");
+  getMe(signal) {
+    return this.call("getMe", {}, { signal });
   }
   getUpdates(params, signal) {
     return this.call("getUpdates", params, { signal, timeoutMs: ((params.timeout ?? 0) + 15) * 1e3 });
@@ -88934,7 +88972,7 @@ async function pollUpdates(opts) {
     } catch (e) {
       if (signal.aborted) break;
       if (e instanceof TelegramApiError && e.errorCode === 401) {
-        log.error("Telegram \u62D2\u7EDD\u4E86 botToken\uFF08401\uFF09\u3002\u68C0\u67E5 config.json \u91CC\u7684 botToken \u662F\u5426\u6B63\u786E\uFF0C\u6539\u597D\u540E\u91CD\u542F ST\u3002\u8F6E\u8BE2\u5DF2\u505C\u6B62\u3002");
+        log.error("Telegram \u62D2\u7EDD\u4E86 botToken\uFF08401\uFF09\uFF0C\u8F6E\u8BE2\u5DF2\u505C\u6B62\u3002\u5728 ST \u6269\u5C55\u8BBE\u7F6E\u680F\u7684 Silly TG \u9762\u677F\u91CC\u6539\u597D botToken \u5E76\u4FDD\u5B58\u5373\u53EF\uFF0C\u65E0\u9700\u91CD\u542F ST\uFF08\u76F4\u63A5\u6539 config.json \u7684\u8BDD\u8981\u91CD\u542F ST \u624D\u4F1A\u91CD\u65B0\u8BFB\u53D6\uFF09\u3002");
         return "unauthorized";
       }
       if (e instanceof TelegramApiError && e.errorCode === 409) {
@@ -89066,6 +89104,13 @@ var Bot = class {
   /** 当前一轮生成结束（测试和退出时用）。 */
   async idle() {
     while (this.turn) await this.turn.promise;
+  }
+  /**
+   * 运行时停止（面板保存后重新加载，或 ST 退出）：进行中的一轮不再等页面结果，立即按“中断”告知用户。
+   * 否则新运行时的页面连上后，旧这一轮会一直等到空闲超时（10 分钟）才用旧的 bot 回复。
+   */
+  dispose(reason = "\u63D2\u4EF6\u6B63\u5728\u91CD\u65B0\u52A0\u8F7D\u6216\u9000\u51FA") {
+    this.turn?.abandon?.(reason);
   }
   get busy() {
     return this.turn !== null || this.op !== null;
@@ -89632,6 +89677,7 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
     };
     let resolveResult;
     const result = new Promise((r) => resolveResult = r);
+    turn.abandon = (reason) => resolveResult({ kind: "lost", reason });
     let idleTimer = null;
     const idleMs = this.opts.turnIdleTimeoutMs ?? 10 * 6e4;
     const bump = () => {
@@ -89894,6 +89940,7 @@ var BrowserStartError = class extends Error {
   }
 };
 var GENERIC_LAUNCH_HINT = "\u5982\u679C\u662F\u5728\u6CA1\u6709\u684C\u9762\u7684\u670D\u52A1\u5668\u6216\u5BB9\u5668\u91CC\uFF0C\u8BF7\u5BF9\u7167 docs/install-linux.md \u6392\u67E5\uFF1B\u628A\u4E0A\u9762\u7684\u539F\u59CB\u62A5\u9519\u53D1\u7ED9\u5F00\u53D1\u8005\u4E5F\u6709\u5E2E\u52A9\u3002";
+var CANCELLED = "\u63D2\u4EF6\u6B63\u5728\u9000\u51FA\u6216\u91CD\u65B0\u52A0\u8F7D\uFF0C\u5DF2\u53D6\u6D88\u542F\u52A8\u65E0\u5934\u6D4F\u89C8\u5668";
 var sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 var BrowserManager = class {
   constructor(opts) {
@@ -89914,6 +89961,8 @@ var BrowserManager = class {
   lastActivity;
   heartbeatAlerted = false;
   handlers = /* @__PURE__ */ new Set();
+  /** 正在等页面连接的回调；dispose 时立即叫醒，不等连接超时。 */
+  connectWaiters = /* @__PURE__ */ new Set();
   ticker;
   now;
   fetchImpl;
@@ -89957,10 +90006,12 @@ var BrowserManager = class {
     if (this.stateValue === "running") {
       if (this.opts.host.connected) return;
       if (await this.waitConnected(this.opts.reconnectGraceMs ?? 3e4)) return;
+      if (this.disposed) throw new BrowserStartError(CANCELLED);
       this.opts.log.warn("host \u9875\u9762\u65AD\u5F00\u4E14\u6CA1\u6709\u81EA\u52A8\u91CD\u8FDE\uFF0C\u91CD\u542F\u65E0\u5934\u6D4F\u89C8\u5668");
       await this.stop("\u9875\u9762\u672A\u8FDE\u63A5\uFF0C\u91CD\u542F");
     }
     if (this.stopping) await this.stopping;
+    if (this.disposed) throw new BrowserStartError(CANCELLED);
     if (!this.starting) {
       this.starting = this.start().finally(() => this.starting = null);
     }
@@ -89973,13 +90024,23 @@ var BrowserManager = class {
     this.stopping = this.doStop(reason).finally(() => this.stopping = null);
     return this.stopping;
   }
-  /** 插件退出：停止计时器并关闭浏览器。 */
+  /**
+   * 插件退出或重新加载：停止计时器并关闭浏览器。
+   * 启动进行中时不等它走完（等扩展连接最长 180 秒）：叫醒等待、关掉已经拉起的进程，让启动立刻失败收尾。
+   */
   async dispose() {
     this.disposed = true;
     clearInterval(this.ticker);
-    if (this.starting) await this.starting.catch(() => {
-    });
-    await this.stop("ST \u9000\u51FA");
+    if (this.starting) {
+      for (const wake of [...this.connectWaiters]) wake();
+      const browser = this.browser;
+      this.browser = null;
+      const closing = browser ? this.closeBrowser(browser) : void 0;
+      await this.starting.catch(() => {
+      });
+      await closing;
+    }
+    await this.stop("ST \u9000\u51FA\u6216\u63D2\u4EF6\u91CD\u65B0\u52A0\u8F7D");
   }
   emit(e) {
     for (const h of this.handlers) {
@@ -90014,14 +90075,19 @@ var BrowserManager = class {
   waitConnected(timeoutMs) {
     const host = this.opts.host;
     if (host.connected && host.hello) return Promise.resolve(true);
+    if (this.disposed) return Promise.resolve(false);
+    const waiters = this.connectWaiters;
     return new Promise((resolve9) => {
       const off = host.onConnectionChange((c) => {
         if (c && host.hello) done(true);
       });
       const timer2 = setTimeout(() => done(false), timeoutMs);
+      const wake = () => done(false);
+      waiters.add(wake);
       function done(v2) {
         clearTimeout(timer2);
         off();
+        waiters.delete(wake);
         resolve9(v2);
       }
     });
@@ -90064,10 +90130,15 @@ var BrowserManager = class {
     }
     this.stateValue = "starting";
     let launching = false;
+    const cancelled = () => {
+      if (this.disposed) throw new BrowserStartError(CANCELLED);
+    };
     try {
       await this.waitForSt();
+      cancelled();
       const nonce = this.opts.host.rotateNonce();
       this.userDataDir = await mkdtemp(join2(tmpdir(), "silly-tg-chrome-"));
+      cancelled();
       const isRoot = this.opts.isRoot ?? process.getuid?.() === 0;
       launching = true;
       const browser = await this.opts.launcher({
@@ -90077,9 +90148,11 @@ var BrowserManager = class {
       });
       launching = false;
       this.browser = browser;
+      cancelled();
       browser.onDisconnected(() => this.handleDisconnected(browser));
       log.info(`\u65E0\u5934\u6D4F\u89C8\u5668\u5DF2\u542F\u52A8\uFF08PID ${browser.pid ?? "\u672A\u77E5"}${this.opts.lowMemory ? "\uFF0C\u4F4E\u5185\u5B58\u53C2\u6570" : ""}\uFF09\uFF0C\u6253\u5F00 ST \u9875\u9762\u2026`);
       const page = await browser.newPage();
+      cancelled();
       this.watchPage(page, browser);
       if (this.opts.basicAuth) await page.authenticate(this.opts.basicAuth);
       const connected = this.waitConnected(this.opts.hostReadyTimeoutMs ?? 18e4);
@@ -90091,6 +90164,7 @@ var BrowserManager = class {
         );
       }
       if (!await connected) {
+        cancelled();
         throw new BrowserStartError(
           "ST \u9875\u9762\u6253\u5F00\u4E86\uFF0C\u4F46 silly-tg \u6269\u5C55\u6CA1\u6709\u8FDE\u63A5\u3002\u68C0\u67E5 ST \u7684\u201C\u6269\u5C55\u201D\u7BA1\u7406\u91CC Silly TG \u662F\u5426\u5B58\u5728\u5E76\u5904\u4E8E\u542F\u7528\u72B6\u6001\uFF08\u53EF\u80FD\u662F\u9762\u677F\u5B89\u88C5\u7684\u526F\u672C\uFF0C\u4E5F\u53EF\u80FD\u662F\u81EA\u52A8\u90E8\u7F72\u5230 public/scripts/extensions/third-party/silly-tg \u7684\u526F\u672C\uFF0C\u88AB\u505C\u7528\u90FD\u4F1A\u5BFC\u81F4\u8FDE\u4E0D\u4E0A\uFF09\u3002"
         );
@@ -90103,6 +90177,12 @@ var BrowserManager = class {
       log.info("\u65E0\u5934 ST \u9875\u9762\u5DF2\u8FDE\u63A5");
       this.emit({ type: "started", pid: browser.pid });
     } catch (e) {
+      if (this.disposed) {
+        this.lastError = void 0;
+        log.info("\u65E0\u5934\u6D4F\u89C8\u5668\u542F\u52A8\u5DF2\u53D6\u6D88\uFF08\u63D2\u4EF6\u9000\u51FA\u6216\u91CD\u65B0\u52A0\u8F7D\uFF09");
+        await this.doStop("\u542F\u52A8\u5DF2\u53D6\u6D88", false);
+        throw new BrowserStartError(CANCELLED);
+      }
       let message = e.message;
       if (launching && !(e instanceof BrowserStartError)) {
         const d = diagnoseBrowserError(message, {
@@ -90140,7 +90220,7 @@ var BrowserManager = class {
     });
   }
   handleDisconnected(browser) {
-    if (this.browser !== browser || this.stopping) return;
+    if (this.browser !== browser || this.stopping || this.disposed) return;
     this.opts.log.error("\u65E0\u5934\u6D4F\u89C8\u5668\u610F\u5916\u9000\u51FA");
     this.browser = null;
     this.stateValue = "stopped";
@@ -90153,20 +90233,7 @@ var BrowserManager = class {
     this.browser = null;
     if (browser) {
       this.stateValue = "stopping";
-      const closed = await Promise.race([
-        browser.close().then(
-          () => true,
-          () => false
-        ),
-        sleep(5e3).then(() => false)
-      ]);
-      if (!closed) {
-        this.opts.log.warn("\u5173\u95ED\u6D4F\u89C8\u5668\u8D85\u65F6\uFF0C\u5F3A\u5236\u7ED3\u675F\u8FDB\u7A0B");
-        try {
-          browser.kill();
-        } catch {
-        }
-      }
+      await this.closeBrowser(browser);
     }
     await this.cleanupDir();
     this.stateValue = "stopped";
@@ -90174,6 +90241,23 @@ var BrowserManager = class {
     if (browser && announce) {
       this.opts.log.info(`\u65E0\u5934\u6D4F\u89C8\u5668\u5DF2\u5173\u95ED\uFF08${reason}\uFF09`);
       this.emit({ type: "stopped", reason });
+    }
+  }
+  /** 正常关闭，5 秒内没关掉就强制结束进程。 */
+  async closeBrowser(browser) {
+    const closed = await Promise.race([
+      browser.close().then(
+        () => true,
+        () => false
+      ),
+      sleep(5e3).then(() => false)
+    ]);
+    if (!closed) {
+      this.opts.log.warn("\u5173\u95ED\u6D4F\u89C8\u5668\u8D85\u65F6\uFF0C\u5F3A\u5236\u7ED3\u675F\u8FDB\u7A0B");
+      try {
+        browser.kill();
+      } catch {
+      }
     }
   }
   async cleanupDir() {
@@ -92017,7 +92101,7 @@ function loadConfigFile(path14, read = (p) => readFileSync7(p, "utf8")) {
     text2 = read(path14);
   } catch (e) {
     const code = e.code;
-    const message = code === "ENOENT" ? `\u627E\u4E0D\u5230\u914D\u7F6E\u6587\u4EF6 ${path14}\u3002\u628A\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 config.example.json \u590D\u5236\u4E3A config.json\uFF0C\u586B\u597D botToken \u548C allowedUserIds \u540E\u91CD\u542F ST\u3002` : `\u65E0\u6CD5\u8BFB\u53D6\u914D\u7F6E\u6587\u4EF6 ${path14}\uFF1A${e.message}`;
+    const message = code === "ENOENT" ? `\u627E\u4E0D\u5230\u914D\u7F6E\u6587\u4EF6 ${path14}\u3002\u5728 ST \u6269\u5C55\u8BBE\u7F6E\u680F\u7684 Silly TG \u9762\u677F\u91CC\u586B\u5199 Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID \u5E76\u4FDD\u5B58\uFF08\u6216\u628A\u63D2\u4EF6\u76EE\u5F55\u4E0B\u7684 config.example.json \u590D\u5236\u4E3A config.json \u586B\u597D\u540E\u5728\u9762\u677F\u91CC\u4FDD\u5B58\u4E00\u6B21\uFF09\uFF0C\u65E0\u9700\u91CD\u542F ST\u3002` : `\u65E0\u6CD5\u8BFB\u53D6\u914D\u7F6E\u6587\u4EF6 ${path14}\uFF1A${e.message}`;
     return { ok: false, errors: [{ field: "(file)", message }], warnings: [] };
   }
   let raw;
@@ -92052,12 +92136,12 @@ function configSecrets(c, env2) {
 
 // src/server/settings-api.ts
 var MASK = "********";
-var HOT_FIELDS = ["dialogueStyle", "logLevel", "idleShutdownMinutes", "lowMemory", "draftIntervalSeconds", "draftMode", "choiceLayout"];
-var RESTART_FIELDS = ["botToken", "allowedUserIds", "telegramProxy", "basicAuth", "stBaseUrl"];
-var MANAGED_FIELDS = [...RESTART_FIELDS, ...HOT_FIELDS];
+var HOT_FIELDS = ["allowedUserIds", "dialogueStyle", "logLevel", "idleShutdownMinutes", "lowMemory", "draftIntervalSeconds", "draftMode", "choiceLayout"];
+var RELOAD_FIELDS = ["botToken", "telegramProxy", "basicAuth", "stBaseUrl"];
+var MANAGED_FIELDS = [...RELOAD_FIELDS, ...HOT_FIELDS];
 var FIELD_EFFECTS = {
   ...Object.fromEntries(HOT_FIELDS.map((f) => [f, "hot"])),
-  ...Object.fromEntries(RESTART_FIELDS.map((f) => [f, "restart"]))
+  ...Object.fromEntries(RELOAD_FIELDS.map((f) => [f, "reload"]))
   // lowMemory 的新值在下次启动 Chromium 时才会用上，界面上单独说明
 };
 var isRecord3 = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
@@ -92143,7 +92227,7 @@ function applySettings(existing, patch) {
     config: result.config,
     changed,
     hot: changed.filter((k) => FIELD_EFFECTS[k] === "hot"),
-    restart: changed.filter((k) => FIELD_EFFECTS[k] === "restart"),
+    reload: changed.filter((k) => FIELD_EFFECTS[k] === "reload"),
     warnings: result.warnings
   };
 }
@@ -92193,29 +92277,35 @@ function saveSettingsPatch(configPath, live, patch) {
 function registerSettingsRoutes(router, opts) {
   const { configPath, log } = opts;
   const fail = (res, status, error) => void res.status(status).json({ ok: false, error });
+  const denied = (req, res) => {
+    if (isAdmin(req)) return false;
+    fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
+    return true;
+  };
   router.get("/config", (req, res) => {
-    if (!isAdmin(req)) {
-      fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
-      return;
-    }
+    if (denied(req, res)) return;
     try {
       const { raw, exists } = readRawConfig(configPath);
+      const runtime = opts.runtime.status();
       res.json({
         ok: true,
-        running: opts.live() !== null,
-        startErrors: opts.live() ? [] : opts.startErrors(),
+        running: runtime.state === "running",
+        // 旧版面板读这个字段；新版面板看 runtime
+        startErrors: runtime.state === "standby" ? runtime.errors ?? [] : [],
         effects: FIELD_EFFECTS,
+        runtime,
         ...viewSettings(raw, exists)
       });
     } catch (e) {
       fail(res, 500, e.message);
     }
   });
-  router.post("/config", (req, res) => {
-    if (!isAdmin(req)) {
-      fail(res, 403, "\u53EA\u6709 ST \u7BA1\u7406\u5458\u53EF\u4EE5\u67E5\u770B\u6216\u4FEE\u6539 Silly TG \u914D\u7F6E\u3002");
-      return;
-    }
+  router.get("/status", (req, res) => {
+    if (denied(req, res)) return;
+    res.json({ ok: true, runtime: opts.runtime.status() });
+  });
+  router.post("/config", async (req, res) => {
+    if (denied(req, res)) return;
     let existing;
     try {
       existing = readRawConfig(configPath);
@@ -92237,11 +92327,28 @@ function registerSettingsRoutes(router, opts) {
       return;
     }
     const live = opts.live();
+    const needReload = !live || r.reload.length > 0;
     const hot = live ? r.hot : [];
-    const restart = live ? r.restart : r.changed;
+    const reloaded = needReload ? live ? r.reload : r.changed : [];
     if (live && hot.length > 0) opts.applyHot(r.config);
-    log.info(`\u914D\u7F6E\u5DF2\u901A\u8FC7\u9762\u677F\u4FDD\u5B58\uFF1A${r.changed.length ? r.changed.join("\u3001") : "\u65E0\u53D8\u5316"}${hot.length ? `\uFF08\u7ACB\u5373\u751F\u6548\uFF1A${hot.join("\u3001")}\uFF09` : ""}${restart.length ? `\uFF08\u9700\u91CD\u542F ST\uFF1A${restart.join("\u3001")}\uFF09` : ""}`);
-    res.json({ ok: true, changed: r.changed, hot, restart, lowMemoryNote: r.changed.includes("lowMemory"), warnings: r.warnings, ...viewSettings(r.raw, true) });
+    log.info(
+      `\u914D\u7F6E\u5DF2\u901A\u8FC7\u9762\u677F\u4FDD\u5B58\uFF1A${r.changed.length ? r.changed.join("\u3001") : "\u65E0\u53D8\u5316"}${hot.length ? `\uFF08\u7ACB\u5373\u751F\u6548\uFF1A${hot.join("\u3001")}\uFF09` : ""}${needReload ? `\uFF08\u91CD\u65B0\u52A0\u8F7D${reloaded.length ? `\uFF1A${reloaded.join("\u3001")}` : ""}\uFF09` : ""}`
+    );
+    let runtime = opts.runtime.status();
+    if (needReload) {
+      let timer2;
+      const capped = new Promise((resolve9) => {
+        timer2 = setTimeout(() => resolve9(opts.runtime.status()), opts.reloadWaitMs ?? 25e3);
+        timer2.unref?.();
+      });
+      const done = opts.runtime.reload().catch((e) => {
+        log.error(`\u91CD\u65B0\u52A0\u8F7D\u5931\u8D25\uFF1A${redactError(e, opts.secrets?.() ?? [])}`);
+        return opts.runtime.status();
+      });
+      runtime = await Promise.race([done, capped]);
+      clearTimeout(timer2);
+    }
+    res.json({ ok: true, changed: r.changed, hot, reloaded, reloadedRuntime: needReload, lowMemoryNote: r.changed.includes("lowMemory"), warnings: r.warnings, runtime, ...viewSettings(r.raw, true) });
   });
 }
 
@@ -92372,6 +92479,7 @@ var Watchdog = class {
 // src/server/bridge.ts
 function attachBridge(rt, opts = {}) {
   const { config: config2, log, channel, telegram, status } = rt;
+  const env2 = opts.env ?? process.env;
   const browser = new BrowserManager({
     log,
     host: channel,
@@ -92387,9 +92495,9 @@ function attachBridge(rt, opts = {}) {
     get idleShutdownMs() {
       return config2.idleShutdownMinutes * 6e4;
     },
-    testSkipCsrfPatch: process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === "1"
+    testSkipCsrfPatch: env2.SILLY_TG_TEST_SKIP_CSRF_PATCH === "1"
   });
-  if (process.env.SILLY_TG_TEST_SKIP_CSRF_PATCH === "1") log.warn("SILLY_TG_TEST_SKIP_CSRF_PATCH=1\uFF1A\u9875\u9762\u4E0D\u5B89\u88C5 CSRF \u8865\u4E01\uFF08\u4EC5\u7528\u4E8E\u6D4B\u8BD5\uFF09\u3002");
+  if (env2.SILLY_TG_TEST_SKIP_CSRF_PATCH === "1") log.warn("SILLY_TG_TEST_SKIP_CSRF_PATCH=1\uFF1A\u9875\u9762\u4E0D\u5B89\u88C5 CSRF \u8865\u4E01\uFF08\u4EC5\u7528\u4E8E\u6D4B\u8BD5\uFF09\u3002");
   const store = new BridgeStore(join7(rt.dataDir, "state.json"), log);
   const notify = async (text2) => {
     for (const id of config2.allowedUserIds) {
@@ -92433,42 +92541,17 @@ function attachBridge(rt, opts = {}) {
     choiceRules: () => choiceRules.get()
   });
   rt.setUpdateHandler((u) => bot.handleUpdate(u));
-  if (process.env.SILLY_TG_OFFLINE !== "1") {
+  if (env2.SILLY_TG_OFFLINE !== "1") {
     telegram.setMyCommands([...BOT_COMMANDS]).catch((e) => log.warn(`\u6CE8\u518C\u547D\u4EE4\u83DC\u5355\u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u4F7F\u7528\uFF09\uFF1A${e.message}`));
   }
   rt.onShutdown(() => browser.dispose());
   rt.onShutdown(() => watchdog.dispose());
+  rt.onShutdown(() => bot.dispose());
   if (status.chromium.path) {
     void browser.ensureRunning().catch(() => {
     });
   }
   return { bot, browser, watchdog, store };
-}
-
-// src/server/plugin.ts
-import { join as join9 } from "node:path";
-
-// src/shared/version.ts
-var VERSION = true ? "0.3.0" : "dev";
-function versionMismatchWarning(serverVersion, extVersion) {
-  if (extVersion === void 0 || extVersion === serverVersion) return null;
-  if (serverVersion === "dev" || extVersion === "dev") return null;
-  return `UI \u6269\u5C55\u7248\u672C\uFF08${extVersion}\uFF09\u4E0E\u670D\u52A1\u7AEF\u63D2\u4EF6\u7248\u672C\uFF08${serverVersion}\uFF09\u4E0D\u4E00\u81F4\uFF0C\u8BF7\u628A\u4E24\u8FB9\u90FD\u66F4\u65B0\u5230\u540C\u4E00\u7248\u672C\uFF0C\u5426\u5219\u90E8\u5206\u529F\u80FD\u53EF\u80FD\u5F02\u5E38\u3002`;
-}
-
-// src/server/access.ts
-function getSenderId(update) {
-  const id = update.message?.from?.id ?? update.edited_message?.from?.id ?? update.callback_query?.from?.id;
-  if (typeof id === "number") return id;
-  const stop = update.stopped_message_generation;
-  if (stop?.chat?.type === "private" && typeof stop.chat.id === "number") return stop.chat.id;
-  return void 0;
-}
-function isAllowedUpdate(update, allowedUserIds) {
-  const chat = (update.message ?? update.edited_message ?? update.callback_query?.message)?.chat;
-  if (chat && chat.type !== "private") return false;
-  const id = getSenderId(update);
-  return id !== void 0 && allowedUserIds.includes(id);
 }
 
 // src/server/deploy-extension.ts
@@ -92656,66 +92739,284 @@ async function deployExtension(opts) {
   }
 }
 
+// src/server/supervisor.ts
+var STANDBY_HINT = "\u63D2\u4EF6\u5DF2\u5F85\u547D\uFF0C\u8BF7\u5728 ST \u6269\u5C55\u8BBE\u7F6E\u680F\u7684 Silly TG \u91CC\u586B\u5199 Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID \u5E76\u4FDD\u5B58\uFF0C\u4FDD\u5B58\u540E\u81EA\u52A8\u542F\u52A8\uFF0C\u65E0\u9700\u91CD\u542F ST\u3002";
+var Supervisor = class {
+  constructor(opts) {
+    this.opts = opts;
+  }
+  opts;
+  stateValue = "standby";
+  runtime = null;
+  /** starting 时这一轮加载的配置（热字段写进它，运行时启动后用的就是同一个对象）。 */
+  loadingConfig = null;
+  standby;
+  loop = null;
+  /** 进行中的启动的取消器。 */
+  startAbort = null;
+  again = false;
+  closed = false;
+  get state() {
+    return this.stateValue;
+  }
+  /** 当前运行时（测试和桥接用）。 */
+  current() {
+    return this.runtime;
+  }
+  /** running / starting 时的运行时配置；其余状态为 null。 */
+  liveConfig() {
+    if (this.stateValue === "running") return this.runtime?.config ?? null;
+    if (this.stateValue === "starting") return this.loadingConfig;
+    return null;
+  }
+  /** 重新读盘并重建运行时。并发调用合并，见文件头的契约。 */
+  reload() {
+    if (this.closed) return Promise.resolve(this.status());
+    if (this.loop) {
+      this.again = true;
+      this.startAbort?.abort();
+      return this.loop;
+    }
+    this.loop = (async () => {
+      try {
+        do {
+          this.again = false;
+          await this.cycle();
+        } while (this.again && !this.closed);
+        return this.status();
+      } finally {
+        this.loop = null;
+      }
+    })();
+    return this.loop;
+  }
+  /** 等当前的加载（如果有）结束。测试和配置面板用。 */
+  whenSettled() {
+    return this.loop ?? Promise.resolve(this.status());
+  }
+  /** ST 退出：不再接受 reload，停掉运行时。 */
+  async stop() {
+    this.closed = true;
+    this.startAbort?.abort();
+    const loop = this.loop;
+    if (loop) {
+      const t = this.timeout();
+      await Promise.race([loop.catch(() => void 0), t.promise]);
+      t.clear();
+    }
+    const rt = this.runtime;
+    this.runtime = null;
+    if (rt) {
+      this.stateValue = "stopping";
+      await this.stopRuntime(rt);
+    }
+    this.loadingConfig = null;
+    this.stateValue = "standby";
+  }
+  secretsOf(c) {
+    return c ? (this.opts.secretsFor ?? configSecrets)(c) : [];
+  }
+  status() {
+    const rt = this.runtime;
+    const secrets = [...this.secretsOf(rt?.config), ...this.secretsOf(this.loadingConfig)];
+    const clean = (s) => redact(s, secrets);
+    const chromium = rt ? rt.status.chromium : this.opts.chromium();
+    const hello = this.opts.host.hello;
+    const out = {
+      state: this.stateValue,
+      telegram: rt ? rt.status.telegram : this.stateValue === "starting" ? "pending" : "skipped",
+      chromium: { found: !!chromium.path, ...chromium.path ? {} : { hint: chromium.hint } },
+      hostConnected: this.opts.host.connected
+    };
+    if (this.stateValue === "standby" && this.standby) {
+      out.standbyReason = this.standby.reason;
+      out.errors = this.standby.errors.map((e) => ({ field: e.field, message: clean(e.message) }));
+    }
+    if (rt?.status.telegramError) out.telegramError = clean(rt.status.telegramError);
+    if (rt?.status.botUsername) out.botUsername = rt.status.botUsername;
+    if (hello && this.opts.host.connected) out.hostPage = { stVersion: hello.stVersion, ...hello.extVersion ? { extVersion: hello.extVersion } : {} };
+    return out;
+  }
+  timeout() {
+    let timer2;
+    const promise = new Promise((r) => {
+      timer2 = setTimeout(() => r("timeout"), this.opts.stopTimeoutMs ?? 1e4);
+      timer2.unref?.();
+    });
+    return { promise, clear: () => clearTimeout(timer2) };
+  }
+  /** 停止一个运行时，最多等 stopTimeoutMs；超时记 warn 后继续（宁可晚点回收一个进程，也不让保存请求挂住）。 */
+  async stopRuntime(rt) {
+    const t = this.timeout();
+    const r = await Promise.race([
+      rt.stop().then(
+        () => "ok",
+        (e) => {
+          this.opts.log.error(`\u505C\u6B62\u8FD0\u884C\u65F6\u51FA\u9519\uFF1A${redactError(e, this.secretsOf(rt.config))}`);
+          return "error";
+        }
+      ),
+      t.promise
+    ]);
+    t.clear();
+    if (r === "timeout") this.opts.log.warn(`\u505C\u6B62\u65E7\u7684\u8FD0\u884C\u65F6\u8D85\u65F6\uFF08${+((this.opts.stopTimeoutMs ?? 1e4) / 1e3).toFixed(1)} \u79D2\uFF09\uFF0C\u4E0D\u518D\u7B49\u5F85\uFF0C\u7EE7\u7EED\u91CD\u65B0\u52A0\u8F7D\uFF08\u9057\u7559\u7684\u8FDB\u7A0B\u4F1A\u5728\u7A0D\u540E\u81EA\u884C\u9000\u51FA\uFF09\u3002`);
+  }
+  async cycle() {
+    const { log } = this.opts;
+    const old = this.runtime;
+    if (old) {
+      this.stateValue = "stopping";
+      this.runtime = null;
+      log.info("\u6B63\u5728\u91CD\u65B0\u52A0\u8F7D\uFF1A\u5148\u505C\u6B62\u65E7\u7684 Telegram \u8F6E\u8BE2\u548C\u65E0\u5934\u6D4F\u89C8\u5668\u2026");
+      await this.stopRuntime(old);
+    }
+    if (this.closed) {
+      this.stateValue = "standby";
+      return;
+    }
+    const loaded = this.opts.load();
+    if (!loaded.ok) {
+      this.stateValue = "standby";
+      this.loadingConfig = null;
+      if (loaded.missing) {
+        this.standby = { reason: "no-config", errors: [] };
+        log.info(STANDBY_HINT);
+      } else {
+        this.standby = { reason: "invalid-config", errors: loaded.errors };
+        for (const e of loaded.errors) log.error(`\u914D\u7F6E\u9519\u8BEF [${e.field}]\uFF1A${e.message}`);
+        log.error("silly-tg \u672A\u542F\u52A8\uFF08SillyTavern \u7684\u5176\u4F59\u529F\u80FD\u4E0D\u53D7\u5F71\u54CD\uFF09\u3002\u5728 ST \u6269\u5C55\u8BBE\u7F6E\u680F\u7684 Silly TG \u9762\u677F\u91CC\u4FEE\u6B63\u5E76\u4FDD\u5B58\u5373\u53EF\uFF0C\u65E0\u9700\u91CD\u542F ST\u3002");
+      }
+      return;
+    }
+    this.stateValue = "starting";
+    this.standby = void 0;
+    this.loadingConfig = loaded.config;
+    const ac = new AbortController();
+    this.startAbort = ac;
+    let rt;
+    try {
+      rt = await this.opts.start(loaded.config, loaded.warnings, ac.signal);
+    } catch (e) {
+      this.startAbort = null;
+      if (ac.signal.aborted) {
+        this.stateValue = "standby";
+        this.loadingConfig = null;
+        this.standby = void 0;
+        log.info("\u5DF2\u53D6\u6D88\u8FD9\u6B21\u542F\u52A8\uFF08\u6536\u5230\u65B0\u7684\u914D\u7F6E\uFF0C\u6216 ST \u6B63\u5728\u9000\u51FA\uFF09\u3002");
+        return;
+      }
+      const message = redactError(e instanceof Error ? e.message : e, this.secretsOf(loaded.config));
+      this.stateValue = "standby";
+      this.loadingConfig = null;
+      this.standby = { reason: "start-failed", errors: [{ field: "(runtime)", message }] };
+      log.error(`silly-tg \u542F\u52A8\u5931\u8D25\uFF1A${message}\u3002\u4FEE\u6B63\u540E\u5728\u9762\u677F\u91CC\u518D\u4FDD\u5B58\u4E00\u6B21\u5373\u53EF\u91CD\u8BD5\u3002`);
+      return;
+    }
+    this.startAbort = null;
+    this.loadingConfig = null;
+    if (this.closed) {
+      this.stateValue = "stopping";
+      await this.stopRuntime(rt);
+      this.stateValue = "standby";
+      return;
+    }
+    this.runtime = rt;
+    this.stateValue = "running";
+  }
+};
+
 // src/server/plugin.ts
 function proxyFailureHint(proxy) {
   if (proxy.source === "config") return "\u5DF2\u914D\u7F6E telegramProxy\uFF0C\u68C0\u67E5\u4EE3\u7406\u662F\u5426\u53EF\u7528\u3002";
   if (proxy.source === "env") return `\u6B63\u5728\u4F7F\u7528\u73AF\u5883\u53D8\u91CF ${proxy.envName} \u91CC\u7684\u4EE3\u7406\uFF0C\u68C0\u67E5\u4EE3\u7406\u662F\u5426\u53EF\u7528\uFF1B\u4E0D\u60F3\u8D70\u4EE3\u7406\u5C31\u53D6\u6D88\u8FD9\u4E2A\u73AF\u5883\u53D8\u91CF\uFF0C\u6216\u5728 config.json \u91CC\u8BBE\u7F6E telegramProxy \u8986\u76D6\u5B83\u3002`;
   return "\u5982\u679C\u4F60\u6240\u5728\u7F51\u7EDC\u8BBF\u95EE\u4E0D\u4E86 Telegram\uFF0C\u5728 config.json \u91CC\u914D\u7F6E telegramProxy\uFF08\u6216\u8BBE\u7F6E\u73AF\u5883\u53D8\u91CF HTTPS_PROXY\uFF09\u3002";
 }
-async function startPlugin(opts) {
+async function bootPlugin(opts) {
   const env2 = opts.env ?? process.env;
-  const bootLog = opts.log ?? createLogger();
+  const log = switchableLogger(opts.log ?? createLogger());
   const configPath = env2.SILLY_TG_CONFIG || join9(opts.pluginDir, "config.json");
-  const loaded = loadConfigFile(configPath);
-  const liveConfig = loaded.ok ? loaded.config : null;
-  let runtimeLog = bootLog;
+  const dataDir = env2.SILLY_TG_DATA_DIR || join9(opts.pluginDir, "data");
+  const lookupChromium = opts.findChromium ?? findChromium;
+  let chromium = lookupChromium();
+  let extension2 = { ok: false, reason: "\u5C1A\u672A\u90E8\u7F72" };
+  const channel = new HostChannel({ log });
+  const load = () => {
+    const r = loadConfigFile(configPath);
+    if (r.ok) return { ok: true, config: r.config, warnings: r.warnings };
+    return { ok: false, missing: !existsSync5(configPath), errors: r.errors };
+  };
+  const supervisor = new Supervisor({
+    log,
+    host: channel,
+    chromium: () => chromium,
+    secretsFor: (c) => configSecrets(c, env2),
+    load,
+    start: (config2, warnings, signal) => {
+      chromium = lookupChromium(config2.chromiumPath);
+      return startRuntime({ opts, env: env2, configPath, dataDir, channel, extension: extension2, chromium, shellLog: log }, config2, warnings, signal);
+    },
+    stopTimeoutMs: opts.stopTimeoutMs
+  });
   registerSettingsRoutes(opts.router, {
     configPath,
-    log: bootLog,
-    live: () => liveConfig,
-    startErrors: () => loaded.ok ? [] : loaded.errors,
-    secrets: () => liveConfig ? configSecrets(liveConfig) : [],
+    log,
+    live: () => supervisor.liveConfig(),
+    runtime: { status: () => supervisor.status(), reload: () => supervisor.reload() },
+    secrets: () => {
+      const c = supervisor.liveConfig();
+      return c ? configSecrets(c, env2) : [];
+    },
     applyHot: (c) => {
-      if (!liveConfig) return;
-      assignHotFields(liveConfig, c);
-      runtimeLog.setLevel?.(c.logLevel);
-    }
+      const live = supervisor.liveConfig();
+      if (!live) return;
+      assignHotFields(live, c);
+      log.setLevel?.(c.logLevel);
+    },
+    reloadWaitMs: opts.reloadWaitMs
   });
-  if (!loaded.ok) {
-    for (const e of loaded.errors) bootLog.error(`\u914D\u7F6E\u9519\u8BEF [${e.field}]\uFF1A${e.message}`);
-    bootLog.error("silly-tg \u672A\u542F\u52A8\uFF08SillyTavern \u7684\u5176\u4F59\u529F\u80FD\u4E0D\u53D7\u5F71\u54CD\uFF09\u3002\u4FEE\u6B63\u914D\u7F6E\u540E\u91CD\u542F ST\u3002");
-    return null;
+  channel.register(opts.router);
+  extension2 = await (opts.deploy ?? deployExtension)({ pluginDir: opts.pluginDir });
+  if (extension2.ok) {
+    log.info(extension2.message ?? `UI \u6269\u5C55\u5DF2\u90E8\u7F72\u5230 ${extension2.target}`);
+    if (extension2.warning) log.warn(extension2.warning);
+  } else {
+    log.warn(`UI \u6269\u5C55\u672A\u80FD\u90E8\u7F72\uFF1A${extension2.reason ?? ""}`);
+    if (extension2.manual) log.warn(extension2.manual);
   }
-  const config2 = loaded.config;
+  void supervisor.reload();
+  return {
+    configPath,
+    dataDir,
+    log,
+    channel,
+    extension: extension2,
+    supervisor,
+    stop: async () => {
+      await supervisor.stop();
+      channel.close();
+    }
+  };
+}
+async function startRuntime(ctx, config2, warnings, signal) {
+  const { opts, env: env2, channel } = ctx;
   const secrets = configSecrets(config2, env2);
   const log = opts.log ?? createLogger({ level: config2.logLevel, secrets });
-  runtimeLog = log;
-  for (const w2 of loaded.warnings) log.warn(`\u914D\u7F6E\u63D0\u793A [${w2.field}]\uFF1A${w2.message}`);
+  ctx.shellLog.use(log);
+  for (const w2 of warnings) log.warn(`\u914D\u7F6E\u63D0\u793A [${w2.field}]\uFF1A${w2.message}`);
   const proxy = resolveProxy(config2.telegramProxy, env2);
   if (proxy.source !== "none") log.info(`Telegram \u4EE3\u7406\uFF1A${describeProxy(proxy)}${proxy.noProxy ? `\uFF0CNO_PROXY=${proxy.noProxy}` : ""}`);
   else if (proxy.ignored) log.warn(`\u73AF\u5883\u53D8\u91CF\u91CC\u7684\u4EE3\u7406 ${proxy.ignored} \u534F\u8BAE\u4E0D\u53D7\u652F\u6301\uFF08\u53EA\u652F\u6301 http/https\uFF09\uFF0C\u5DF2\u5FFD\u7565\uFF0C\u5C06\u76F4\u8FDE Telegram\u3002\u4EE3\u7406\u8F6F\u4EF6\u5982\u679C\u6709 HTTP\uFF08\u6DF7\u5408\uFF09\u7AEF\u53E3\uFF0C\u8BF7\u6539\u7528\u90A3\u4E2A\u7AEF\u53E3\u3002`);
-  const channel = new HostChannel({ log });
-  channel.register(opts.router);
-  const shutdownHooks = [];
-  let updateHandler = (u) => log.debug(`\u6536\u5230 update ${u.update_id}\uFF08bot \u903B\u8F91\u5C1A\u672A\u63A5\u5165\uFF09`);
   const status = {
     telegram: "skipped",
-    chromium: findChromium(config2.chromiumPath),
+    chromium: ctx.chromium,
     proxy: { source: proxy.source, description: describeProxy(proxy) },
-    extension: await deployExtension({ pluginDir: opts.pluginDir }),
+    extension: ctx.extension,
     hostChecks: []
   };
-  if (status.extension.ok) {
-    log.info(status.extension.message ?? `UI \u6269\u5C55\u5DF2\u90E8\u7F72\u5230 ${status.extension.target}`);
-    if (status.extension.warning) log.warn(status.extension.warning);
-  } else {
-    log.warn(`UI \u6269\u5C55\u672A\u80FD\u90E8\u7F72\uFF1A${status.extension.reason ?? ""}`);
-    if (status.extension.manual) log.warn(status.extension.manual);
-  }
   if (status.chromium.warning) log.warn(status.chromium.warning);
   if (status.chromium.path) log.info(`\u4F7F\u7528 Chromium\uFF1A${status.chromium.path}`);
   else log.warn(`\u6CA1\u6709\u627E\u5230 Chrome/Chromium\uFF0C\u65E0\u5934\u6D4F\u89C8\u5668\u65E0\u6CD5\u542F\u52A8\u3002${status.chromium.hint ?? ""}`);
-  channel.onEvent((e) => {
+  const offEvent = channel.onEvent((e) => {
     if (e.type === "hello") {
       const warning = versionMismatchWarning(opts.version ?? VERSION, e.extVersion);
       if (warning) log.warn(warning);
@@ -92738,38 +93039,13 @@ async function startPlugin(opts) {
   });
   const abort = new AbortController();
   let polling = Promise.resolve();
-  if (env2.SILLY_TG_OFFLINE === "1") {
-    log.warn("SILLY_TG_OFFLINE=1\uFF1A\u4E0D\u8FDE\u63A5 Telegram\uFF08\u4EC5\u8054\u8C03\u7528\uFF09\u3002");
-  } else {
-    try {
-      const me2 = await telegram.getMe();
-      status.telegram = "ok";
-      status.botUsername = me2.username;
-      log.info(`Telegram \u5DF2\u8FDE\u63A5\uFF0Cbot\uFF1A@${me2.username ?? me2.id}`);
-    } catch (e) {
-      status.telegram = "error";
-      const hint = e instanceof TelegramApiError ? e.errorCode === 401 ? "Telegram \u5DF2\u54CD\u5E94\uFF0C\u7F51\u7EDC\u548C\u4EE3\u7406\u6CA1\u95EE\u9898\uFF0C\u662F botToken \u88AB\u62D2\u7EDD\uFF0C\u68C0\u67E5 config.json \u91CC\u7684 botToken\u3002" : "" : proxyFailureHint(proxy);
-      log.error(`\u8FDE\u63A5 Telegram \u5931\u8D25\uFF1A${e.message}\u3002${hint}\u5C06\u7EE7\u7EED\u5728\u540E\u53F0\u91CD\u8BD5\u3002`);
-    }
-    polling = pollUpdates({
-      client: telegram,
-      signal: abort.signal,
-      log,
-      allowedUpdates: ["message", "edited_message", "callback_query", "stopped_message_generation"],
-      onUpdate: (u) => {
-        if (!isAllowedUpdate(u, config2.allowedUserIds)) {
-          log.debug(`\u5FFD\u7565\u975E\u767D\u540D\u5355 update ${u.update_id}`);
-          return;
-        }
-        return updateHandler(u);
-      }
-    }).catch((e) => log.error(`\u8F6E\u8BE2\u5F02\u5E38\u9000\u51FA\uFF1A${redactError(e, secrets)}`));
-  }
+  const shutdownHooks = [];
+  let updateHandler = (u) => log.debug(`\u6536\u5230 update ${u.update_id}\uFF08bot \u903B\u8F91\u5C1A\u672A\u63A5\u5165\uFF09`);
   let stopped;
-  return {
+  const rt = {
     config: config2,
-    configPath,
-    dataDir: env2.SILLY_TG_DATA_DIR || join9(opts.pluginDir, "data"),
+    configPath: ctx.configPath,
+    dataDir: ctx.dataDir,
     log,
     channel,
     telegram,
@@ -92778,6 +93054,7 @@ async function startPlugin(opts) {
     setUpdateHandler: (fn) => void (updateHandler = fn),
     stop: () => stopped ??= (async () => {
       abort.abort();
+      offEvent();
       channel.close();
       for (const fn of shutdownHooks.reverse()) {
         try {
@@ -92789,6 +93066,52 @@ async function startPlugin(opts) {
       await Promise.race([polling, new Promise((r) => setTimeout(r, 3e3).unref())]);
     })()
   };
+  try {
+    const offline = env2.SILLY_TG_OFFLINE === "1";
+    if (offline) {
+      log.warn("SILLY_TG_OFFLINE=1\uFF1A\u4E0D\u8FDE\u63A5 Telegram\uFF08\u4EC5\u8054\u8C03\u7528\uFF09\u3002");
+    } else {
+      try {
+        const me2 = await telegram.getMe(signal);
+        status.telegram = "ok";
+        status.botUsername = me2.username;
+        log.info(`Telegram \u5DF2\u8FDE\u63A5\uFF0Cbot\uFF1A@${me2.username ?? me2.id}`);
+      } catch (e) {
+        if (signal?.aborted) throw new Error("\u542F\u52A8\u5DF2\u53D6\u6D88", { cause: e });
+        status.telegram = "error";
+        const hint = e instanceof TelegramApiError ? e.errorCode === 401 ? "Telegram \u5DF2\u54CD\u5E94\uFF0C\u7F51\u7EDC\u548C\u4EE3\u7406\u6CA1\u95EE\u9898\uFF0C\u662F botToken \u88AB\u62D2\u7EDD\uFF0C\u68C0\u67E5\u9762\u677F\uFF08\u6216 config.json\uFF09\u91CC\u7684 botToken\u3002" : "" : proxyFailureHint(proxy);
+        const message = redactError(e.message, secrets);
+        status.telegramError = `${message}\u3002${hint}`;
+        log.error(`\u8FDE\u63A5 Telegram \u5931\u8D25\uFF1A${message}\u3002${hint}\u5C06\u7EE7\u7EED\u5728\u540E\u53F0\u91CD\u8BD5\u3002`);
+      }
+    }
+    if (signal?.aborted) throw new Error("\u542F\u52A8\u5DF2\u53D6\u6D88");
+    rt.bridge = attachBridge(rt, { launcher: opts.launcher, env: env2 });
+    if (!offline) {
+      polling = pollUpdates({
+        client: telegram,
+        signal: abort.signal,
+        log,
+        allowedUpdates: ["message", "edited_message", "callback_query", "stopped_message_generation"],
+        onUpdate: (u) => {
+          if (!isAllowedUpdate(u, config2.allowedUserIds)) {
+            log.debug(`\u5FFD\u7565\u975E\u767D\u540D\u5355 update ${u.update_id}`);
+            return;
+          }
+          return updateHandler(u);
+        }
+      }).then((reason) => {
+        if (reason === "unauthorized") {
+          status.telegram = "error";
+          status.telegramError = "Telegram \u62D2\u7EDD\u4E86 botToken\uFF08401\uFF09\uFF0C\u8F6E\u8BE2\u5DF2\u505C\u6B62\u3002\u5728\u9762\u677F\u91CC\u586B\u5199\u6B63\u786E\u7684 botToken \u5E76\u4FDD\u5B58\u5373\u53EF\u6062\u590D\u3002";
+        }
+      }).catch((e) => log.error(`\u8F6E\u8BE2\u5F02\u5E38\u9000\u51FA\uFF1A${redactError(e, secrets)}`));
+    }
+  } catch (e) {
+    await rt.stop();
+    throw e;
+  }
+  return rt;
 }
 
 // src/server/index.ts
@@ -92797,23 +93120,22 @@ var info = {
   name: "Silly TG",
   description: "\u5728 Telegram \u91CC\u4E0E SillyTavern / Luker \u5BF9\u8BDD\uFF08Bot\u3001\u65E0\u5934\u6D4F\u89C8\u5668\u3001Mini App\uFF09\u3002"
 };
-var runtime = null;
+var shell = null;
 async function init(router) {
   try {
     const pluginDir = resolve8(dirname9(fileURLToPath2(import.meta.url)), "..");
-    runtime = await startPlugin({ router, pluginDir });
-    if (runtime) attachBridge(runtime);
+    shell = await bootPlugin({ router, pluginDir });
   } catch (e) {
     createLogger().error(`\u542F\u52A8\u5931\u8D25\uFF0C\u63D2\u4EF6\u5DF2\u7981\u7528\uFF1A${redactError(e)}`);
   }
 }
 async function exit() {
   try {
-    await runtime?.stop();
+    await shell?.stop();
   } catch (e) {
     createLogger().error(`\u9000\u51FA\u51FA\u9519\uFF1A${redactError(e)}`);
   }
-  runtime = null;
+  shell = null;
 }
 export {
   exit,

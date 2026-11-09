@@ -1,4 +1,6 @@
-// 配置面板里不依赖 DOM 的部分：服务端响应的类型、表单值到提交内容的转换。可在 Node 中测试。
+// 配置面板里不依赖 DOM 的部分：服务端响应的类型、表单值到提交内容的转换、运行状态的文案。可在 Node 中测试。
+
+import type { RuntimeStatus } from '../shared/runtime-status';
 
 export interface SettingsValues {
   botToken: { set: boolean };
@@ -27,7 +29,12 @@ export interface SettingsResponse {
   errors?: Array<{ field: string; message: string }>;
   changed?: string[];
   hot?: string[];
-  restart?: string[];
+  /** 触发了运行时重新加载的字段（待命时为全部改动）。 */
+  reloaded?: string[];
+  /** 这次保存是否重新加载了运行时；待命时即使没有改动也会按现有 config.json 重新启动一次。 */
+  reloadedRuntime?: boolean;
+  /** 服务端运行状态（GET/POST /config 与 GET /status 都带）。 */
+  runtime?: RuntimeStatus;
 }
 
 /** 表单里用户填的原始值（都是字符串/布尔）。 */
@@ -101,13 +108,78 @@ export function buildPatch(form: FormValues, original: SettingsValues | undefine
   return errors.length > 0 ? { ok: false, errors } : { ok: true, patch };
 }
 
-/** 保存结果的提示文字。 */
-export function saveSummary(r: SettingsResponse): string {
-  if (!r.changed || r.changed.length === 0) return '没有改动。';
-  const parts: string[] = ['已保存。'];
-  if (r.hot && r.hot.length > 0) parts.push(`已立即生效：${r.hot.map(fieldLabel).join('、')}。`);
-  if (r.restart && r.restart.length > 0) parts.push(`需要重启 ST 才生效：${r.restart.map(fieldLabel).join('、')}。`);
+/** 保存结果的提示文字。保存后不再需要重启 ST：连接类字段由服务端当场重新连接。 */
+export function saveResultMessage(r: SettingsResponse): string {
+  const changed = r.changed ?? [];
+  const hot = r.hot ?? [];
+  const reloaded = r.reloaded ?? [];
+  const rt = r.runtime;
+  // 待命时没有改动也会重新启动一次（例如手动改好了 config.json，在面板里点保存让它生效）
+  const head = changed.length > 0 ? '已保存' : r.reloadedRuntime ? '没有改动，已按现有 config.json 重新启动' : '没有改动';
+  const parts: string[] = [`${head}。`];
+  if (hot.length > 0) parts.push(`已立即生效：${hot.map(fieldLabel).join('、')}。`);
+  // 只有重新加载过、或者当前不在正常运行时，才补一句运行状态
+  if (!rt || (!r.reloadedRuntime && reloaded.length === 0 && rt.state === 'running' && rt.telegram !== 'error')) return parts.join('');
+  if (runtimeSettling(rt)) return `${parts.join('')}正在重新连接…`;
+  if (rt.state === 'standby') return `${head}，但插件没有启动：${rt.errors?.map((e) => e.message).join('；') || '请检查配置'}`;
+  if (rt.telegram === 'error') return `${head}，但连接 Telegram 失败：${rt.telegramError ?? '原因见 ST 日志'}`;
+  if (rt.telegram === 'ok') parts.push(`已重新连接${rt.botUsername ? `，bot：@${rt.botUsername}` : ''}。`);
+  else parts.push('已重新加载。');
   return parts.join('');
+}
+
+export type RuntimeLineLevel = 'ok' | 'error' | 'pending' | 'idle';
+export interface RuntimeLine {
+  level: RuntimeLineLevel;
+  text: string;
+}
+export const LEVEL_ICON: Record<RuntimeLineLevel, string> = { ok: '🟢', error: '🔴', pending: '⏳', idle: '⚪' };
+
+/** 面板状态区的几行：总体状态、Telegram、Chromium、无头页面。文字都来自固定文案或服务端已脱敏的字段。 */
+export function describeRuntime(rt: RuntimeStatus): RuntimeLine[] {
+  const lines: RuntimeLine[] = [];
+  const add = (level: RuntimeLineLevel, text: string): void => void lines.push({ level, text });
+  switch (rt.state) {
+    case 'standby':
+      if (rt.standbyReason === 'invalid-config') add('error', '待命：配置有误，修正后保存即可，无需重启 ST。');
+      else if (rt.standbyReason === 'start-failed') add('error', '待命：上次启动失败，修正后再保存一次即可重试。');
+      else add('idle', '待命：还没有配置。填写 Bot Token 和允许的用户 ID 后保存，插件会立即启动。');
+      for (const e of rt.errors ?? []) add('error', `· ${e.field}：${e.message}`);
+      break;
+    case 'starting':
+      add('pending', '正在启动…');
+      break;
+    case 'stopping':
+      add('pending', '正在重新加载…');
+      break;
+    case 'running':
+      add('ok', '运行中');
+      break;
+  }
+  if (rt.telegram === 'ok') add('ok', `Telegram：已连接${rt.botUsername ? ` @${rt.botUsername}` : ''}`);
+  else if (rt.telegram === 'error') add('error', `Telegram：连接失败。${rt.telegramError ?? '原因见 ST 日志'}`);
+  else if (rt.telegram === 'pending') add('pending', 'Telegram：连接中…');
+  else add('idle', rt.state === 'running' ? 'Telegram：未连接（离线模式）' : 'Telegram：未连接');
+  if (rt.chromium.found) add('ok', 'Chromium：已找到');
+  else add('error', `Chromium：未找到。${rt.chromium.hint ?? ''}`.trim());
+  if (rt.hostConnected) add('ok', `无头页面：已连接${rt.hostPage ? `（ST ${rt.hostPage.stVersion}）` : ''}`);
+  else if (rt.state === 'running' && rt.chromium.found) add('pending', '无头页面：未连接（正在启动，或已空闲关闭，收到消息时会自动启动）');
+  else add('idle', '无头页面：未启动');
+  return lines;
+}
+
+/** 启动或重新加载还没结束（不含“页面还没连上”这种可能长期存在的稳定状态）。 */
+export function runtimeSettling(rt: RuntimeStatus): boolean {
+  return rt.state === 'starting' || rt.state === 'stopping' || rt.telegram === 'pending';
+}
+
+/** 面板轮询到时还没结束时的提示。 */
+export const POLL_TIMEOUT_NOTE = '30 秒内还没有完成（可能是网络或代理较慢）。稍后重新打开本面板查看状态，或查看 ST 的日志。';
+
+/** 状态还在变化（启动、重新加载、连接中、页面还没连上），面板应继续轮询 GET /status。 */
+export function runtimeInProgress(rt: RuntimeStatus): boolean {
+  if (runtimeSettling(rt)) return true;
+  return rt.state === 'running' && rt.chromium.found && !rt.hostConnected;
 }
 
 export const FIELD_LABELS: Record<string, string> = {
@@ -139,15 +211,18 @@ export function classifyConfigFailure(status: number): ConfigFailure {
   return status === 404 ? 'server-missing' : 'other';
 }
 
-/** 服务端插件没装时的引导文案。全部是固定文字，不含任何来自服务端响应的内容。 */
+/**
+ * 服务端插件没有加载时的引导文案。全部是固定文字，不含任何来自服务端响应的内容。
+ * 覆盖两种情况：只装了扩展（没 clone 服务端插件）；clone 了但 enableServerPlugins 没开。
+ */
 export const INSTALL_GUIDE = {
-  title: '还需要安装服务端插件',
-  intro: '这个扩展只是 Silly TG 的页面部分，需要配套的服务端插件才能工作。请按下面的步骤补装：',
+  title: '服务端插件没有加载',
+  intro: '这个扩展只是 Silly TG 的页面部分，需要配套的服务端插件才能工作。出现这段说明，是因为 ST 没有加载它：可能还没装到 ST 的 plugins 目录，或者 config.yaml 里的 enableServerPlugins 不是 true。请按下面的步骤检查：',
   command: 'git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg',
   steps: [
-    '在 SillyTavern 的根目录执行上面的命令（需要已安装 git）。',
-    '打开 ST 根目录的 config.yaml，把 enableServerPlugins 改成 true。默认是 false，不开启时插件不会被加载，也没有任何提示。',
-    '重启 ST，然后刷新本页面，回到这里填写 Bot Token 和允许的用户 ID。',
+    '在 SillyTavern 的根目录执行上面的命令（需要已安装 git）。已经有 plugins/silly-tg 目录就不用再执行。',
+    '打开 ST 根目录的 config.yaml，把 enableServerPlugins 改成 true（已经是 true 就不用改）。默认是 false，不开启时插件不会被加载，也没有任何提示。',
+    '重启 ST 一次，然后刷新本页面，回到这里填写 Bot Token 和允许的用户 ID 并保存。保存后立即生效，无需再重启。',
   ],
   readmeUrl: 'https://github.com/incohua/silly-tg-bridge-plugin#安装',
   readmeText: '查看完整安装说明',

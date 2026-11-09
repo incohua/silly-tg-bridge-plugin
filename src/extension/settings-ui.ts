@@ -1,12 +1,32 @@
 // 酒馆“扩展”设置栏里的 Silly TG 配置抽屉。只在普通 ST 页面渲染；无头 host 页面不会走到这里。
 // 所有来自服务端的文字都用 textContent 写入，不拼 HTML。
-// 接口：GET/POST /api/plugins/silly-tg/config，继承 ST 的会话和 CSRF 鉴权。
+// 接口：GET/POST /api/plugins/silly-tg/config、GET /status，继承 ST 的会话和 CSRF 鉴权。
+// 保存后服务端当场生效（热字段直接改，连接类字段自动重新连接），面板轮询 /status 显示连接结果，不再提示重启 ST。
 
 import { ctx } from './adapter';
-import { buildPatch, classifyConfigFailure, fieldLabel, INSTALL_GUIDE, saveSummary, type FormValues, type SettingsResponse, type SettingsValues } from './settings-model';
+import type { RuntimeStatus } from '../shared/runtime-status';
+import {
+  buildPatch,
+  classifyConfigFailure,
+  describeRuntime,
+  fieldLabel,
+  INSTALL_GUIDE,
+  LEVEL_ICON,
+  POLL_TIMEOUT_NOTE,
+  runtimeInProgress,
+  runtimeSettling,
+  saveResultMessage,
+  type FormValues,
+  type SettingsResponse,
+  type SettingsValues,
+} from './settings-model';
 import { PLUGIN_BASE } from './uplink';
 
 const CONTAINER_ID = 'extensions_settings2';
+/** 保存后轮询 /status 的间隔与最长时间。 */
+const POLL_INTERVAL_MS = 1000;
+const POLL_MAX_MS = 30_000;
+const RECONNECT = '保存后自动重新连接';
 const ROOT_ID = 'silly_tg_settings';
 
 type El = HTMLElement;
@@ -148,11 +168,11 @@ function buildDrawer(container: HTMLElement): void {
     ]),
   };
   const rows: Record<string, Row> = {
-    botToken: row('Bot Token', '重启 ST 后生效', f.botToken),
-    allowedUserIds: row('允许的用户 ID', '重启 ST 后生效', f.allowedUserIds, '只有这些 Telegram 账号能使用 bot。'),
-    telegramProxy: row('Telegram 代理', '重启 ST 后生效', f.telegramProxy),
-    stBaseUrl: row('ST 地址', '重启 ST 后生效', f.stBaseUrl, '无头浏览器访问 ST 用的地址。'),
-    basicAuth: row('ST 登录账号', '重启 ST 后生效', f.basicAuthUser),
+    botToken: row('Bot Token', RECONNECT, f.botToken),
+    allowedUserIds: row('允许的用户 ID', '立即生效', f.allowedUserIds, '只有这些 Telegram 账号能使用 bot。'),
+    telegramProxy: row('Telegram 代理', RECONNECT, f.telegramProxy),
+    stBaseUrl: row('ST 地址', RECONNECT, f.stBaseUrl, '无头浏览器访问 ST 用的地址。'),
+    basicAuth: row('ST 登录账号', RECONNECT, f.basicAuthUser),
     idleShutdownMinutes: row('空闲关闭（分钟）', '立即生效', f.idleShutdownMinutes, '0 表示不自动关闭无头浏览器。'),
     lowMemory: row('低内存模式', '下次启动浏览器时生效', f.lowMemory),
     dialogueStyle: row('对话样式', '立即生效', f.dialogueStyle),
@@ -171,7 +191,10 @@ function buildDrawer(container: HTMLElement): void {
   const foot = el('div', { style: 'margin-top:6px' });
   foot.append(save, status);
   form.append(foot);
-  form.append(el('small', { style: 'opacity:.65;display:block;margin-top:8px' }, 'Chromium 路径等未在此列出的选项只能在 config.json 里修改。行动选项规则见插件目录下的 choice-rules.json（改完无需重启）。'));
+  // 运行状态：Telegram、Chromium、无头页面
+  const runtimeBox = el('div', { class: 'silly-tg-runtime', style: 'margin-top:8px' });
+  form.append(runtimeBox);
+  form.append(el('small', { style: 'opacity:.65;display:block;margin-top:8px' }, 'Chromium 路径等未在此列出的选项只能在 config.json 里修改（手动改文件后要重启 ST 才生效）。行动选项规则见插件目录下的 choice-rules.json（改完无需重启）。'));
 
   let original: SettingsValues | undefined;
 
@@ -207,16 +230,22 @@ function buildDrawer(container: HTMLElement): void {
 
   const showBanner = (r: SettingsResponse): void => {
     banner.textContent = '';
-    if (r.exists === false) banner.append(el('div', {}, '还没有 config.json：填好 Bot Token 和允许的用户 ID 后保存，然后重启 ST。'));
-    else if (r.running === false) {
-      banner.append(el('div', {}, '插件当前没有启动（配置有误）。修正后保存并重启 ST：'));
-      for (const e of r.startErrors ?? []) banner.append(el('div', { style: 'opacity:.8' }, `· ${e.field}：${e.message}`));
+    // 待命原因在状态区逐条列出，这里只给一句提示
+    if (r.exists === false) banner.append(el('div', {}, '还没有 config.json：填好 Bot Token 和允许的用户 ID 后保存，插件会立即启动，无需重启 ST。'));
+    else if (r.runtime ? r.runtime.state === 'standby' && r.runtime.standbyReason !== 'no-config' : r.running === false) {
+      banner.append(el('div', {}, '插件处于待命状态（配置有误或启动失败）。在下面修正后保存即可，无需重启 ST。'));
     }
   };
 
-  const request = async (method: 'GET' | 'POST', body?: unknown): Promise<SettingsResponse> => {
+  const renderRuntime = (rt: RuntimeStatus | undefined): void => {
+    runtimeBox.textContent = '';
+    if (!rt) return;
+    for (const line of describeRuntime(rt)) runtimeBox.append(el('div', { style: line.level === 'error' ? 'color:var(--SmartThemeQuoteColor,#e66)' : '' }, `${LEVEL_ICON[line.level]} ${line.text}`));
+  };
+
+  const request = async (method: 'GET' | 'POST', body?: unknown, path = '/config'): Promise<SettingsResponse> => {
     const headers = ctx().getRequestHeaders();
-    const res = await fetch(`${PLUGIN_BASE}/config`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    const res = await fetch(`${PLUGIN_BASE}${path}`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
     // 404 = ST 找不到插件的路由 = 服务端插件没装/没启用。必须先于 res.json() 判断（404 返回的不是 JSON）。
     if (classifyConfigFailure(res.status) === 'server-missing') return { ok: false, serverMissing: true };
     let json: SettingsResponse;
@@ -226,6 +255,37 @@ function buildDrawer(container: HTMLElement): void {
       return { ok: false, error: `服务端返回了无法解析的内容（HTTP ${res.status}）。插件可能没有加载，检查 ST 的 enableServerPlugins。` };
     }
     return res.ok ? json : { ...json, ok: false, error: json.error ?? `HTTP ${res.status}` };
+  };
+
+  // 轮询 /status，直到状态稳定或超过 30 秒。再次保存时作废上一轮。saved 有值时同步更新保存结果的提示。
+  let pollToken = 0;
+  const pollRuntime = (saved?: SettingsResponse): void => {
+    const token = ++pollToken;
+    const deadline = Date.now() + POLL_MAX_MS;
+    let last = saved?.runtime;
+    const tick = async (): Promise<void> => {
+      if (token !== pollToken) return;
+      if (Date.now() > deadline) {
+        // 到点还在启动：明确告诉用户，而不是一直停在“正在重新连接…”
+        if (!last || runtimeSettling(last)) {
+          if (saved) status.textContent = `${saveResultMessage({ ...saved, runtime: last })}${POLL_TIMEOUT_NOTE}`;
+          else runtimeBox.append(el('div', {}, `${LEVEL_ICON.pending} ${POLL_TIMEOUT_NOTE}`));
+        }
+        return;
+      }
+      try {
+        const r = await request('GET', undefined, '/status');
+        if (token !== pollToken || !r.ok || !r.runtime) return;
+        last = r.runtime;
+        renderRuntime(r.runtime);
+        if (saved) status.textContent = saveResultMessage({ ...saved, runtime: r.runtime });
+        if (!runtimeInProgress(r.runtime)) return;
+      } catch {
+        // 网络抖动：下一秒再试
+      }
+      setTimeout(() => void tick(), POLL_INTERVAL_MS);
+    };
+    setTimeout(() => void tick(), POLL_INTERVAL_MS);
   };
 
   const load = async (): Promise<void> => {
@@ -248,7 +308,9 @@ function buildDrawer(container: HTMLElement): void {
       }
       showBanner(r);
       fill(r.values);
+      renderRuntime(r.runtime);
       status.textContent = '';
+      if (r.runtime && runtimeInProgress(r.runtime)) pollRuntime();
     } catch (e) {
       status.textContent = `读取配置失败：${e instanceof Error ? e.message : String(e)}`;
     }
@@ -288,9 +350,12 @@ function buildDrawer(container: HTMLElement): void {
           } else status.textContent = r.error ?? (r.serverMissing ? '服务端插件未安装或未启用，请刷新页面查看安装引导。' : '保存失败');
           return;
         }
-        status.textContent = saveSummary(r);
+        status.textContent = saveResultMessage(r);
         if (r.values) fill(r.values);
-        showBanner({ ...r, running: undefined, exists: true });
+        showBanner({ ...r, exists: true });
+        renderRuntime(r.runtime);
+        if (r.runtime && runtimeInProgress(r.runtime)) pollRuntime(r);
+        else pollToken++;
       } catch (e) {
         status.textContent = `保存失败：${e instanceof Error ? e.message : String(e)}`;
       }
