@@ -46,7 +46,7 @@
 还没有决定要不要做，或者技术上有不确定性。
 
 - [ ] **发布分支（用户多起来再说）**：现在 `main` 合并即发布，CI 已检查 `dist/` 与源码一致，对一个人维护的项目足够。等一次坏更新会造成真实损失时，再把 `main` 改成发布分支、开发移到 `dev`（和 SillyTavern 一样），老用户跟踪的就是 `main`，不用迁移。原则：用户跟踪的分支**永远不 force-push、不用孤儿提交重建**（ST 的自动更新是 `fetch` 加 `git pull`，分叉后会一直停在旧版），回退只用 `revert`。不要新开 `release` 分支：老用户要手动迁移，清单还容易漏 `package.json`。
-- [ ] **Docker 部署文档**（优先级低）：官方 ST 镜像（Alpine）不含 Chromium。**不提供镜像，也不在仓库放 Dockerfile 和 compose**，避免承担升级、多架构和安全更新的维护。如果做，只写一篇文档，说明怎么在官方镜像基础上自行加装 Chromium、挂载插件、处理 PUID/PGID 模式下的沙箱（`PUPPETEER_DANGEROUS_NO_SANDBOX=true`）和容器内的代理地址，标注“社区验证”。此前的初稿在提交 `25a286d` 的历史里。
+- [ ] **Docker 部署文档**（优先级低）：官方 ST 镜像（Alpine）不含 Chromium。**不提供镜像，也不在仓库放 Dockerfile 和 compose**，避免承担升级、多架构和安全更新的维护。如果做，只写一篇文档，说明怎么在官方镜像基础上自行加装 Chromium、挂载插件、处理 PUID/PGID 模式下的沙箱（`PUPPETEER_DANGEROUS_NO_SANDBOX=true`）和容器内的代理地址，标注“社区验证”。此前写过一份初稿，没有提交进仓库。
 - [ ] `/chars` 关键词搜索、最近使用置顶
 - [ ] 每条回复下方的“重新生成”按钮
 - [ ] 配置面板：运行状态、一键重启无头浏览器、测试 token / 代理
