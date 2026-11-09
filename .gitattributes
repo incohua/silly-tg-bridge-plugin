@@ -7,3 +7,7 @@
 # picking either side (task state lives in task.json, not index.md). See
 # .trellis/spec/cli/backend/directory-structure.md for details.
 .trellis/workspace/*/journal-*.md merge=union
+
+# dist/ 是提交进仓库的构建产物（ST 的插件更新只做 git pull，不会构建）。
+# 标成生成文件后，GitHub 的 PR 页面会默认折叠它，不用每次翻构建结果。
+dist/** linguist-generated=true
