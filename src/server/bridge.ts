@@ -2,6 +2,7 @@
 // 运行时重新加载时整套重建；BridgeStore 每次修改都同步落盘，新运行时读到的 state.json 是最新的。
 import { dirname, join } from 'node:path';
 import { Bot, BOT_COMMANDS } from './bot';
+import { HeapGuard } from './heap-guard';
 import { ChoiceRuleStore } from './choices';
 import { BrowserManager, type Launcher } from './browser';
 import { BridgeStore } from './message-map';
@@ -14,6 +15,7 @@ export interface Bridge {
   bot: Bot;
   browser: BrowserManager;
   watchdog: Watchdog;
+  heapGuard: HeapGuard;
   store: BridgeStore;
 }
 
@@ -79,8 +81,11 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher; env
       set: (patch) => saveSettingsPatch(rt.configPath, config, patch),
     },
     watchdogStatus: () => watchdog.status(),
+    heapStatus: () => heapGuard.status(),
     choiceRules: () => choiceRules.get(),
   });
+  // 页面 JS 堆接近低内存模式的上限时，空闲时重载页面（见 heap-guard.ts）。按当前这个 Chromium 启动时的参数判断是否有上限
+  const heapGuard: HeapGuard = new HeapGuard({ host: channel, isIdle: () => !bot.busy, recycle: () => bot.recyclePage(), enabled: () => browser.heapLimited, log });
   rt.setUpdateHandler((u) => bot.handleUpdate(u));
   // 命令菜单：输入 / 时可选。失败只记警告，不影响使用。
   if (env.SILLY_TG_OFFLINE !== '1') {
@@ -91,11 +96,13 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher; env
   rt.onShutdown(() => watchdog.dispose());
   // 最先执行：进行中的一轮立即收尾，不等页面（页面马上要关了）
   rt.onShutdown(() => bot.dispose());
+  // 同样最先执行：停止过程中不能再触发回收
+  rt.onShutdown(() => heapGuard.dispose());
 
   // 启动后在后台打开 host 页面（ST 此时可能还没开始监听，BrowserManager 会等它）。
   // 失败只记日志：收到消息时会再试一次。
   if (status.chromium.path) {
     void browser.ensureRunning().catch(() => {});
   }
-  return { bot, browser, watchdog, store };
+  return { bot, browser, watchdog, heapGuard, store };
 }

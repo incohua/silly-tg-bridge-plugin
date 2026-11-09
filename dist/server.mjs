@@ -88607,6 +88607,9 @@ var isOptStr = (v2) => v2 === void 0 || typeof v2 === "string";
 function isCardSource(v2) {
   return isRecord(v2) && isStr(v2.source);
 }
+function isNonNegFinite(v2) {
+  return typeof v2 === "number" && Number.isFinite(v2) && v2 >= 0;
+}
 function isSelfCheckItem(v2) {
   return isRecord(v2) && isStr(v2.name) && typeof v2.ok === "boolean" && isOptStr(v2.detail);
 }
@@ -88615,8 +88618,11 @@ function decodeHostEvent(v2) {
   switch (v2.type) {
     case "hello":
       return isStr(v2.nonce) && isStr(v2.stVersion) && typeof v2.hasTavernHelper === "boolean" ? { type: "hello", nonce: v2.nonce, stVersion: v2.stVersion, hasTavernHelper: v2.hasTavernHelper, extVersion: isStr(v2.extVersion) ? v2.extVersion : void 0 } : null;
-    case "heartbeat":
+    case "heartbeat": {
+      const h = v2.heap;
+      if (isRecord(h) && isNonNegFinite(h.used) && isNonNegFinite(h.limit)) return { type: "heartbeat", heap: { used: h.used, limit: h.limit } };
       return { type: "heartbeat" };
+    }
     case "selfCheck":
       return Array.isArray(v2.items) && v2.items.every(isSelfCheckItem) ? { type: "selfCheck", items: v2.items.map((i) => ({ name: i.name, ok: i.ok, detail: i.detail })) } : null;
     case "hostError":
@@ -89063,6 +89069,7 @@ function decodeMenuCallback(data) {
 }
 var BUSY_TEXT = "\u23F3 \u4E0A\u4E00\u6761\u6D88\u606F\u8FD8\u5728\u751F\u6210\u56DE\u590D\uFF0C\u8BF7\u7B49\u5B83\u5B8C\u6210\u540E\u518D\u53D1\u3002\u8FD9\u6761\u6D88\u606F\u6CA1\u6709\u53D1\u9001\u7ED9\u89D2\u8272\u3002";
 var BUSY_COMMAND_TEXT = "\u23F3 \u6B63\u5728\u751F\u6210\u56DE\u590D\u6216\u5207\u6362\u4E2D\uFF0C\u8BF7\u7B49\u5B83\u5B8C\u6210\uFF08\u6216\u5148 /stop\uFF09\u518D\u6267\u884C\u8FD9\u4E2A\u547D\u4EE4\u3002";
+var RECYCLING_TEXT = "\u267B\uFE0F \u6B63\u5728\u91CD\u65B0\u52A0\u8F7D\u65E0\u5934\u9875\u9762\u4EE5\u91CA\u653E\u5185\u5B58\uFF0C\u51E0\u79D2\u540E\u7EE7\u7EED\u5904\u7406\u4F60\u7684\u6D88\u606F\u2026";
 var COLD_START_TEXT = "\u{1F680} \u6B63\u5728\u542F\u52A8\u65E0\u5934\u6D4F\u89C8\u5668\uFF0C\u7A0D\u5019\u2026";
 var NOTHING_TO_STOP_TEXT = "\u2139\uFE0F \u5F53\u524D\u6CA1\u6709\u6B63\u5728\u751F\u6210\u7684\u56DE\u590D\u3002";
 var NOTHING_TO_REGEN_TEXT = "\u2139\uFE0F \u6CA1\u6709\u53EF\u4EE5\u91CD\u65B0\u751F\u6210\u7684\u56DE\u590D\u3002\u53EA\u80FD\u91CD\u65B0\u751F\u6210 bot \u5728\u8FD9\u91CC\u53D1\u51FA\u7684\u4E0A\u4E00\u6761\u56DE\u590D\u3002";
@@ -89100,6 +89107,8 @@ var Bot = class {
   defaultRules = compileRules(DEFAULT_RULES).rules;
   sessionKey;
   sessionPromise = Promise.resolve();
+  /** 堆回收（重载页面）进行中；期间到达的消息和命令等它结束再处理，不丢。 */
+  recycling = null;
   now;
   /** 当前一轮生成结束（测试和退出时用）。 */
   async idle() {
@@ -89150,6 +89159,7 @@ var Bot = class {
       await this.reply(chatId, "\u2139\uFE0F \u4EE5 / \u5F00\u5934\u7684\u6587\u5B57\u4F1A\u88AB\u5F53\u4F5C\u547D\u4EE4\u3002\u53D1 /help \u67E5\u770B\u53EF\u7528\u547D\u4EE4\uFF1B\u60F3\u53D1\u7ED9\u89D2\u8272\u7684\u8BDD\uFF0C\u5F00\u5934\u522B\u7528 /\u3002");
       return;
     }
+    await this.waitForRecycle(chatId);
     if (this.busy) {
       log.info(`\u6B63\u5728${this.turn ? "\u751F\u6210" : "\u5207\u6362"}\uFF0C\u5DF2\u63D0\u793A\u5FD9\u788C update=${update.update_id}`);
       await this.reply(chatId, BUSY_TEXT);
@@ -89179,6 +89189,7 @@ var Bot = class {
       await this.reply(chatId, `\u2753 \u672A\u77E5\u547D\u4EE4 /${name}\uFF0C\u53D1 /help \u67E5\u770B\u53EF\u7528\u547D\u4EE4\u3002`);
       return;
     }
+    await this.waitForRecycle(chatId);
     if (this.busy) {
       await this.reply(chatId, BUSY_COMMAND_TEXT);
       return;
@@ -89289,18 +89300,53 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
       await host.request({ type: "refreshPage" }, 1e4);
     } catch (e) {
       log.warn(`\u5237\u65B0\u65E0\u5934\u9875\u9762\u5931\u8D25\uFF0C\u4F7F\u7528\u73B0\u6709\u7684\u9884\u8BBE\u5217\u8868\uFF1A${e.message}`);
-      return;
+      return false;
     }
     const limit = this.opts.hostReloadTimeoutMs ?? 6e4;
     for (let waited = 0; waited < limit; waited += 200) {
       if (host.connected && host.hello && host.hello !== before) {
         this.sessionKey = void 0;
         await this.ensureSession();
-        return;
+        return true;
       }
       await new Promise((r) => setTimeout(r, 200));
     }
     log.warn("\u5237\u65B0\u65E0\u5934\u9875\u9762\u540E\u6CA1\u6709\u5728\u9650\u5B9A\u65F6\u95F4\u5185\u91CD\u65B0\u8FDE\u4E0A");
+    return false;
+  }
+  /**
+   * 堆回收：bot 空闲时重载无头页面，把 JS 堆清零，并恢复角色和聊天（HeapGuard 调用）。
+   * 期间 busy 为真；这段时间到达的消息由 waitForRecycle 挂起等待，页面恢复后照常处理。
+   * 页面没能重新连上时抛错（HeapGuard 只记 warn）。
+   */
+  recyclePage() {
+    if (this.recycling) return this.recycling;
+    if (this.busy) return Promise.reject(new Error("bot \u6B63\u5FD9\uFF0C\u4E0D\u80FD\u56DE\u6536\u9875\u9762"));
+    const run = (async () => {
+      this.op = "recycle";
+      const release = this.opts.browser.acquire();
+      try {
+        if (!await this.refreshHostPage()) throw new Error("\u91CD\u8F7D\u9875\u9762\u5931\u8D25\u6216\u9875\u9762\u6CA1\u6709\u91CD\u65B0\u8FDE\u4E0A");
+      } finally {
+        release();
+        this.op = null;
+        this.recycling = null;
+      }
+    })();
+    this.recycling = run;
+    return run;
+  }
+  /** 堆回收进行中就先告知用户并等它结束（有上限），而不是按“忙碌”丢掉这条消息。 */
+  async waitForRecycle(chatId) {
+    const pending = this.recycling;
+    if (!pending) return;
+    this.opts.log.info("\u5806\u56DE\u6536\u8FDB\u884C\u4E2D\uFF0C\u6D88\u606F\u7B49\u5F85\u9875\u9762\u6062\u590D\u540E\u518D\u5904\u7406");
+    await this.reply(chatId, RECYCLING_TEXT);
+    const limit = (this.opts.hostReloadTimeoutMs ?? 6e4) + 1e4;
+    let timer2;
+    await Promise.race([pending.catch(() => {
+    }), new Promise((r) => timer2 = setTimeout(r, limit))]);
+    clearTimeout(timer2);
   }
   async sendList(chatId, kind) {
     const { host, log } = this.opts;
@@ -89556,6 +89602,11 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
     lines.push(`\u{1F4A4} \u7A7A\u95F2\u5173\u95ED\uFF1A${idle > 0 ? `\u7A7A\u95F2 ${idle} \u5206\u949F\u540E\u5173\u95ED` : "\u672A\u542F\u7528"}`);
     const wd = this.opts.watchdogStatus?.();
     if (wd) lines.push(`\u{1F415} \u770B\u95E8\u72D7\uFF1A${wd}`);
+    const heap = this.opts.heapStatus?.();
+    if (heap && (heap.usedMB !== void 0 || heap.recycled > 0 || heap.suspended)) {
+      const used = heap.usedMB !== void 0 ? `${Math.round(heap.usedMB)} / ${heap.limitMB} MB` : `\u4E0A\u9650 ${heap.limitMB} MB`;
+      lines.push(`\u{1F9E0} \u9875\u9762\u5185\u5B58\uFF1A${used}\uFF1B\u56E0\u5806\u56DE\u6536\u91CD\u8F7D ${heap.recycled} \u6B21${heap.suspended ? "\uFF08\u56DE\u6536\u540E\u7528\u91CF\u7ACB\u5373\u56DE\u5347\uFF0C\u5DF2\u505C\u6B62\u81EA\u52A8\u56DE\u6536\uFF09" : ""}`);
+    }
     if (host.connected && host.hello) {
       lines.push(`\u{1F7E2} ST \u9875\u9762\uFF1A\u5DF2\u8FDE\u63A5\uFF08${host.hello.stVersion}\uFF0C\u9152\u9986\u52A9\u624B${host.hello.hasTavernHelper ? "\u5DF2\u52A0\u8F7D" : "\u672A\u52A0\u8F7D"}\uFF09`);
       try {
@@ -89798,6 +89849,96 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
   }
 };
 
+// src/server/heap-guard.ts
+var OLD_SPACE_LIMIT_MB = 256;
+var MB = 1024 * 1024;
+var HeapGuard = class {
+  constructor(opts) {
+    this.opts = opts;
+    this.now = opts.now ?? Date.now;
+    this.thresholdMB = OLD_SPACE_LIMIT_MB * (opts.thresholdRatio ?? 0.75);
+    this.minIntervalMs = opts.minIntervalMs ?? 5 * 6e4;
+    this.relapseWindowMs = opts.relapseWindowMs ?? 5 * 6e4;
+    this.off = opts.host.onEvent((e) => this.onEvent(e));
+  }
+  opts;
+  usedBytes;
+  recycledCount = 0;
+  suspended = false;
+  inFlight = null;
+  lastAttemptAt;
+  /** 最近一次成功回收完成的时间，用来判断回收后是否马上又超阈值。 */
+  lastSuccessAt;
+  disposed = false;
+  off;
+  now;
+  thresholdMB;
+  minIntervalMs;
+  relapseWindowMs;
+  status() {
+    return {
+      usedMB: this.usedBytes === void 0 ? void 0 : this.usedBytes / MB,
+      limitMB: OLD_SPACE_LIMIT_MB,
+      recycled: this.recycledCount,
+      suspended: this.suspended
+    };
+  }
+  /** 进行中的回收（测试用）。 */
+  settled() {
+    return this.inFlight ?? Promise.resolve();
+  }
+  dispose() {
+    this.disposed = true;
+    this.off();
+  }
+  onEvent(e) {
+    if (this.disposed) return;
+    if (e.type === "hello") {
+      this.usedBytes = void 0;
+      return;
+    }
+    if (e.type !== "heartbeat" || !e.heap || this.inFlight) return;
+    this.usedBytes = e.heap.used;
+    this.consider();
+  }
+  consider() {
+    if (this.suspended || this.usedBytes === void 0 || !this.opts.enabled()) return;
+    const usedMB = this.usedBytes / MB;
+    if (usedMB < this.thresholdMB) return;
+    const now = this.now();
+    if (this.lastSuccessAt !== void 0 && now - this.lastSuccessAt <= this.relapseWindowMs) {
+      this.suspended = true;
+      this.opts.log.warn(
+        `\u9875\u9762\u5806\u56DE\u6536\u540E\u7528\u91CF\u7ACB\u5373\u56DE\u5230 ${Math.round(usedMB)} MB\uFF08\u9608\u503C ${Math.round(this.thresholdMB)} MB\uFF09\uFF0C\u5DF2\u505C\u6B62\u81EA\u52A8\u56DE\u6536\u3002\u53EF\u80FD\u662F\u5F53\u524D\u89D2\u8272\u5361\u6216\u804A\u5929\u672C\u8EAB\u5C31\u5F88\u5927\uFF1B\u53EF\u4EE5\u5728\u914D\u7F6E\u91CC\u628A lowMemory \u8BBE\u4E3A false \u53D6\u6D88 ${OLD_SPACE_LIMIT_MB} MB \u4E0A\u9650\uFF08\u9700\u8981\u66F4\u591A\u5185\u5B58\uFF09`
+      );
+      return;
+    }
+    if (this.lastAttemptAt !== void 0 && now - this.lastAttemptAt < this.minIntervalMs) return;
+    if (!this.opts.isIdle()) return;
+    this.inFlight = this.run(usedMB);
+  }
+  async run(usedMB) {
+    const { log } = this.opts;
+    const startedAt = this.now();
+    this.lastAttemptAt = startedAt;
+    log.info(`\u9875\u9762 JS \u5806 ${usedMB.toFixed(0)} MB / \u4E0A\u9650 ${OLD_SPACE_LIMIT_MB} MB\uFF0C\u5DF2\u8FBE\u56DE\u6536\u9608\u503C\u4E14 bot \u7A7A\u95F2\uFF0C\u91CD\u8F7D\u9875\u9762`);
+    try {
+      await this.opts.recycle();
+      const done = this.now();
+      this.lastAttemptAt = done;
+      this.lastSuccessAt = done;
+      this.recycledCount++;
+      log.info(`\u5806\u56DE\u6536\u91CD\u8F7D\u5B8C\u6210\uFF1A\u56DE\u6536\u524D ${usedMB.toFixed(0)} MB / \u4E0A\u9650 ${OLD_SPACE_LIMIT_MB} MB\uFF0C\u7528\u65F6 ${Math.max(0, Math.round((done - startedAt) / 1e3))} \u79D2`);
+    } catch (e) {
+      this.lastAttemptAt = this.now();
+      log.warn(`\u5806\u56DE\u6536\u91CD\u8F7D\u5931\u8D25\uFF1A${e.message}`);
+    } finally {
+      this.usedBytes = void 0;
+      this.inFlight = null;
+    }
+  }
+};
+
 // src/server/browser.ts
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -89924,7 +90065,7 @@ function chromiumArgs(opts) {
       "--renderer-process-limit=1",
       "--disable-background-networking",
       "--mute-audio",
-      "--js-flags=--max-old-space-size=256"
+      `--js-flags=--max-old-space-size=${OLD_SPACE_LIMIT_MB}`
     );
   }
   if (opts.isRoot) args.push("--no-sandbox");
@@ -89955,6 +90096,7 @@ var BrowserManager = class {
   stateValue = "stopped";
   browser = null;
   userDataDir = null;
+  launchedLowMemory = false;
   starting = null;
   stopping = null;
   leases = 0;
@@ -89972,6 +90114,10 @@ var BrowserManager = class {
   startedAt;
   get state() {
     return this.stateValue;
+  }
+  /** 当前这个 Chromium 是带 JS 堆上限参数启动的（低内存模式）。 */
+  get heapLimited() {
+    return this.stateValue === "running" && this.launchedLowMemory;
   }
   get pid() {
     return this.browser?.pid;
@@ -90141,16 +90287,18 @@ var BrowserManager = class {
       cancelled();
       const isRoot = this.opts.isRoot ?? process.getuid?.() === 0;
       launching = true;
+      const lowMemory = this.opts.lowMemory;
       const browser = await this.opts.launcher({
         executablePath: this.opts.executablePath,
-        args: chromiumArgs({ lowMemory: this.opts.lowMemory, isRoot }),
+        args: chromiumArgs({ lowMemory, isRoot }),
         userDataDir: this.userDataDir
       });
       launching = false;
       this.browser = browser;
+      this.launchedLowMemory = lowMemory;
       cancelled();
       browser.onDisconnected(() => this.handleDisconnected(browser));
-      log.info(`\u65E0\u5934\u6D4F\u89C8\u5668\u5DF2\u542F\u52A8\uFF08PID ${browser.pid ?? "\u672A\u77E5"}${this.opts.lowMemory ? "\uFF0C\u4F4E\u5185\u5B58\u53C2\u6570" : ""}\uFF09\uFF0C\u6253\u5F00 ST \u9875\u9762\u2026`);
+      log.info(`\u65E0\u5934\u6D4F\u89C8\u5668\u5DF2\u542F\u52A8\uFF08PID ${browser.pid ?? "\u672A\u77E5"}${lowMemory ? "\uFF0C\u4F4E\u5185\u5B58\u53C2\u6570" : ""}\uFF09\uFF0C\u6253\u5F00 ST \u9875\u9762\u2026`);
       const page = await browser.newPage();
       cancelled();
       this.watchPage(page, browser);
@@ -92475,7 +92623,7 @@ var Watchdog = class {
     const backoff = this.opts.backoffMs ?? DEFAULT_BACKOFF;
     const delay = backoff[Math.min(this.consecutive - 1, backoff.length - 1)];
     try {
-      await notify(`\u65E0\u5934\u6D4F\u89C8\u5668\u5F02\u5E38\uFF1A${reason}\u3002\u6B63\u5728\u81EA\u52A8\u91CD\u542F${delay > 0 ? `\uFF08${Math.round(delay / 1e3)} \u79D2\u540E\uFF09` : ""}\u2026`);
+      await notify(`\u65E0\u5934\u6D4F\u89C8\u5668\u5F02\u5E38\uFF1A${reason}\u3002\u6B63\u5728\u81EA\u52A8\u91CD\u542F${delay > 0 ? `\uFF08${Math.round(delay / 1e3)} \u79D2\u540E\uFF09` : ""}\u2026${/crashed/i.test(reason) ? "\n\u5982\u679C\u5F00\u7740\u4F4E\u5185\u5B58\u6A21\u5F0F\uFF0C\u9875\u9762\u5D29\u6E83\u591A\u534A\u662F JS \u5185\u5B58\u8FBE\u5230\u4E0A\u9650\uFF0C\u8BE6\u89C1 README \u7684\u300C\u4F7F\u7528\u63D0\u9192\u300D\u3002" : ""}`);
       if (delay > 0) {
         this.retryAt = this.now() + delay;
         await new Promise((r) => {
@@ -92566,8 +92714,10 @@ function attachBridge(rt, opts = {}) {
       set: (patch) => saveSettingsPatch(rt.configPath, config2, patch)
     },
     watchdogStatus: () => watchdog.status(),
+    heapStatus: () => heapGuard.status(),
     choiceRules: () => choiceRules.get()
   });
+  const heapGuard = new HeapGuard({ host: channel, isIdle: () => !bot.busy, recycle: () => bot.recyclePage(), enabled: () => browser.heapLimited, log });
   rt.setUpdateHandler((u) => bot.handleUpdate(u));
   if (env2.SILLY_TG_OFFLINE !== "1") {
     telegram.setMyCommands([...BOT_COMMANDS]).catch((e) => log.warn(`\u6CE8\u518C\u547D\u4EE4\u83DC\u5355\u5931\u8D25\uFF08\u4E0D\u5F71\u54CD\u4F7F\u7528\uFF09\uFF1A${e.message}`));
@@ -92575,11 +92725,12 @@ function attachBridge(rt, opts = {}) {
   rt.onShutdown(() => browser.dispose());
   rt.onShutdown(() => watchdog.dispose());
   rt.onShutdown(() => bot.dispose());
+  rt.onShutdown(() => heapGuard.dispose());
   if (status.chromium.path) {
     void browser.ensureRunning().catch(() => {
     });
   }
-  return { bot, browser, watchdog, store };
+  return { bot, browser, watchdog, heapGuard, store };
 }
 
 // src/server/deploy-extension.ts

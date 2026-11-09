@@ -529,6 +529,16 @@
     return { restored: false, reason: `\u6253\u5F00\u89D2\u8272 ${key} \u8D85\u65F6` };
   }
 
+  // src/extension/heap.ts
+  function readHeap(perf = globalThis.performance) {
+    const mem = perf?.memory;
+    if (!mem) return void 0;
+    const { usedJSHeapSize: used, jsHeapSizeLimit: limit } = mem;
+    if (typeof used !== "number" || typeof limit !== "number") return void 0;
+    if (!Number.isFinite(used) || !Number.isFinite(limit) || used < 0 || limit < 0) return void 0;
+    return { used, limit };
+  }
+
   // src/extension/settings-model.ts
   function parseUserIds(text) {
     const parts = text.split(/[\s,，、;；]+/).filter(Boolean);
@@ -1144,7 +1154,10 @@
     es.onerror = () => {
       if (es.readyState === EventSource.CLOSED) shutdown("SSE \u8FDE\u63A5\u88AB\u5173\u95ED");
     };
-    const hb = setInterval(() => report({ type: "heartbeat" }), HEARTBEAT_MS);
+    const hb = setInterval(() => {
+      const heap = readHeap();
+      report(heap ? { type: "heartbeat", heap } : { type: "heartbeat" });
+    }, HEARTBEAT_MS);
     cleanups.push(() => clearInterval(hb));
     const runChecks = async () => {
       const api = await queue.run(() => ensureApiConnected());

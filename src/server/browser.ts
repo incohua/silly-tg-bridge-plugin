@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { isKnownNoise, isReadyConsoleLine } from '../extension/adapter';
 import { HOST_PARAM, SKIP_CSRF_PATCH_PARAM } from '../extension/host-mode';
 import { diagnoseBrowserError } from './browser-diagnose';
+import { OLD_SPACE_LIMIT_MB } from './heap-guard';
 import type { FetchLike } from './http';
 import type { Logger } from './logger';
 
@@ -104,7 +105,7 @@ export function chromiumArgs(opts: { lowMemory: boolean; isRoot: boolean }): str
       '--renderer-process-limit=1',
       '--disable-background-networking',
       '--mute-audio',
-      '--js-flags=--max-old-space-size=256',
+      `--js-flags=--max-old-space-size=${OLD_SPACE_LIMIT_MB}`,
     );
   }
   // 以 root 运行（常见于容器）时 Chrome 拒绝启动沙箱
@@ -135,6 +136,7 @@ export class BrowserManager {
   private stateValue: BrowserState = 'stopped';
   private browser: LaunchedBrowser | null = null;
   private userDataDir: string | null = null;
+  private launchedLowMemory = false;
   private starting: Promise<void> | null = null;
   private stopping: Promise<void> | null = null;
   private leases = 0;
@@ -161,6 +163,11 @@ export class BrowserManager {
 
   get state(): BrowserState {
     return this.stateValue;
+  }
+
+  /** 当前这个 Chromium 是带 JS 堆上限参数启动的（低内存模式）。 */
+  get heapLimited(): boolean {
+    return this.stateValue === 'running' && this.launchedLowMemory;
   }
 
   get pid(): number | undefined {
@@ -348,17 +355,20 @@ export class BrowserManager {
       cancelled();
       const isRoot = this.opts.isRoot ?? process.getuid?.() === 0;
       launching = true;
+      // lowMemory 面板里可以热改，但对已启动的 Chromium 不起作用：记下这一次启动用的值，堆回收按它判断
+      const lowMemory = this.opts.lowMemory;
       const browser = await this.opts.launcher({
         executablePath: this.opts.executablePath,
-        args: chromiumArgs({ lowMemory: this.opts.lowMemory, isRoot }),
+        args: chromiumArgs({ lowMemory, isRoot }),
         userDataDir: this.userDataDir,
       });
       launching = false;
       // 先记下来再检查：取消时由下面的收尾（doStop）关掉这个进程
       this.browser = browser;
+      this.launchedLowMemory = lowMemory;
       cancelled();
       browser.onDisconnected(() => this.handleDisconnected(browser));
-      log.info(`无头浏览器已启动（PID ${browser.pid ?? '未知'}${this.opts.lowMemory ? '，低内存参数' : ''}），打开 ST 页面…`);
+      log.info(`无头浏览器已启动（PID ${browser.pid ?? '未知'}${lowMemory ? '，低内存参数' : ''}），打开 ST 页面…`);
 
       const page = await browser.newPage();
       cancelled();

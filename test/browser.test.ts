@@ -1,6 +1,7 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserManager, chromiumArgs, hostUrl, type BrowserEvent, type HostLink, type LaunchedBrowser, type Launcher, type PageLike } from '../src/server/browser';
+import { OLD_SPACE_LIMIT_MB } from '../src/server/heap-guard';
 import { captureLogger } from './helpers';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -130,6 +131,10 @@ describe('chromiumArgs / hostUrl', () => {
     const low = chromiumArgs({ lowMemory: true, isRoot: true });
     expect(low).toContain('--renderer-process-limit=1');
     expect(low).toContain('--no-sandbox');
+    // 回收阈值和启动参数共用同一个常量
+    expect(low).toContain(`--js-flags=--max-old-space-size=${OLD_SPACE_LIMIT_MB}`);
+    expect(low).toContain('--js-flags=--max-old-space-size=256');
+    expect(base.some((a) => a.startsWith('--js-flags'))).toBe(false);
   });
   it('host URL 带 nonce 参数', () => {
     expect(hostUrl('http://127.0.0.1:8000', 'abc')).toBe('http://127.0.0.1:8000/#silly_tg_host=abc');
@@ -341,6 +346,38 @@ describe('BrowserManager', () => {
     expect(launched[0].killCount).toBe(1);
     expect(launched[1].killCount).toBe(0);
     expect(m.state).toBe('running');
+    await m.dispose();
+  });
+
+  it('heapLimited：按这次启动时的 lowMemory 判断，之后热改配置不影响正在运行的浏览器', async () => {
+    const host = new FakeHost();
+    const { launcher } = fakeLauncher(host);
+    let low = true;
+    const m = new BrowserManager({
+      log: captureLogger(),
+      host,
+      launcher,
+      executablePath: '/fake/chrome',
+      stBaseUrl: 'http://127.0.0.1:8000',
+      get lowMemory() {
+        return low;
+      },
+      idleShutdownMs: 0,
+      fetch: okFetch,
+      tickMs: 10,
+      hostReadyTimeoutMs: 500,
+      reconnectGraceMs: 50,
+      isRoot: false,
+    });
+    expect(m.heapLimited).toBe(false);
+    await m.ensureRunning();
+    expect(m.heapLimited).toBe(true);
+    low = false;
+    expect(m.heapLimited).toBe(true);
+    await m.stop();
+    expect(m.heapLimited).toBe(false);
+    await m.ensureRunning();
+    expect(m.heapLimited).toBe(false);
     await m.dispose();
   });
 

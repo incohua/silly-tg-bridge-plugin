@@ -97,11 +97,19 @@ export interface SelfCheckItem {
   detail?: string;
 }
 
+export interface HeapUsage {
+  used: number;
+  limit: number;
+}
+
 export type HostEvent =
   /** extVersion 是 UI 扩展自己的版本，服务端据此提示两边版本不一致；旧版扩展不带，缺省即可。 */
   | { type: 'hello'; nonce: string; stVersion: string; hasTavernHelper: boolean; extVersion?: string }
-  /** 扩展定期发送，服务端据此判断页面存活（看门狗）。 */
-  | { type: 'heartbeat' }
+  /**
+   * 扩展定期发送，服务端据此判断页面存活（看门狗）。
+   * heap 是页面 JS 堆用量（字节，performance.memory）；可选，旧版扩展不带，服务端据此在空闲时回收页面。
+   */
+  | { type: 'heartbeat'; heap?: HeapUsage }
   /** 启动自检结果（CSRF 补丁、typeof Mvu 等），服务端写日志并显示在 /status。 */
   | { type: 'selfCheck'; items: SelfCheckItem[] }
   /** 页面内的未处理错误（已过滤忽略清单后）。 */
@@ -148,6 +156,10 @@ function isCardSource(v: unknown): v is CardSource {
   return isRecord(v) && isStr(v.source);
 }
 
+function isNonNegFinite(v: unknown): v is number {
+  return typeof v === 'number' && Number.isFinite(v) && v >= 0;
+}
+
 function isSelfCheckItem(v: unknown): v is SelfCheckItem {
   return isRecord(v) && isStr(v.name) && typeof v.ok === 'boolean' && isOptStr(v.detail);
 }
@@ -160,8 +172,12 @@ export function decodeHostEvent(v: unknown): HostEvent | null {
       return isStr(v.nonce) && isStr(v.stVersion) && typeof v.hasTavernHelper === 'boolean'
         ? { type: 'hello', nonce: v.nonce, stVersion: v.stVersion, hasTavernHelper: v.hasTavernHelper, extVersion: isStr(v.extVersion) ? v.extVersion : undefined }
         : null;
-    case 'heartbeat':
+    case 'heartbeat': {
+      const h = v.heap;
+      // 非法的堆数据直接丢掉，心跳本身照常有效（看门狗只关心“活着”）
+      if (isRecord(h) && isNonNegFinite(h.used) && isNonNegFinite(h.limit)) return { type: 'heartbeat', heap: { used: h.used, limit: h.limit } };
       return { type: 'heartbeat' };
+    }
     case 'selfCheck':
       return Array.isArray(v.items) && v.items.every(isSelfCheckItem)
         ? { type: 'selfCheck', items: v.items.map((i) => ({ name: i.name, ok: i.ok, detail: i.detail })) }

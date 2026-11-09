@@ -13,6 +13,7 @@ import { captureToasts, runGeneration, type GenerationRequest } from './generati
 import { parseHostNonce, parseHostTestFlags } from './host-mode';
 import { SerialQueue } from './queue';
 import { restoreActiveCharacter } from './restore';
+import { readHeap } from './heap';
 import { mountSettings } from './settings-ui';
 import { claimSingleton, duplicateMessage } from './singleton';
 import { PLUGIN_BASE, Uplink } from './uplink';
@@ -150,7 +151,10 @@ async function main(): Promise<void> {
   };
 
   // 6. 心跳
-  const hb = setInterval(() => report({ type: 'heartbeat' }), HEARTBEAT_MS);
+  const hb = setInterval(() => {
+    const heap = readHeap();
+    report(heap ? { type: 'heartbeat', heap } : { type: 'heartbeat' });
+  }, HEARTBEAT_MS);
   cleanups.push(() => clearInterval(hb));
 
   // 7. 自检：CSRF、酒馆助手、MVU、API 连接

@@ -10,6 +10,7 @@ import {
   NOTHING_TO_REGEN_TEXT,
   NOTHING_TO_STOP_TEXT,
   parseCommand,
+  RECYCLING_TEXT,
   REGENERATED_NOTE,
   type BotBrowser,
   type BotHost,
@@ -265,6 +266,83 @@ describe('Bot 路由', () => {
     expect(out).toMatch(/API：openai（已连接）/);
     expect(out).toMatch(/mvu 未通过：没有 MVU/);
     expect(browser.ensureCalls).toBe(0);
+  });
+
+  it('堆回收：空闲时重载页面并恢复会话；期间 busy，结束后释放浏览器租约', async () => {
+    const ctx = setup();
+    ctx.store.session = { characterAvatar: 'c5.png', chatId: 'E - 2' };
+    ctx.browser.startedAt = 1;
+    const p = ctx.bot.recyclePage();
+    expect(ctx.bot.busy).toBe(true);
+    expect(ctx.browser.leases).toBe(1);
+    await p;
+    expect(ctx.host.requests.map((r) => r.type)).toContain('refreshPage');
+    expect(ctx.bot.busy).toBe(false);
+    expect(ctx.browser.leases).toBe(0);
+  });
+
+  it('堆回收期间发来的消息：先提示再等页面恢复，之后照常发给 ST，不按忙碌丢弃', async () => {
+    const ctx = setup();
+    const p = ctx.bot.recyclePage();
+    await wait(5);
+    const h = ctx.bot.handleUpdate(text('回收时发的消息'));
+    await p;
+    await h;
+    await wait(5);
+    expect(ctx.telegram.texts()).toEqual([RECYCLING_TEXT]);
+    expect(ctx.telegram.texts()).not.toContain(BUSY_TEXT);
+    const types = ctx.host.requests.map((r) => r.type);
+    expect(types.indexOf('refreshPage')).toBeLessThan(types.indexOf('send'));
+    expect(ctx.host.requests.find((r) => r.type === 'send')).toMatchObject({ text: '回收时发的消息' });
+    ctx.host.emit({ type: 'generationFailed', generationId: ctx.host.gen, reason: 'test' });
+    await ctx.bot.idle();
+  });
+
+  it('堆回收期间发来的命令（/regen 等）同样等待，不回复忙碌', async () => {
+    const ctx = setup();
+    ctx.store.replies.push({ telegramChatId: 7, telegramMessageIds: [1], stChatId: 'c', stMessageId: 3, sentAt: Date.now() });
+    const p = ctx.bot.recyclePage();
+    await wait(5);
+    const h = ctx.bot.handleUpdate(text('/regen'));
+    await p;
+    await h;
+    expect(ctx.telegram.texts()).not.toContain(BUSY_COMMAND_TEXT);
+    expect(ctx.telegram.texts()[0]).toBe(RECYCLING_TEXT);
+    await wait(5);
+    expect(ctx.host.requests.some((r) => r.type === 'regenerate')).toBe(true);
+    ctx.host.emit({ type: 'generationFailed', generationId: ctx.host.gen, reason: 'test' });
+    await ctx.bot.idle();
+  });
+
+  it('生成中不能回收页面：recyclePage 拒绝，当前生成不受影响', async () => {
+    const ctx = setup();
+    await ctx.bot.handleUpdate(text('你好'));
+    await wait(5);
+    await expect(ctx.bot.recyclePage()).rejects.toThrow(/正忙/);
+    expect(ctx.host.requests.some((r) => r.type === 'refreshPage')).toBe(false);
+    ctx.host.emit({ type: 'generationFailed', generationId: ctx.host.gen, reason: 'test' });
+    await ctx.bot.idle();
+  });
+
+  it('堆回收：页面没能重新连上时抛错，并且恢复到空闲、释放租约', async () => {
+    const ctx = setup({ hostReloadTimeoutMs: 300 });
+    ctx.host.reloadsOnRefresh = false;
+    await expect(ctx.bot.recyclePage()).rejects.toThrow();
+    expect(ctx.bot.busy).toBe(false);
+    expect(ctx.browser.leases).toBe(0);
+  });
+
+  it('/status：显示页面堆用量与回收次数；无数据时不显示', async () => {
+    let heap: { usedMB?: number; limitMB: number; recycled: number; suspended: boolean } | undefined;
+    const ctx = setup({ heapStatus: () => heap });
+    await ctx.bot.handleUpdate(text('/status'));
+    expect(ctx.telegram.texts()[0]).not.toMatch(/页面内存/);
+    heap = { usedMB: 180.4, limitMB: 256, recycled: 2, suspended: false };
+    await ctx.bot.handleUpdate(text('/status'));
+    expect(ctx.telegram.texts()[1]).toMatch(/页面内存：180 \/ 256 MB；因堆回收重载 2 次/);
+    heap = { limitMB: 256, recycled: 1, suspended: true };
+    await ctx.bot.handleUpdate(text('/status'));
+    expect(ctx.telegram.texts()[2]).toMatch(/页面内存：上限 256 MB；因堆回收重载 1 次.*已停止自动回收/);
   });
 
   it('/status：显示 Telegram 代理的来源（配置 / 环境变量 / 无），不含凭据', async () => {

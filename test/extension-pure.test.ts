@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { detectApp, getHostApi, isKnownNoise, isReadyConsoleLine } from '../src/extension/adapter';
 import { parseHostNonce, parseHostTestFlags } from '../src/extension/host-mode';
+import { readHeap } from '../src/extension/heap';
 import { SerialQueue } from '../src/extension/queue';
 import { activeCharacterFromSettingsResponse } from '../src/extension/restore';
 import { isGreetingOnly, normalizeChats } from '../src/extension/commands';
@@ -149,5 +150,16 @@ describe('isGreetingOnly（新聊天判定）', () => {
     expect(isGreetingOnly([{}, { is_user: true }])).toBe(false);
     expect(isGreetingOnly([{ is_user: true }])).toBe(false);
     expect(isGreetingOnly([{ is_system: true }])).toBe(false);
+  });
+});
+
+describe('readHeap', () => {
+  it('读 performance.memory；不存在或值不合法时返回 undefined', () => {
+    expect(readHeap({ memory: { usedJSHeapSize: 10, jsHeapSizeLimit: 20 } })).toEqual({ used: 10, limit: 20 });
+    expect(readHeap({})).toBeUndefined();
+    expect(readHeap(undefined)).toBeUndefined();
+    expect(readHeap({ memory: { usedJSHeapSize: '10', jsHeapSizeLimit: 20 } })).toBeUndefined();
+    expect(readHeap({ memory: { usedJSHeapSize: -1, jsHeapSizeLimit: 20 } })).toBeUndefined();
+    expect(readHeap({ memory: { usedJSHeapSize: Number.NaN, jsHeapSizeLimit: 20 } })).toBeUndefined();
   });
 });

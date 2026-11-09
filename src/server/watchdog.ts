@@ -138,7 +138,7 @@ export class Watchdog {
     const backoff = this.opts.backoffMs ?? DEFAULT_BACKOFF;
     const delay = backoff[Math.min(this.consecutive - 1, backoff.length - 1)];
     try {
-      await notify(`无头浏览器异常：${reason}。正在自动重启${delay > 0 ? `（${Math.round(delay / 1000)} 秒后）` : ''}…`);
+      await notify(`无头浏览器异常：${reason}。正在自动重启${delay > 0 ? `（${Math.round(delay / 1000)} 秒后）` : ''}…${/crashed/i.test(reason) ? '\n如果开着低内存模式，页面崩溃多半是 JS 内存达到上限，详见 README 的「使用提醒」。' : ''}`);
       if (delay > 0) {
         this.retryAt = this.now() + delay;
         await new Promise<void>((r) => {

@@ -15,6 +15,7 @@ import type { BrowserState } from './browser';
 import { choicesKeyboard, choicesText, decodeChoiceCallback, decodeChoiceRegen, DEFAULT_RULES, compileRules, parseChoices, type CompiledChoiceRule } from './choices';
 import { deliverFinal } from './deliver';
 import { HostChannelError } from './host-channel';
+import type { HeapStatus } from './heap-guard';
 import type { Logger } from './logger';
 import type { ReplyRecord, SessionRecord } from './message-map';
 import type { PluginStatus } from './plugin';
@@ -77,6 +78,8 @@ export interface BotOptions {
   dialogueStyle?: DialogueStyle;
   /** /status 显示看门狗状态。 */
   watchdogStatus?: () => string | undefined;
+  /** /status 显示页面 JS 堆用量与堆回收次数。 */
+  heapStatus?: () => HeapStatus | undefined;
   /** /settings 用：读取和保存常用设置。没有提供时 /settings 提示不可用。 */
   settings?: BotSettings;
   /** 草稿更新最小间隔，默认 1000 毫秒。 */
@@ -157,6 +160,7 @@ export function decodeMenuCallback(data: string | undefined): MenuAction | null 
 
 export const BUSY_TEXT = '⏳ 上一条消息还在生成回复，请等它完成后再发。这条消息没有发送给角色。';
 export const BUSY_COMMAND_TEXT = '⏳ 正在生成回复或切换中，请等它完成（或先 /stop）再执行这个命令。';
+export const RECYCLING_TEXT = '♻️ 正在重新加载无头页面以释放内存，几秒后继续处理你的消息…';
 export const COLD_START_TEXT = '🚀 正在启动无头浏览器，稍候…';
 export const NOTHING_TO_STOP_TEXT = 'ℹ️ 当前没有正在生成的回复。';
 export const NOTHING_TO_REGEN_TEXT = 'ℹ️ 没有可以重新生成的回复。只能重新生成 bot 在这里发出的上一条回复。';
@@ -221,6 +225,8 @@ export class Bot {
   private readonly defaultRules = compileRules(DEFAULT_RULES).rules;
   private sessionKey: number | undefined;
   private sessionPromise: Promise<void> = Promise.resolve();
+  /** 堆回收（重载页面）进行中；期间到达的消息和命令等它结束再处理，不丢。 */
+  private recycling: Promise<void> | null = null;
   private readonly now: () => number;
 
   constructor(private readonly opts: BotOptions) {
@@ -281,6 +287,7 @@ export class Bot {
       await this.reply(chatId, 'ℹ️ 以 / 开头的文字会被当作命令。发 /help 查看可用命令；想发给角色的话，开头别用 /。');
       return;
     }
+    await this.waitForRecycle(chatId);
     if (this.busy) {
       log.info(`正在${this.turn ? '生成' : '切换'}，已提示忙碌 update=${update.update_id}`);
       await this.reply(chatId, BUSY_TEXT);
@@ -311,6 +318,7 @@ export class Bot {
       await this.reply(chatId, `❓ 未知命令 /${name}，发 /help 查看可用命令。`);
       return;
     }
+    await this.waitForRecycle(chatId);
     if (this.busy) {
       await this.reply(chatId, BUSY_COMMAND_TEXT);
       return;
@@ -421,25 +429,61 @@ export class Bot {
    * 重载后页面是空白的，要按 bot 记着的会话把角色和聊天恢复回来，否则当前聊天会变。
    * 刷新失败不影响列表，用旧数据照常列出。
    */
-  private async refreshHostPage(): Promise<void> {
+  private async refreshHostPage(): Promise<boolean> {
     const { host, log } = this.opts;
     const before = host.hello;
     try {
       await host.request({ type: 'refreshPage' }, 10_000);
     } catch (e) {
       log.warn(`刷新无头页面失败，使用现有的预设列表：${(e as Error).message}`);
-      return;
+      return false;
     }
     const limit = this.opts.hostReloadTimeoutMs ?? 60_000;
     for (let waited = 0; waited < limit; waited += 200) {
       if (host.connected && host.hello && host.hello !== before) {
         this.sessionKey = undefined; // 强制再恢复一次
         await this.ensureSession();
-        return;
+        return true;
       }
       await new Promise((r) => setTimeout(r, 200));
     }
     log.warn('刷新无头页面后没有在限定时间内重新连上');
+    return false;
+  }
+
+  /**
+   * 堆回收：bot 空闲时重载无头页面，把 JS 堆清零，并恢复角色和聊天（HeapGuard 调用）。
+   * 期间 busy 为真；这段时间到达的消息由 waitForRecycle 挂起等待，页面恢复后照常处理。
+   * 页面没能重新连上时抛错（HeapGuard 只记 warn）。
+   */
+  recyclePage(): Promise<void> {
+    if (this.recycling) return this.recycling;
+    if (this.busy) return Promise.reject(new Error('bot 正忙，不能回收页面'));
+    const run = (async () => {
+      this.op = 'recycle';
+      const release = this.opts.browser.acquire();
+      try {
+        if (!(await this.refreshHostPage())) throw new Error('重载页面失败或页面没有重新连上');
+      } finally {
+        release();
+        this.op = null;
+        this.recycling = null;
+      }
+    })();
+    this.recycling = run;
+    return run;
+  }
+
+  /** 堆回收进行中就先告知用户并等它结束（有上限），而不是按“忙碌”丢掉这条消息。 */
+  private async waitForRecycle(chatId: number): Promise<void> {
+    const pending = this.recycling;
+    if (!pending) return;
+    this.opts.log.info('堆回收进行中，消息等待页面恢复后再处理');
+    await this.reply(chatId, RECYCLING_TEXT);
+    const limit = (this.opts.hostReloadTimeoutMs ?? 60_000) + 10_000;
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([pending.catch(() => {}), new Promise<void>((r) => (timer = setTimeout(r, limit)))]);
+    clearTimeout(timer);
   }
 
   private async sendList(chatId: number, kind: ListKind): Promise<void> {
@@ -716,6 +760,11 @@ export class Bot {
     lines.push(`💤 空闲关闭：${idle > 0 ? `空闲 ${idle} 分钟后关闭` : '未启用'}`);
     const wd = this.opts.watchdogStatus?.();
     if (wd) lines.push(`🐕 看门狗：${wd}`);
+    const heap = this.opts.heapStatus?.();
+    if (heap && (heap.usedMB !== undefined || heap.recycled > 0 || heap.suspended)) {
+      const used = heap.usedMB !== undefined ? `${Math.round(heap.usedMB)} / ${heap.limitMB} MB` : `上限 ${heap.limitMB} MB`;
+      lines.push(`🧠 页面内存：${used}；因堆回收重载 ${heap.recycled} 次${heap.suspended ? '（回收后用量立即回升，已停止自动回收）' : ''}`);
+    }
     if (host.connected && host.hello) {
       lines.push(`🟢 ST 页面：已连接（${host.hello.stVersion}，酒馆助手${host.hello.hasTavernHelper ? '已加载' : '未加载'}）`);
       try {

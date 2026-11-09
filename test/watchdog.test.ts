@@ -75,6 +75,20 @@ describe('Watchdog', () => {
     wd.dispose();
   });
 
+  it('页面崩溃（Page crashed!）：通知里提示可能是 JS 内存上限；其他故障不带这句', async () => {
+    const { browser, notes, wd } = setup();
+    browser.emit({ type: 'crashed', detail: '页面崩溃：Page crashed!' });
+    await wait(10);
+    expect(notes[0]).toMatch(/页面崩溃：Page crashed!。正在自动重启/);
+    expect(notes[0]).toMatch(/JS 内存达到上限.*使用提醒/);
+    wd.dispose();
+    const other = setup();
+    other.browser.crash();
+    await wait(10);
+    expect(other.notes[0]).not.toMatch(/JS 内存/);
+    other.wd.dispose();
+  });
+
   it('心跳超时：先关闭再启动', async () => {
     const { browser, wd } = setup();
     browser.emit({ type: 'heartbeatTimeout', silentMs: 90_000 });
