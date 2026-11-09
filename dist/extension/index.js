@@ -594,9 +594,8 @@
     title: "\u8FD8\u9700\u8981\u5B89\u88C5\u670D\u52A1\u7AEF\u63D2\u4EF6",
     intro: "\u8FD9\u4E2A\u6269\u5C55\u53EA\u662F Silly TG \u7684\u9875\u9762\u90E8\u5206\uFF0C\u9700\u8981\u914D\u5957\u7684\u670D\u52A1\u7AEF\u63D2\u4EF6\u624D\u80FD\u5DE5\u4F5C\u3002\u8BF7\u6309\u4E0B\u9762\u7684\u6B65\u9AA4\u8865\u88C5\uFF1A",
     command: "git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg",
-    commandNote: "\u5728 SillyTavern \u7684\u6839\u76EE\u5F55\u6267\u884C\uFF08\u9700\u8981\u5DF2\u5B89\u88C5 git\uFF09\u3002",
     steps: [
-      "\u5728 SillyTavern \u7684\u6839\u76EE\u5F55\u6267\u884C\u4E0A\u9762\u7684\u547D\u4EE4\u3002",
+      "\u5728 SillyTavern \u7684\u6839\u76EE\u5F55\u6267\u884C\u4E0A\u9762\u7684\u547D\u4EE4\uFF08\u9700\u8981\u5DF2\u5B89\u88C5 git\uFF09\u3002",
       "\u6253\u5F00 ST \u6839\u76EE\u5F55\u7684 config.yaml\uFF0C\u628A enableServerPlugins \u6539\u6210 true\u3002\u9ED8\u8BA4\u662F false\uFF0C\u4E0D\u5F00\u542F\u65F6\u63D2\u4EF6\u4E0D\u4F1A\u88AB\u52A0\u8F7D\uFF0C\u4E5F\u6CA1\u6709\u4EFB\u4F55\u63D0\u793A\u3002",
       "\u91CD\u542F ST\uFF0C\u7136\u540E\u5237\u65B0\u672C\u9875\u9762\uFF0C\u56DE\u5230\u8FD9\u91CC\u586B\u5199 Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID\u3002"
     ],
@@ -695,7 +694,7 @@
     });
     const row2 = el("div", { style: "display:flex;align-items:center;margin-bottom:6px" });
     row2.append(copy, copied);
-    box.append(code, row2, el("small", { style: "opacity:.65;display:block;margin-bottom:6px" }, g.commandNote));
+    box.append(code, row2);
     const ol = el("ol", { style: "margin:0 0 6px 18px;padding:0" });
     for (const step of g.steps) ol.append(el("li", {}, step));
     box.append(ol);

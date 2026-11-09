@@ -144,9 +144,8 @@ export const INSTALL_GUIDE = {
   title: '还需要安装服务端插件',
   intro: '这个扩展只是 Silly TG 的页面部分，需要配套的服务端插件才能工作。请按下面的步骤补装：',
   command: 'git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg',
-  commandNote: '在 SillyTavern 的根目录执行（需要已安装 git）。',
   steps: [
-    '在 SillyTavern 的根目录执行上面的命令。',
+    '在 SillyTavern 的根目录执行上面的命令（需要已安装 git）。',
     '打开 ST 根目录的 config.yaml，把 enableServerPlugins 改成 true。默认是 false，不开启时插件不会被加载，也没有任何提示。',
     '重启 ST，然后刷新本页面，回到这里填写 Bot Token 和允许的用户 ID。',
   ],

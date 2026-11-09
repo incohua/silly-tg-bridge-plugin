@@ -64,7 +64,7 @@ function buildGuide(): El {
   });
   const row2 = el('div', { style: 'display:flex;align-items:center;margin-bottom:6px' });
   row2.append(copy, copied);
-  box.append(code, row2, el('small', { style: 'opacity:.65;display:block;margin-bottom:6px' }, g.commandNote));
+  box.append(code, row2);
   const ol = el('ol', { style: 'margin:0 0 6px 18px;padding:0' });
   for (const step of g.steps) ol.append(el('li', {}, step));
   box.append(ol);
