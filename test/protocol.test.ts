@@ -2,6 +2,13 @@ import { describe, expect, it } from 'vitest';
 import { decodeHostCommand, decodeHostEvent, decodeHostUpload } from '../src/shared/protocol';
 
 describe('decodeHostEvent', () => {
+  it('hello 的 extVersion 可选：带了就解出来，缺省或类型不对时为 undefined（旧版扩展照常连接）', () => {
+    const base = { type: 'hello', nonce: 'n', stVersion: '1.19.0', hasTavernHelper: false };
+    expect(decodeHostEvent({ ...base, extVersion: '0.3.0' })).toMatchObject({ type: 'hello', extVersion: '0.3.0' });
+    expect(decodeHostEvent(base)).toMatchObject({ type: 'hello' });
+    expect((decodeHostEvent(base) as { extVersion?: string }).extVersion).toBeUndefined();
+    expect((decodeHostEvent({ ...base, extVersion: 3 }) as { extVersion?: string }).extVersion).toBeUndefined();
+  });
   it('解码各类事件', () => {
     expect(decodeHostEvent({ type: 'hello', nonce: 'n', stVersion: '1.19.0', hasTavernHelper: true })).toEqual({
       type: 'hello',

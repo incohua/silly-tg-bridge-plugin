@@ -22,6 +22,8 @@ export interface SettingsResponse {
   exists?: boolean;
   values?: SettingsValues;
   error?: string;
+  /** 本地判断出的：服务端插件没装（接口返回 HTTP 404）。不是服务端响应里的字段。 */
+  serverMissing?: boolean;
   errors?: Array<{ field: string; message: string }>;
   changed?: string[];
   hot?: string[];
@@ -124,3 +126,30 @@ export const FIELD_LABELS: Record<string, string> = {
 };
 
 export const fieldLabel = (k: string): string => FIELD_LABELS[k] ?? k;
+
+/** 配置接口失败的归类。 */
+export type ConfigFailure = 'server-missing' | 'other';
+
+/**
+ * 只有 HTTP 404 才认为服务端插件没装（ST 找不到 /api/plugins/silly-tg/* 路由）。
+ * 401、403、5xx 和网络错误（ST 本身连不上也会抛）都不是“没装”，仍按原来的错误提示处理。
+ * 必须在 res.json() 之前判断：404 时 ST 返回的是 HTML，不是 JSON。
+ */
+export function classifyConfigFailure(status: number): ConfigFailure {
+  return status === 404 ? 'server-missing' : 'other';
+}
+
+/** 服务端插件没装时的引导文案。全部是固定文字，不含任何来自服务端响应的内容。 */
+export const INSTALL_GUIDE = {
+  title: '还需要安装服务端插件',
+  intro: '这个扩展只是 Silly TG 的页面部分，需要配套的服务端插件才能工作。请按下面的步骤补装：',
+  command: 'git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg',
+  commandNote: '在 SillyTavern 的根目录执行（需要已安装 git）。',
+  steps: [
+    '在 SillyTavern 的根目录执行上面的命令。',
+    '打开 ST 根目录的 config.yaml，把 enableServerPlugins 改成 true。默认是 false，不开启时插件不会被加载，也没有任何提示。',
+    '重启 ST，然后刷新本页面，回到这里填写 Bot Token 和允许的用户 ID。',
+  ],
+  readmeUrl: 'https://github.com/incohua/silly-tg-bridge-plugin#安装',
+  readmeText: '查看完整安装说明',
+} as const;

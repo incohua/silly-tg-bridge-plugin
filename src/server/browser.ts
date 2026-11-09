@@ -341,7 +341,7 @@ export class BrowserManager {
       }
       if (!(await connected)) {
         throw new BrowserStartError(
-          'ST 页面打开了，但 silly-tg 扩展没有连接。检查扩展是否已部署到 public/scripts/extensions/third-party/silly-tg 并在 ST 里处于启用状态。',
+          'ST 页面打开了，但 silly-tg 扩展没有连接。检查 ST 的“扩展”管理里 Silly TG 是否存在并处于启用状态（可能是面板安装的副本，也可能是自动部署到 public/scripts/extensions/third-party/silly-tg 的副本，被停用都会导致连不上）。',
         );
       }
       this.stateValue = 'running';

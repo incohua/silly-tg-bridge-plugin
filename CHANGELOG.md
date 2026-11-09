@@ -8,6 +8,11 @@
 - 连接 Telegram 收到 401 时，不再提示“检查代理是否可用”（收到 401 说明网络和代理是通的），改为指向 botToken。
 
 ### 新增
+- 在 ST 的“安装扩展”里直接粘贴仓库链接即可安装 UI 扩展（仓库根目录新增 `manifest.json`，指向提交在仓库里的 `dist/extension`）。两份 manifest 都带 `auto_update`，并有测试防止版本号漂移。
+- “扩展”设置栏里的 Silly TG 在检测到服务端插件没装（接口返回 HTTP 404）时，显示安装引导（可一键复制的 `git clone` 命令、`enableServerPlugins`、重启提示），而不是报错；网络错误、401、5xx 仍显示原来的错误提示。
+- UI 与服务端版本检查：`hello` 增加可选字段 `extVersion`，两边版本不一致时服务端日志警告（不拒绝连接；旧版 UI 不带该字段照常连接）。
+- UI 扩展单例保护：被加载了两份时只运行先加载的一份，另一份在控制台和 toast 里提示。
+- README 前部增加两部分缺一不可、`enableServerPlugins` 默认 `false` 必须开启的提示，安装改写为“面板粘贴链接”和“直接 git clone”两条路径，新增“更新与卸载”一节。
 - Telegram 代理支持环境变量兜底：`config.json` 的 `telegramProxy` 为空时，读取 `HTTPS_PROXY`、`https_proxy`、`HTTP_PROXY`、`http_proxy`、`ALL_PROXY`、`all_proxy`（按此顺序取第一个非空值）以及 `NO_PROXY`；只支持 http/https，socks 等协议会警告并忽略（直连）。`telegramProxy` 优先于环境变量。
 - 无头浏览器启动失败时，在原始报错后追加一句可操作的修法（沙箱不可用、缺系统库、snap 版 Chromium、以 root 运行、找不到浏览器），同时出现在日志和 `/status`；认不出的报错保留原文并附通用提示。
 - 找不到浏览器的提示新增 `android`（Termux）：原生 Termux 不支持，请用 proot-distro 里的 Debian；Linux 的提示补充了 Ubuntu snap 的说明。
@@ -16,6 +21,9 @@
 - README 增加“无头服务器与 Linux”入口，故障排查指向新文档，配置一节说明代理环境变量兜底。
 
 ### 变更
+- UI 扩展的自动部署改为幂等且原子：部署目录里写入 `.silly-tg-deploy.json`（版本和内容哈希），内容一致就不重复复制；先复制到同级临时目录再替换，失败不留空目录。目标目录是软链接、带 `.git` 或不能确认是本插件部署的，不会被删除或覆盖，只给出警告和手动步骤。
+- 插件启动时发现 ST 里已有面板安装的副本（`manifest.json` 带 `silly_tg: true`，扫描全局 `third-party` 和 `default-user` 的用户级扩展目录）会跳过自动复制，并清理旧的自动部署副本，避免加载两份。只有服务端插件的老用户行为不变。
+- “扩展没有连接”的报错同时提到面板安装的副本，并提醒检查扩展是否被停用。
 - 行为变化：设了 `HTTPS_PROXY` 等环境变量、且没有配置 `telegramProxy` 的机器上，访问 Telegram 会改走该代理（之前一律直连）。启动日志会写明代理来源；不想走代理时取消环境变量，或用 `NO_PROXY` 排除。
 
 ## [0.2.0] - 2026-11-08

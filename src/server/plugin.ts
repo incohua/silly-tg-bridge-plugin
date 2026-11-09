@@ -1,6 +1,7 @@
 import { join } from 'node:path';
 import type { Router } from 'express';
 import type { SelfCheckItem } from '../shared/protocol';
+import { VERSION, versionMismatchWarning } from '../shared/version';
 import { isAllowedUpdate } from './access';
 import { findChromium, type ChromiumLookup } from './chromium-path';
 import { configSecrets, loadConfigFile, type Config } from './config';
@@ -50,6 +51,8 @@ export interface StartOptions {
   env?: NodeJS.ProcessEnv;
   fetch?: FetchLike;
   log?: Logger;
+  /** 服务端版本，默认取构建时注入的版本。仅测试用。 */
+  version?: string;
 }
 
 /** 连接 Telegram 失败时，按代理来源给出下一步建议。 */
@@ -120,8 +123,10 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
   };
 
   // 扩展部署
-  if (status.extension.ok) log.info(`UI 扩展已部署到 ${status.extension.target}`);
-  else {
+  if (status.extension.ok) {
+    log.info(status.extension.message ?? `UI 扩展已部署到 ${status.extension.target}`);
+    if (status.extension.warning) log.warn(status.extension.warning);
+  } else {
     log.warn(`UI 扩展未能部署：${status.extension.reason ?? ''}`);
     if (status.extension.manual) log.warn(status.extension.manual);
   }
@@ -133,7 +138,11 @@ export async function startPlugin(opts: StartOptions): Promise<PluginRuntime | n
 
   // 页面自检与错误
   channel.onEvent((e) => {
-    if (e.type === 'selfCheck') {
+    if (e.type === 'hello') {
+      // 只警告，不拒绝连接；旧版 UI 不带版本字段，不提示。
+      const warning = versionMismatchWarning(opts.version ?? VERSION, e.extVersion);
+      if (warning) log.warn(warning);
+    } else if (e.type === 'selfCheck') {
       status.hostChecks = e.items;
       // CSRF 失败会导致提示词为空，记为错误；其余（MVU、酒馆助手、API）记为警告。
       for (const item of e.items) (item.ok ? log.info : item.name === 'csrf' ? log.error : log.warn)(`页面自检 ${item.name}：${item.ok ? '通过' : '失败'}${item.detail ? `（${item.detail}）` : ''}`);

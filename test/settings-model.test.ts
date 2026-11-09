@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildPatch, parseUserIds, saveSummary, type FormValues, type SettingsValues } from '../src/extension/settings-model';
+import { buildPatch, classifyConfigFailure, INSTALL_GUIDE, parseUserIds, saveSummary, type FormValues, type SettingsValues } from '../src/extension/settings-model';
 
 const form = (over: Partial<FormValues> = {}): FormValues => ({
   botToken: '',
@@ -82,5 +82,26 @@ describe('saveSummary', () => {
   it('区分立即生效和需要重启', () => {
     expect(saveSummary({ ok: true, changed: [] })).toBe('没有改动。');
     expect(saveSummary({ ok: true, changed: ['logLevel', 'botToken'], hot: ['logLevel'], restart: ['botToken'] })).toBe('已保存。已立即生效：日志级别。需要重启 ST 才生效：Bot Token。');
+  });
+});
+
+describe('classifyConfigFailure（服务端插件是否没装）', () => {
+  it('只认 HTTP 404', () => {
+    expect(classifyConfigFailure(404)).toBe('server-missing');
+  });
+  it('401、403、5xx、200 等都不是“没装”，仍走原来的错误提示', () => {
+    for (const status of [200, 400, 401, 403, 500, 502, 503, 0]) expect(classifyConfigFailure(status)).toBe('other');
+  });
+});
+
+describe('INSTALL_GUIDE（引导文案）', () => {
+  it('克隆命令带显式目标目录 plugins/silly-tg，且不含凭据', () => {
+    expect(INSTALL_GUIDE.command).toBe('git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg');
+    expect(INSTALL_GUIDE.command).not.toMatch(/@|token/i);
+  });
+  it('步骤里说明了 enableServerPlugins 和重启', () => {
+    const text = INSTALL_GUIDE.steps.join('\n');
+    expect(text).toContain('enableServerPlugins');
+    expect(text).toContain('重启');
   });
 });

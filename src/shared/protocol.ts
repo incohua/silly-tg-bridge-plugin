@@ -98,7 +98,8 @@ export interface SelfCheckItem {
 }
 
 export type HostEvent =
-  | { type: 'hello'; nonce: string; stVersion: string; hasTavernHelper: boolean }
+  /** extVersion 是 UI 扩展自己的版本，服务端据此提示两边版本不一致；旧版扩展不带，缺省即可。 */
+  | { type: 'hello'; nonce: string; stVersion: string; hasTavernHelper: boolean; extVersion?: string }
   /** 扩展定期发送，服务端据此判断页面存活（看门狗）。 */
   | { type: 'heartbeat' }
   /** 启动自检结果（CSRF 补丁、typeof Mvu 等），服务端写日志并显示在 /status。 */
@@ -157,7 +158,7 @@ export function decodeHostEvent(v: unknown): HostEvent | null {
   switch (v.type) {
     case 'hello':
       return isStr(v.nonce) && isStr(v.stVersion) && typeof v.hasTavernHelper === 'boolean'
-        ? { type: 'hello', nonce: v.nonce, stVersion: v.stVersion, hasTavernHelper: v.hasTavernHelper }
+        ? { type: 'hello', nonce: v.nonce, stVersion: v.stVersion, hasTavernHelper: v.hasTavernHelper, extVersion: isStr(v.extVersion) ? v.extVersion : undefined }
         : null;
     case 'heartbeat':
       return { type: 'heartbeat' };

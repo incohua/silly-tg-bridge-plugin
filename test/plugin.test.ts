@@ -2,6 +2,7 @@ import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import express from 'express';
+import type { AddressInfo } from 'node:net';
 import { describe, expect, it } from 'vitest';
 import type { FetchLike } from '../src/server/http';
 import { startPlugin } from '../src/server/plugin';
@@ -16,6 +17,54 @@ function dirWithConfig(config: unknown): string {
 const json = (b: unknown): Response => new Response(JSON.stringify(b));
 
 describe('startPlugin', () => {
+  describe('hello 版本比对', () => {
+    /** 启动插件并用真实 HTTP 往 host 通道发一条 hello，返回 HTTP 状态和日志。 */
+    async function sendHello(serverVersion: string, extVersion: string | undefined): Promise<{ status: number; out: string }> {
+      const log = captureLogger();
+      const router = express.Router();
+      const rt = await startPlugin({
+        router,
+        pluginDir: dirWithConfig({ botToken: FAKE_TOKEN, allowedUserIds: [1] }),
+        env: { SILLY_TG_OFFLINE: '1' },
+        log,
+        version: serverVersion,
+      });
+      const app = express();
+      app.use(express.json());
+      app.use('/api/plugins/silly-tg', router);
+      const server = await new Promise<import('node:http').Server>((r) => {
+        const s = app.listen(0, '127.0.0.1', () => r(s));
+      });
+      try {
+        const port = (server.address() as AddressInfo).port;
+        const event = { type: 'hello', nonce: rt!.channel.nonce, stVersion: '1.19.0', hasTavernHelper: true, ...(extVersion === undefined ? {} : { extVersion }) };
+        const res = await fetch(`http://127.0.0.1:${port}/api/plugins/silly-tg/host/message`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ nonce: rt!.channel.nonce, event }),
+        });
+        return { status: res.status, out: log.lines.join('\n') };
+      } finally {
+        await rt!.stop();
+        server.closeAllConnections();
+        await new Promise<void>((r) => server.close(() => r()));
+      }
+    }
+
+    it('版本不一致：警告里含两边版本，但连接照常被接受', async () => {
+      const r = await sendHello('0.3.0', '0.2.0');
+      expect(r.status).toBe(200);
+      expect(r.out).toMatch(/warn .*0\.2\.0.*0\.3\.0/);
+    });
+    it('版本一致、或旧版扩展不带版本字段：不警告', async () => {
+      for (const ext of ['0.3.0', undefined]) {
+        const r = await sendHello('0.3.0', ext);
+        expect(r.status).toBe(200);
+        expect(r.out).not.toContain('不一致');
+      }
+    });
+  });
+
   it('配置文件缺失：返回 null，提示复制 config.example.json；只注册配置面板的接口（host 通道不注册）', async () => {
     const log = captureLogger();
     const router = express.Router();

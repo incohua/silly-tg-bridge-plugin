@@ -34,6 +34,9 @@
     }
   }
 
+  // src/shared/version.ts
+  var VERSION = true ? "0.2.0" : "dev";
+
   // src/extension/adapter.ts
   var NOISE_RULES = [
     // Luker 没配置 Stable Diffusion 时的 /api/sd/* 500
@@ -584,6 +587,22 @@
     choiceLayout: "\u9009\u9879\u6309\u94AE\u6392\u7248"
   };
   var fieldLabel = (k) => FIELD_LABELS[k] ?? k;
+  function classifyConfigFailure(status) {
+    return status === 404 ? "server-missing" : "other";
+  }
+  var INSTALL_GUIDE = {
+    title: "\u8FD8\u9700\u8981\u5B89\u88C5\u670D\u52A1\u7AEF\u63D2\u4EF6",
+    intro: "\u8FD9\u4E2A\u6269\u5C55\u53EA\u662F Silly TG \u7684\u9875\u9762\u90E8\u5206\uFF0C\u9700\u8981\u914D\u5957\u7684\u670D\u52A1\u7AEF\u63D2\u4EF6\u624D\u80FD\u5DE5\u4F5C\u3002\u8BF7\u6309\u4E0B\u9762\u7684\u6B65\u9AA4\u8865\u88C5\uFF1A",
+    command: "git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg",
+    commandNote: "\u5728 SillyTavern \u7684\u6839\u76EE\u5F55\u6267\u884C\uFF08\u9700\u8981\u5DF2\u5B89\u88C5 git\uFF09\u3002",
+    steps: [
+      "\u5728 SillyTavern \u7684\u6839\u76EE\u5F55\u6267\u884C\u4E0A\u9762\u7684\u547D\u4EE4\u3002",
+      "\u6253\u5F00 ST \u6839\u76EE\u5F55\u7684 config.yaml\uFF0C\u628A enableServerPlugins \u6539\u6210 true\u3002\u9ED8\u8BA4\u662F false\uFF0C\u4E0D\u5F00\u542F\u65F6\u63D2\u4EF6\u4E0D\u4F1A\u88AB\u52A0\u8F7D\uFF0C\u4E5F\u6CA1\u6709\u4EFB\u4F55\u63D0\u793A\u3002",
+      "\u91CD\u542F ST\uFF0C\u7136\u540E\u5237\u65B0\u672C\u9875\u9762\uFF0C\u56DE\u5230\u8FD9\u91CC\u586B\u5199 Bot Token \u548C\u5141\u8BB8\u7684\u7528\u6237 ID\u3002"
+    ],
+    readmeUrl: "https://github.com/incohua/silly-tg-bridge-plugin#\u5B89\u88C5",
+    readmeText: "\u67E5\u770B\u5B8C\u6574\u5B89\u88C5\u8BF4\u660E"
+  };
 
   // src/extension/uplink.ts
   var PLUGIN_BASE = "/api/plugins/silly-tg";
@@ -648,6 +667,41 @@
     const error = el("small", { style: "color:var(--SmartThemeQuoteColor,#e66);display:block" });
     root.append(error);
     return { root, error };
+  }
+  async function copyText(text, fallbackTarget) {
+    try {
+      await navigator.clipboard.writeText(text);
+      return true;
+    } catch {
+      const range = document.createRange();
+      range.selectNodeContents(fallbackTarget);
+      const sel = window.getSelection();
+      sel?.removeAllRanges();
+      sel?.addRange(range);
+      return false;
+    }
+  }
+  function buildGuide() {
+    const g = INSTALL_GUIDE;
+    const box = el("div", { class: "silly-tg-guide" });
+    box.append(el("b", {}, g.title), el("div", { style: "margin:4px 0" }, g.intro));
+    const code = el("code", { style: "display:block;padding:6px 8px;margin:4px 0;word-break:break-all;user-select:all" }, g.command);
+    const copy = el("input", { type: "button", class: "menu_button", value: "\u590D\u5236\u547D\u4EE4" });
+    const copied = el("small", { style: "margin-left:8px" });
+    copy.addEventListener("click", () => {
+      void copyText(g.command, code).then((ok) => {
+        copied.textContent = ok ? "\u5DF2\u590D\u5236" : "\u65E0\u6CD5\u81EA\u52A8\u590D\u5236\uFF0C\u5DF2\u9009\u4E2D\u547D\u4EE4\uFF0C\u8BF7\u624B\u52A8\u590D\u5236\u3002";
+      });
+    });
+    const row2 = el("div", { style: "display:flex;align-items:center;margin-bottom:6px" });
+    row2.append(copy, copied);
+    box.append(code, row2, el("small", { style: "opacity:.65;display:block;margin-bottom:6px" }, g.commandNote));
+    const ol = el("ol", { style: "margin:0 0 6px 18px;padding:0" });
+    for (const step of g.steps) ol.append(el("li", {}, step));
+    box.append(ol);
+    const link = el("a", { href: g.readmeUrl, target: "_blank", rel: "noopener noreferrer" }, g.readmeText);
+    box.append(link);
+    return box;
   }
   var input = (type, placeholder = "") => el("input", { type, class: "text_pole", placeholder, autocomplete: "off", style: "width:100%" });
   function select(options) {
@@ -779,6 +833,7 @@
     const request = async (method, body) => {
       const headers = ctx().getRequestHeaders();
       const res = await fetch(`${PLUGIN_BASE}/config`, { method, headers, body: body === void 0 ? void 0 : JSON.stringify(body) });
+      if (classifyConfigFailure(res.status) === "server-missing") return { ok: false, serverMissing: true };
       let json;
       try {
         json = await res.json();
@@ -791,6 +846,15 @@
       status.textContent = "\u8BFB\u53D6\u4E2D\u2026";
       try {
         const r = await request("GET");
+        if (r.serverMissing) {
+          banner.textContent = "";
+          banner.append(buildGuide());
+          form.style.display = "none";
+          status.textContent = "";
+          return;
+        }
+        banner.textContent = "";
+        form.style.display = "";
         if (!r.ok || !r.values) {
           status.textContent = r.error ?? "\u8BFB\u53D6\u914D\u7F6E\u5931\u8D25";
           return;
@@ -833,7 +897,7 @@
             if (r.errors) {
               showErrors(r.errors);
               status.textContent = "\u6CA1\u6709\u4FDD\u5B58\uFF1A\u6709\u8F93\u5165\u9700\u8981\u4FEE\u6B63\u3002";
-            } else status.textContent = r.error ?? "\u4FDD\u5B58\u5931\u8D25";
+            } else status.textContent = r.error ?? (r.serverMissing ? "\u670D\u52A1\u7AEF\u63D2\u4EF6\u672A\u5B89\u88C5\u6216\u672A\u542F\u7528\uFF0C\u8BF7\u5237\u65B0\u9875\u9762\u67E5\u770B\u5B89\u88C5\u5F15\u5BFC\u3002" : "\u4FDD\u5B58\u5931\u8D25");
             return;
           }
           status.textContent = saveSummary(r);
@@ -845,6 +909,21 @@
       })();
     });
     void load();
+  }
+
+  // src/extension/singleton.ts
+  var SINGLETON_KEY = "__SILLY_TG__";
+  function claimSingleton(g, version) {
+    const existing = g[SINGLETON_KEY];
+    if (existing !== void 0 && existing !== null) {
+      const v = existing.version;
+      return { ok: false, existingVersion: typeof v === "string" ? v : "unknown" };
+    }
+    g[SINGLETON_KEY] = { version };
+    return { ok: true };
+  }
+  function duplicateMessage(existingVersion, thisVersion) {
+    return `\u68C0\u6D4B\u5230 Silly TG \u6269\u5C55\u88AB\u52A0\u8F7D\u4E86\u4E24\u4EFD\uFF08\u5DF2\u5728\u8FD0\u884C\u7684\u7248\u672C ${existingVersion}\uFF0C\u672C\u4EFD\u7248\u672C ${thisVersion}\uFF09\uFF0C\u672C\u4EFD\u5DF2\u505C\u7528\u3002\u8BF7\u5728 ST \u7684\u6269\u5C55\u7BA1\u7406\u91CC\u5220\u6389\u591A\u4F59\u7684\u4E00\u4EFD\uFF0C\u6216\u91CD\u542F ST \u8BA9\u63D2\u4EF6\u81EA\u52A8\u6E05\u7406\u3002`;
   }
 
   // src/extension/index.ts
@@ -921,7 +1000,8 @@
           type: "hello",
           nonce,
           stVersion: await stVersion(),
-          hasTavernHelper: typeof globalThis.TavernHelper === "object"
+          hasTavernHelper: typeof globalThis.TavernHelper === "object",
+          extVersion: VERSION
         });
         if (helloStatus < 500) break;
       } catch {
@@ -1068,5 +1148,15 @@
     }
     console.info(`${LOG} host \u6A21\u5F0F\u5DF2\u542F\u52A8`);
   }
-  main().catch((e) => console.error(`${LOG} host \u521D\u59CB\u5316\u5931\u8D25`, e));
+  var claim = claimSingleton(globalThis, VERSION);
+  if (claim.ok) {
+    main().catch((e) => console.error(`${LOG} host \u521D\u59CB\u5316\u5931\u8D25`, e));
+  } else {
+    const msg = duplicateMessage(claim.existingVersion, VERSION);
+    console.warn(`${LOG} ${msg}`);
+    try {
+      globalThis.toastr?.warning?.(msg, "Silly TG");
+    } catch {
+    }
+  }
 })();

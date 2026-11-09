@@ -3,6 +3,7 @@
 // 不注册消息监听，不连接 host 通道，也不处理命令。
 
 import { decodeHostCommand, type HostCommand, type HostEvent, type SelfCheckItem } from '../shared/protocol';
+import { VERSION } from '../shared/version';
 import { ctx, detectApp, getHostApi, isKnownNoise, waitAppReady } from './adapter';
 import { hostStatus, listCharacters, listChats, listPresets, newChat, openChat, selectCharacter, selectPreset } from './commands';
 import { ensureApiConnected } from './api-connect';
@@ -13,6 +14,7 @@ import { parseHostNonce, parseHostTestFlags } from './host-mode';
 import { SerialQueue } from './queue';
 import { restoreActiveCharacter } from './restore';
 import { mountSettings } from './settings-ui';
+import { claimSingleton, duplicateMessage } from './singleton';
 import { PLUGIN_BASE, Uplink } from './uplink';
 
 const HEARTBEAT_MS = 15_000;
@@ -111,6 +113,7 @@ async function main(): Promise<void> {
         nonce,
         stVersion: await stVersion(),
         hasTavernHelper: typeof (globalThis as Record<string, unknown>).TavernHelper === 'object',
+        extVersion: VERSION,
       });
       if (helloStatus < 500) break;
     } catch {
@@ -273,4 +276,16 @@ async function main(): Promise<void> {
   console.info(`${LOG} host 模式已启动`);
 }
 
-main().catch((e) => console.error(`${LOG} host 初始化失败`, e));
+// 单例保护：必须在任何 await 之前同步占位。已有另一份在运行时，本份只警告，不做任何事。
+const claim = claimSingleton(globalThis as unknown as Record<string, unknown>, VERSION);
+if (claim.ok) {
+  main().catch((e) => console.error(`${LOG} host 初始化失败`, e));
+} else {
+  const msg = duplicateMessage(claim.existingVersion, VERSION);
+  console.warn(`${LOG} ${msg}`);
+  try {
+    (globalThis as unknown as { toastr?: { warning?: (m: string, t?: string) => unknown } }).toastr?.warning?.(msg, 'Silly TG');
+  } catch {
+    // toast 只是提示，失败不影响
+  }
+}

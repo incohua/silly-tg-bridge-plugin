@@ -1,0 +1,12 @@
+{
+  "display_name": "Silly TG",
+  "loading_order": 100,
+  "requires": [],
+  "optional": [],
+  "js": "dist/extension/index.js",
+  "author": "incohua",
+  "version": "0.2.0",
+  "homePage": "https://github.com/incohua/silly-tg-bridge-plugin",
+  "auto_update": true,
+  "silly_tg": true
+}

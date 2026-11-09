@@ -1,7 +1,10 @@
 // 构建脚本。产物写入 dist/，dist/ 需要提交。
 // 入口不存在时跳过（src/miniapp 之类后续任务才会出现）。
 import { build } from 'esbuild';
-import { cpSync, existsSync, mkdirSync, rmSync } from 'node:fs';
+import { cpSync, existsSync, mkdirSync, readFileSync, rmSync } from 'node:fs';
+
+// 版本号只有 package.json 一个来源，构建时注入到服务端和扩展（hello 版本比对用）。
+const { version } = JSON.parse(readFileSync('package.json', 'utf8'));
 
 rmSync('dist', { recursive: true, force: true });
 mkdirSync('dist/extension', { recursive: true });
@@ -40,7 +43,7 @@ for (const { entry, options } of jobs) {
     console.log(`skip  ${entry}（不存在）`);
     continue;
   }
-  await build({ entryPoints: [entry], bundle: true, logLevel: 'warning', legalComments: 'none', ...options });
+  await build({ entryPoints: [entry], bundle: true, logLevel: 'warning', legalComments: 'none', define: { __SILLY_TG_VERSION__: JSON.stringify(version) }, ...options });
   console.log(`built ${entry} -> ${options.outfile}`);
 }
 

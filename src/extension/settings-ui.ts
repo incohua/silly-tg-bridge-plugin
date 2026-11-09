@@ -3,7 +3,7 @@
 // 接口：GET/POST /api/plugins/silly-tg/config，继承 ST 的会话和 CSRF 鉴权。
 
 import { ctx } from './adapter';
-import { buildPatch, fieldLabel, saveSummary, type FormValues, type SettingsResponse, type SettingsValues } from './settings-model';
+import { buildPatch, classifyConfigFailure, fieldLabel, INSTALL_GUIDE, saveSummary, type FormValues, type SettingsResponse, type SettingsValues } from './settings-model';
 import { PLUGIN_BASE } from './uplink';
 
 const CONTAINER_ID = 'extensions_settings2';
@@ -32,6 +32,45 @@ function row(label: string, effect: string, control: El, hint?: string): Row {
   const error = el('small', { style: 'color:var(--SmartThemeQuoteColor,#e66);display:block' });
   root.append(error);
   return { root, error };
+}
+
+/** 复制文字到剪贴板；不可用或被拒绝时选中文本，让用户自己按复制。 */
+async function copyText(text: string, fallbackTarget: HTMLElement): Promise<boolean> {
+  try {
+    await navigator.clipboard.writeText(text);
+    return true;
+  } catch {
+    const range = document.createRange();
+    range.selectNodeContents(fallbackTarget);
+    const sel = window.getSelection();
+    sel?.removeAllRanges();
+    sel?.addRange(range);
+    return false;
+  }
+}
+
+/** 服务端插件没装时的引导。固定文案，全部用 textContent / 属性写入。 */
+function buildGuide(): El {
+  const g = INSTALL_GUIDE;
+  const box = el('div', { class: 'silly-tg-guide' });
+  box.append(el('b', {}, g.title), el('div', { style: 'margin:4px 0' }, g.intro));
+  const code = el('code', { style: 'display:block;padding:6px 8px;margin:4px 0;word-break:break-all;user-select:all' }, g.command);
+  const copy = el('input', { type: 'button', class: 'menu_button', value: '复制命令' });
+  const copied = el('small', { style: 'margin-left:8px' });
+  copy.addEventListener('click', () => {
+    void copyText(g.command, code).then((ok) => {
+      copied.textContent = ok ? '已复制' : '无法自动复制，已选中命令，请手动复制。';
+    });
+  });
+  const row2 = el('div', { style: 'display:flex;align-items:center;margin-bottom:6px' });
+  row2.append(copy, copied);
+  box.append(code, row2, el('small', { style: 'opacity:.65;display:block;margin-bottom:6px' }, g.commandNote));
+  const ol = el('ol', { style: 'margin:0 0 6px 18px;padding:0' });
+  for (const step of g.steps) ol.append(el('li', {}, step));
+  box.append(ol);
+  const link = el('a', { href: g.readmeUrl, target: '_blank', rel: 'noopener noreferrer' }, g.readmeText);
+  box.append(link);
+  return box;
 }
 
 const input = (type: string, placeholder = ''): HTMLInputElement => el('input', { type, class: 'text_pole', placeholder, autocomplete: 'off', style: 'width:100%' });
@@ -178,6 +217,8 @@ function buildDrawer(container: HTMLElement): void {
   const request = async (method: 'GET' | 'POST', body?: unknown): Promise<SettingsResponse> => {
     const headers = ctx().getRequestHeaders();
     const res = await fetch(`${PLUGIN_BASE}/config`, { method, headers, body: body === undefined ? undefined : JSON.stringify(body) });
+    // 404 = ST 找不到插件的路由 = 服务端插件没装/没启用。必须先于 res.json() 判断（404 返回的不是 JSON）。
+    if (classifyConfigFailure(res.status) === 'server-missing') return { ok: false, serverMissing: true };
     let json: SettingsResponse;
     try {
       json = (await res.json()) as SettingsResponse;
@@ -191,6 +232,16 @@ function buildDrawer(container: HTMLElement): void {
     status.textContent = '读取中…';
     try {
       const r = await request('GET');
+      if (r.serverMissing) {
+        // 没装服务端插件：显示引导，不渲染配置表单
+        banner.textContent = '';
+        banner.append(buildGuide());
+        form.style.display = 'none';
+        status.textContent = '';
+        return;
+      }
+      banner.textContent = '';
+      form.style.display = '';
       if (!r.ok || !r.values) {
         status.textContent = r.error ?? '读取配置失败';
         return;
@@ -234,7 +285,7 @@ function buildDrawer(container: HTMLElement): void {
           if (r.errors) {
             showErrors(r.errors);
             status.textContent = '没有保存：有输入需要修正。';
-          } else status.textContent = r.error ?? '保存失败';
+          } else status.textContent = r.error ?? (r.serverMissing ? '服务端插件未安装或未启用，请刷新页面查看安装引导。' : '保存失败');
           return;
         }
         status.textContent = saveSummary(r);

@@ -46120,7 +46120,7 @@ var require_websocket = __commonJS({
     var http2 = __require("http");
     var net = __require("net");
     var tls = __require("tls");
-    var { randomBytes: randomBytes3, createHash: createHash2 } = __require("crypto");
+    var { randomBytes: randomBytes3, createHash: createHash3 } = __require("crypto");
     var { Duplex, Readable: Readable2 } = __require("stream");
     var { URL: URL3 } = __require("url");
     var PerMessageDeflate2 = require_permessage_deflate();
@@ -46806,7 +46806,7 @@ var require_websocket = __commonJS({
           abortHandshake(websocket, socket, "Invalid Upgrade header");
           return;
         }
-        const digest = createHash2("sha1").update(key + GUID).digest("base64");
+        const digest = createHash3("sha1").update(key + GUID).digest("base64");
         if (res.headers["sec-websocket-accept"] !== digest) {
           abortHandshake(websocket, socket, "Invalid Sec-WebSocket-Accept header");
           return;
@@ -47175,7 +47175,7 @@ var require_websocket_server = __commonJS({
     var EventEmitter4 = __require("events");
     var http2 = __require("http");
     var { Duplex } = __require("stream");
-    var { createHash: createHash2 } = __require("crypto");
+    var { createHash: createHash3 } = __require("crypto");
     var extension2 = require_extension();
     var PerMessageDeflate2 = require_permessage_deflate();
     var subprotocol2 = require_subprotocol();
@@ -47482,7 +47482,7 @@ var require_websocket_server = __commonJS({
           );
         }
         if (this._state > RUNNING) return abortHandshake(socket, 503);
-        const digest = createHash2("sha1").update(key + GUID).digest("base64");
+        const digest = createHash3("sha1").update(key + GUID).digest("base64");
         const headers = [
           "HTTP/1.1 101 Switching Protocols",
           "Upgrade: websocket",
@@ -50432,7 +50432,7 @@ function packTar(sources, options = {}) {
             size = content.length;
             body2 = content;
           }
-          const stat3 = {
+          const stat4 = {
             size: isDir ? 0 : size,
             isFile: () => !isDir,
             isDirectory: () => isDir,
@@ -50443,16 +50443,16 @@ function packTar(sources, options = {}) {
             gid: job.gid ?? 0
           };
           if (stream.destroyed) return;
-          if (filter2 && !filter2(target, stat3)) return;
+          if (filter2 && !filter2(target, stat4)) return;
           if (stream.destroyed) return;
           let header2 = {
             name: target,
             type: isDir ? DIRECTORY : FILE,
             size: isDir ? 0 : size,
-            mode: stat3.mode,
-            mtime: stat3.mtime,
-            uid: stat3.uid,
-            gid: stat3.gid,
+            mode: stat4.mode,
+            mtime: stat4.mtime,
+            uid: stat4.uid,
+            gid: stat4.gid,
             uname: job.uname,
             gname: job.gname
           };
@@ -50470,45 +50470,45 @@ function packTar(sources, options = {}) {
           return;
         }
         let source2 = job.source;
-        let stat2 = await fsp.lstat(source2, BIGINT_STAT);
+        let stat3 = await fsp.lstat(source2, BIGINT_STAT);
         if (stream.destroyed) return;
-        if (dereference && (baseDir !== void 0 || stat2.isSymbolicLink())) {
+        if (dereference && (baseDir !== void 0 || stat3.isSymbolicLink())) {
           const resolvedSource = await fsp.realpath(source2);
           if (stream.destroyed) return;
           realBaseDir ??= await fsp.realpath(baseDir ?? directoryPath ?? process.cwd());
           if (stream.destroyed) return;
           const relativeToBase = path8.relative(realBaseDir, resolvedSource);
           if (relativeToBase === ".." || relativeToBase.startsWith(".." + path8.sep) || path8.isAbsolute(relativeToBase)) return;
-          if (stat2.isSymbolicLink()) {
+          if (stat3.isSymbolicLink()) {
             source2 = resolvedSource;
-            stat2 = await fsp.lstat(source2, BIGINT_STAT);
-            if (stat2.isSymbolicLink()) return;
+            stat3 = await fsp.lstat(source2, BIGINT_STAT);
+            if (stat3.isSymbolicLink()) return;
           }
         }
         if (stream.destroyed) return;
-        if (filter2 && !filter2(job.source, stat2)) return;
+        if (filter2 && !filter2(job.source, stat3)) return;
         if (stream.destroyed) return;
         let header = {
           name: target,
           size: 0,
-          mode: (job.mode ?? Number(stat2.mode)) & 4095,
-          mtime: job.mtime === void 0 ? stat2.mtime : new Date(job.mtime.getTime()),
-          uid: job.uid ?? Number(stat2.uid),
-          gid: job.gid ?? Number(stat2.gid),
+          mode: (job.mode ?? Number(stat3.mode)) & 4095,
+          mtime: job.mtime === void 0 ? stat3.mtime : new Date(job.mtime.getTime()),
+          uid: job.uid ?? Number(stat3.uid),
+          gid: job.gid ?? Number(stat3.gid),
           uname: job.uname,
           gname: job.gname,
           type: FILE
         };
         let body;
         let hardlinkId;
-        if (stat2.isDirectory()) {
+        if (stat3.isDirectory()) {
           header.type = DIRECTORY;
           header.name = target.endsWith("/") ? target : `${target}/`;
           try {
             const entries = await fsp.readdir(source2, WITH_FILE_TYPES);
             if (stream.destroyed) return;
             const after = await fsp.lstat(source2, BIGINT_STAT);
-            if (stream.destroyed || !after.isDirectory() || stat2.dev !== after.dev || stat2.ino !== after.ino) return;
+            if (stream.destroyed || !after.isDirectory() || stat3.dev !== after.dev || stat3.ino !== after.ino) return;
             for (const d of entries) jobs.push({
               type: d.isDirectory() ? DIRECTORY : FILE,
               source: path8.join(source2, d.name),
@@ -50524,13 +50524,13 @@ function packTar(sources, options = {}) {
             const code = error.code;
             if (code !== "ENOENT" && code !== "ENOTDIR") throw error;
           }
-        } else if (stat2.isSymbolicLink()) {
+        } else if (stat3.isSymbolicLink()) {
           header.type = SYMLINK;
           header.linkname = await fsp.readlink(job.source);
-        } else if (stat2.isFile()) {
-          header.size = Number(stat2.size);
+        } else if (stat3.isFile()) {
+          header.size = Number(stat3.size);
           let handleToClose;
-          if (stat2.nlink > 1n && (process.platform !== "win32" || stat2.dev !== 0n && stat2.ino !== -1n)) hardlinkId = `${stat2.dev}:${stat2.ino}`;
+          if (stat3.nlink > 1n && (process.platform !== "win32" || stat3.dev !== 0n && stat3.ino !== -1n)) hardlinkId = `${stat3.dev}:${stat3.ino}`;
           try {
             let after;
             try {
@@ -50546,11 +50546,11 @@ function packTar(sources, options = {}) {
             }
             if (stream.destroyed) return;
             if (after) {
-              if (!after.isFile() || stat2.dev !== after.dev || stat2.ino !== after.ino) return;
+              if (!after.isFile() || stat3.dev !== after.dev || stat3.ino !== after.ino) return;
             } else {
               const { dev, ino } = await handleToClose.stat(BIGINT_STAT);
               if (stream.destroyed) return;
-              if (stat2.dev !== dev || stat2.ino !== ino) return;
+              if (stat3.dev !== dev || stat3.ino !== ino) return;
             }
             if (header.size > 0) {
               const handle = handleToClose;
@@ -51063,9 +51063,9 @@ var init_fs = __esm({
           if (dirPath === (await destDirPromise).symbolic) return;
           await prepareDirectory(path8.dirname(dirPath));
           try {
-            const stat2 = await fsp.lstat(dirPath);
-            if (stat2.isDirectory()) return;
-            if (stat2.isSymbolicLink()) try {
+            const stat3 = await fsp.lstat(dirPath);
+            if (stat3.isDirectory()) return;
+            if (stat3.isSymbolicLink()) try {
               const realPath = await getRealDir(dirPath, `Symlink "${dirPath}" points outside the extraction directory.`);
               if ((await fsp.stat(realPath)).isDirectory()) return;
             } catch (err) {
@@ -72384,8 +72384,8 @@ var require_snapshot_utils = __commonJS({
 var require_snapshot_recorder = __commonJS({
   "node_modules/.pnpm/undici@7.30.2/node_modules/undici/lib/mock/snapshot-recorder.js"(exports, module) {
     "use strict";
-    var { writeFile: writeFile2, readFile: readFile2, mkdir: mkdir4 } = __require("node:fs/promises");
-    var { dirname: dirname9, resolve: resolve9 } = __require("node:path");
+    var { writeFile: writeFile3, readFile: readFile3, mkdir: mkdir4 } = __require("node:fs/promises");
+    var { dirname: dirname10, resolve: resolve9 } = __require("node:path");
     var { setTimeout: setTimeout2, clearTimeout: clearTimeout2 } = __require("node:timers");
     var { InvalidArgumentError, UndiciError } = require_errors();
     var { hashId, isUrlExcludedFactory, normalizeHeaders, createHeaderFilters } = require_snapshot_utils();
@@ -72586,7 +72586,7 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError("Snapshot path is required");
         }
         try {
-          const data = await readFile2(resolve9(path14), "utf8");
+          const data = await readFile3(resolve9(path14), "utf8");
           const parsed = JSON.parse(data);
           if (Array.isArray(parsed)) {
             this.#snapshots.clear();
@@ -72616,12 +72616,12 @@ var require_snapshot_recorder = __commonJS({
           throw new InvalidArgumentError("Snapshot path is required");
         }
         const resolvedPath = resolve9(path14);
-        await mkdir4(dirname9(resolvedPath), { recursive: true });
+        await mkdir4(dirname10(resolvedPath), { recursive: true });
         const data = Array.from(this.#snapshots.entries()).map(([hash, snapshot]) => ({
           hash,
           snapshot
         }));
-        await writeFile2(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
+        await writeFile3(resolvedPath, JSON.stringify(data, null, 2), { flush: true });
       }
       /**
        * Clears all recorded snapshots
@@ -77503,7 +77503,7 @@ var require_sqlite_cache_store = __commonJS({
     var { Writable: Writable3 } = __require("node:stream");
     var { assertCacheKey, assertCacheValue } = require_cache();
     var DatabaseSync;
-    var VERSION = 4;
+    var VERSION2 = 4;
     var MAX_ENTRY_SIZE = 2 * 1e3 * 1e3 * 1e3;
     module.exports = class SqliteCacheStore {
       #maxEntrySize = MAX_ENTRY_SIZE;
@@ -77574,7 +77574,7 @@ var require_sqlite_cache_store = __commonJS({
       PRAGMA temp_store = memory;
       PRAGMA optimize;
 
-      CREATE TABLE IF NOT EXISTS cacheInterceptorV${VERSION} (
+      CREATE TABLE IF NOT EXISTS cacheInterceptorV${VERSION2} (
         -- Data specific to us
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         url TEXT NOT NULL,
@@ -77593,8 +77593,8 @@ var require_sqlite_cache_store = __commonJS({
         staleAt INTEGER NOT NULL
       );
 
-      CREATE INDEX IF NOT EXISTS idx_cacheInterceptorV${VERSION}_getValuesQuery ON cacheInterceptorV${VERSION}(url, method, deleteAt);
-      CREATE INDEX IF NOT EXISTS idx_cacheInterceptorV${VERSION}_deleteByUrlQuery ON cacheInterceptorV${VERSION}(deleteAt);
+      CREATE INDEX IF NOT EXISTS idx_cacheInterceptorV${VERSION2}_getValuesQuery ON cacheInterceptorV${VERSION2}(url, method, deleteAt);
+      CREATE INDEX IF NOT EXISTS idx_cacheInterceptorV${VERSION2}_deleteByUrlQuery ON cacheInterceptorV${VERSION2}(deleteAt);
     `);
         this.#getValuesQuery = this.#db.prepare(`
       SELECT
@@ -77609,7 +77609,7 @@ var require_sqlite_cache_store = __commonJS({
         vary,
         cachedAt,
         staleAt
-      FROM cacheInterceptorV${VERSION}
+      FROM cacheInterceptorV${VERSION2}
       WHERE
         url = ?
         AND method = ?
@@ -77617,7 +77617,7 @@ var require_sqlite_cache_store = __commonJS({
         deleteAt ASC
     `);
         this.#updateValueQuery = this.#db.prepare(`
-      UPDATE cacheInterceptorV${VERSION} SET
+      UPDATE cacheInterceptorV${VERSION2} SET
         body = ?,
         deleteAt = ?,
         statusCode = ?,
@@ -77631,7 +77631,7 @@ var require_sqlite_cache_store = __commonJS({
         id = ?
     `);
         this.#insertValueQuery = this.#db.prepare(`
-      INSERT INTO cacheInterceptorV${VERSION} (
+      INSERT INTO cacheInterceptorV${VERSION2} (
         url,
         method,
         body,
@@ -77647,20 +77647,20 @@ var require_sqlite_cache_store = __commonJS({
       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `);
         this.#deleteByUrlQuery = this.#db.prepare(
-          `DELETE FROM cacheInterceptorV${VERSION} WHERE url = ?`
+          `DELETE FROM cacheInterceptorV${VERSION2} WHERE url = ?`
         );
         this.#countEntriesQuery = this.#db.prepare(
-          `SELECT COUNT(*) AS total FROM cacheInterceptorV${VERSION}`
+          `SELECT COUNT(*) AS total FROM cacheInterceptorV${VERSION2}`
         );
         this.#deleteExpiredValuesQuery = this.#db.prepare(
-          `DELETE FROM cacheInterceptorV${VERSION} WHERE deleteAt <= ?`
+          `DELETE FROM cacheInterceptorV${VERSION2} WHERE deleteAt <= ?`
         );
         this.#deleteOldValuesQuery = this.#maxCount === Infinity ? null : this.#db.prepare(`
-        DELETE FROM cacheInterceptorV${VERSION}
+        DELETE FROM cacheInterceptorV${VERSION2}
         WHERE id IN (
           SELECT
             id
-          FROM cacheInterceptorV${VERSION}
+          FROM cacheInterceptorV${VERSION2}
           ORDER BY cachedAt ASC
           LIMIT ?
         )
@@ -85096,7 +85096,7 @@ ${captureLines}` : capture.stack;
 });
 
 // src/server/index.ts
-import { dirname as dirname8, resolve as resolve8 } from "node:path";
+import { dirname as dirname9, resolve as resolve8 } from "node:path";
 import { fileURLToPath as fileURLToPath2 } from "node:url";
 
 // src/server/redact.ts
@@ -88576,7 +88576,7 @@ function decodeHostEvent(v2) {
   if (!isRecord(v2) || !isStr(v2.type)) return null;
   switch (v2.type) {
     case "hello":
-      return isStr(v2.nonce) && isStr(v2.stVersion) && typeof v2.hasTavernHelper === "boolean" ? { type: "hello", nonce: v2.nonce, stVersion: v2.stVersion, hasTavernHelper: v2.hasTavernHelper } : null;
+      return isStr(v2.nonce) && isStr(v2.stVersion) && typeof v2.hasTavernHelper === "boolean" ? { type: "hello", nonce: v2.nonce, stVersion: v2.stVersion, hasTavernHelper: v2.hasTavernHelper, extVersion: isStr(v2.extVersion) ? v2.extVersion : void 0 } : null;
     case "heartbeat":
       return { type: "heartbeat" };
     case "selfCheck":
@@ -90092,7 +90092,7 @@ var BrowserManager = class {
       }
       if (!await connected) {
         throw new BrowserStartError(
-          "ST \u9875\u9762\u6253\u5F00\u4E86\uFF0C\u4F46 silly-tg \u6269\u5C55\u6CA1\u6709\u8FDE\u63A5\u3002\u68C0\u67E5\u6269\u5C55\u662F\u5426\u5DF2\u90E8\u7F72\u5230 public/scripts/extensions/third-party/silly-tg \u5E76\u5728 ST \u91CC\u5904\u4E8E\u542F\u7528\u72B6\u6001\u3002"
+          "ST \u9875\u9762\u6253\u5F00\u4E86\uFF0C\u4F46 silly-tg \u6269\u5C55\u6CA1\u6709\u8FDE\u63A5\u3002\u68C0\u67E5 ST \u7684\u201C\u6269\u5C55\u201D\u7BA1\u7406\u91CC Silly TG \u662F\u5426\u5B58\u5728\u5E76\u5904\u4E8E\u542F\u7528\u72B6\u6001\uFF08\u53EF\u80FD\u662F\u9762\u677F\u5B89\u88C5\u7684\u526F\u672C\uFF0C\u4E5F\u53EF\u80FD\u662F\u81EA\u52A8\u90E8\u7F72\u5230 public/scripts/extensions/third-party/silly-tg \u7684\u526F\u672C\uFF0C\u88AB\u505C\u7528\u90FD\u4F1A\u5BFC\u81F4\u8FDE\u4E0D\u4E0A\uFF09\u3002"
         );
       }
       this.stateValue = "running";
@@ -92448,6 +92448,14 @@ function attachBridge(rt, opts = {}) {
 // src/server/plugin.ts
 import { join as join9 } from "node:path";
 
+// src/shared/version.ts
+var VERSION = true ? "0.2.0" : "dev";
+function versionMismatchWarning(serverVersion, extVersion) {
+  if (extVersion === void 0 || extVersion === serverVersion) return null;
+  if (serverVersion === "dev" || extVersion === "dev") return null;
+  return `UI \u6269\u5C55\u7248\u672C\uFF08${extVersion}\uFF09\u4E0E\u670D\u52A1\u7AEF\u63D2\u4EF6\u7248\u672C\uFF08${serverVersion}\uFF09\u4E0D\u4E00\u81F4\uFF0C\u8BF7\u628A\u4E24\u8FB9\u90FD\u66F4\u65B0\u5230\u540C\u4E00\u7248\u672C\uFF0C\u5426\u5219\u90E8\u5206\u529F\u80FD\u53EF\u80FD\u5F02\u5E38\u3002`;
+}
+
 // src/server/access.ts
 function getSenderId(update) {
   const id = update.message?.from?.id ?? update.edited_message?.from?.id ?? update.callback_query?.from?.id;
@@ -92464,13 +92472,108 @@ function isAllowedUpdate(update, allowedUserIds) {
 }
 
 // src/server/deploy-extension.ts
+import { createHash as createHash2 } from "node:crypto";
 import { existsSync as existsSync4 } from "node:fs";
-import { cp, rm as rm5 } from "node:fs/promises";
-import { join as join8, resolve as resolve7 } from "node:path";
+import { cp, lstat as lstat3, readdir as readdir3, readFile as readFile2, rename as rename2, rm as rm5, stat as stat2, writeFile as writeFile2 } from "node:fs/promises";
+import { dirname as dirname8, join as join8, resolve as resolve7 } from "node:path";
 var EXTENSION_DIR_NAME = "silly-tg";
+var DEPLOY_MARKER = ".silly-tg-deploy.json";
+var REPO_URL_RE = /github\.com\/incohua\/silly-tg-bridge-plugin/i;
 function findStRoot(pluginDir, cwd = process.cwd(), exists = existsSync4) {
   const candidates = [cwd, resolve7(pluginDir, "..", "..")];
   return candidates.find((c) => exists(join8(c, "public", "scripts", "extensions")));
+}
+async function readJson(p) {
+  try {
+    const v2 = JSON.parse(await readFile2(p, "utf8"));
+    return typeof v2 === "object" && v2 !== null && !Array.isArray(v2) ? v2 : null;
+  } catch {
+    return null;
+  }
+}
+async function pathExists(p) {
+  try {
+    await lstat3(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+async function isOurs(dir) {
+  try {
+    const st = await lstat3(dir);
+    if (st.isSymbolicLink() || !st.isDirectory()) return false;
+    if (await pathExists(join8(dir, ".git"))) return false;
+    if (await readJson(join8(dir, DEPLOY_MARKER))) return true;
+    const manifest = await readJson(join8(dir, "manifest.json"));
+    if (!manifest) return false;
+    if (manifest.silly_tg === true) return true;
+    return typeof manifest.homePage === "string" && REPO_URL_RE.test(manifest.homePage);
+  } catch {
+    return false;
+  }
+}
+function resolveDataRoot(stRoot) {
+  const g = globalThis.DATA_ROOT;
+  return typeof g === "string" && g ? resolve7(stRoot, g) : join8(stRoot, "data");
+}
+async function findOtherCopies(stRoot, dataRoot = resolveDataRoot(stRoot)) {
+  const roots = [join8(stRoot, "public", "scripts", "extensions", "third-party"), join8(dataRoot, "default-user", "extensions")];
+  const found = [];
+  for (const root of roots) {
+    let names;
+    try {
+      names = (await readdir3(root)).sort();
+    } catch {
+      continue;
+    }
+    for (const name of names) {
+      if (name.startsWith(".") || name === EXTENSION_DIR_NAME && root === roots[0]) continue;
+      const dir = join8(root, name);
+      try {
+        if (!(await stat2(dir)).isDirectory()) continue;
+        if ((await readJson(join8(dir, "manifest.json")))?.silly_tg === true) found.push(dir);
+      } catch {
+      }
+    }
+  }
+  return found;
+}
+async function hashDir(dir, ignore = []) {
+  const files = [];
+  const walk = async (rel) => {
+    for (const e of await readdir3(join8(dir, rel), { withFileTypes: true })) {
+      const r = rel ? `${rel}/${e.name}` : e.name;
+      if (e.isDirectory()) await walk(r);
+      else if (e.isFile() && !ignore.includes(r)) files.push(r);
+    }
+  };
+  await walk("");
+  files.sort();
+  const h = createHash2("sha256");
+  for (const f of files) {
+    h.update(`${f}\0`);
+    h.update(await readFile2(join8(dir, f)));
+    h.update("\0");
+  }
+  return h.digest("hex");
+}
+async function isUpToDate(target, sourceHash) {
+  const marker = await readJson(join8(target, DEPLOY_MARKER));
+  if (!marker || marker.hash !== sourceHash) return false;
+  try {
+    return await hashDir(target, [DEPLOY_MARKER]) === sourceHash;
+  } catch {
+    return false;
+  }
+}
+async function cleanStaleTemps(parent) {
+  try {
+    for (const name of await readdir3(parent)) {
+      if (/^\.silly-tg\.(tmp|old)-\d+$/.test(name)) await rm5(join8(parent, name), { recursive: true, force: true }).catch(() => void 0);
+    }
+  } catch {
+  }
 }
 async function deployExtension(opts) {
   const source2 = join8(opts.pluginDir, "dist", "extension");
@@ -92487,12 +92590,69 @@ async function deployExtension(opts) {
     };
   }
   const target = join8(stRoot, "public", "scripts", "extensions", "third-party", EXTENSION_DIR_NAME);
+  const parent = dirname8(target);
+  const tmp = join8(parent, `.${EXTENSION_DIR_NAME}.tmp-${process.pid}`);
+  const old = join8(parent, `.${EXTENSION_DIR_NAME}.old-${process.pid}`);
   try {
-    await rm5(target, { recursive: true, force: true });
-    await cp(source2, target, { recursive: true });
-    return { ok: true, target };
+    const others = await findOtherCopies(stRoot, opts.dataRoot ?? resolveDataRoot(stRoot));
+    const targetExists = await pathExists(target);
+    const ours = targetExists && await isOurs(target);
+    if (others.length > 0) {
+      let removedStale = false;
+      let warning;
+      if (targetExists) {
+        if (ours) {
+          await rm5(target, { recursive: true, force: true });
+          removedStale = true;
+        } else {
+          warning = `${target} \u4E0D\u662F\u672C\u63D2\u4EF6\u81EA\u52A8\u90E8\u7F72\u7684\u76EE\u5F55\uFF0C\u6CA1\u6709\u52A8\u5B83\uFF1B\u5B83\u548C ST \u91CC\u5DF2\u5B89\u88C5\u7684\u526F\u672C\u53EF\u80FD\u540C\u65F6\u88AB\u52A0\u8F7D\uFF0C\u9700\u8981\u7684\u8BDD\u8BF7\u624B\u52A8\u5904\u7406\u3002`;
+        }
+      }
+      return {
+        ok: true,
+        skipped: true,
+        target,
+        others,
+        removedStale,
+        warning,
+        message: `\u68C0\u6D4B\u5230\u5DF2\u901A\u8FC7 ST \u5B89\u88C5\u7684 UI \u6269\u5C55\uFF1A${others.join("\u3001")}\uFF0C\u8DF3\u8FC7\u81EA\u52A8\u590D\u5236${removedStale ? `\uFF0C\u5E76\u6E05\u7406\u4E86\u65E7\u7684\u81EA\u52A8\u90E8\u7F72\u526F\u672C ${target}` : ""}\u3002`
+      };
+    }
+    if (targetExists && !ours) {
+      return {
+        ok: false,
+        target,
+        reason: `${target} \u5DF2\u5B58\u5728\uFF0C\u4F46\u770B\u8D77\u6765\u4E0D\u662F\u672C\u63D2\u4EF6\u81EA\u52A8\u90E8\u7F72\u7684\uFF08\u8F6F\u94FE\u63A5\u3001\u5E26 .git\uFF0C\u6216\u4E0D\u662F Silly TG\uFF09\uFF0C\u4E3A\u907F\u514D\u8BEF\u5220\u6CA1\u6709\u8986\u76D6\u3002`,
+        manual: `\u5982\u679C\u8FD9\u4E2A\u76EE\u5F55\u4E0D\u9700\u8981\u4FDD\u7559\uFF0C\u5220\u9664\u5B83\u540E\u91CD\u542F ST\uFF0C\u63D2\u4EF6\u4F1A\u91CD\u65B0\u90E8\u7F72\uFF1B\u5982\u679C\u662F\u4F60\u81EA\u5DF1\u653E\u7684\u5F00\u53D1\u7248\u672C\uFF0C\u4FDD\u7559\u5373\u53EF\uFF0C\u63D2\u4EF6\u4E0D\u4F1A\u518D\u52A8\u5B83\u3002${manualFor(target)}`
+      };
+    }
+    const hash = await hashDir(source2);
+    if (ours && await isUpToDate(target, hash)) {
+      return { ok: true, target, unchanged: true, message: `UI \u6269\u5C55\u5DF2\u662F\u6700\u65B0\uFF0C\u65E0\u9700\u590D\u5236\uFF08${target}\uFF09` };
+    }
+    const manifest = await readJson(join8(source2, "manifest.json"));
+    await cleanStaleTemps(parent);
+    await rm5(tmp, { recursive: true, force: true });
+    await rm5(old, { recursive: true, force: true });
+    await cp(source2, tmp, { recursive: true });
+    await writeFile2(join8(tmp, DEPLOY_MARKER), JSON.stringify({ version: manifest?.version ?? "unknown", hash }, null, 2));
+    let moved = false;
+    try {
+      if (targetExists) {
+        await rename2(target, old);
+        moved = true;
+      }
+      await rename2(tmp, target);
+    } catch (e) {
+      if (moved) await rename2(old, target).catch(() => void 0);
+      throw e;
+    }
+    if (moved) await rm5(old, { recursive: true, force: true }).catch(() => void 0);
+    return { ok: true, target, message: `UI \u6269\u5C55\u5DF2\u90E8\u7F72\u5230 ${target}` };
   } catch (e) {
-    return { ok: false, target, reason: `\u590D\u5236\u5931\u8D25\uFF1A${e.message}`, manual: manualFor(target) };
+    return { ok: false, target, reason: `\u90E8\u7F72\u5931\u8D25\uFF1A${e.message}`, manual: manualFor(target) };
+  } finally {
+    await rm5(tmp, { recursive: true, force: true }).catch(() => void 0);
   }
 }
 
@@ -92545,8 +92705,10 @@ async function startPlugin(opts) {
     extension: await deployExtension({ pluginDir: opts.pluginDir }),
     hostChecks: []
   };
-  if (status.extension.ok) log.info(`UI \u6269\u5C55\u5DF2\u90E8\u7F72\u5230 ${status.extension.target}`);
-  else {
+  if (status.extension.ok) {
+    log.info(status.extension.message ?? `UI \u6269\u5C55\u5DF2\u90E8\u7F72\u5230 ${status.extension.target}`);
+    if (status.extension.warning) log.warn(status.extension.warning);
+  } else {
     log.warn(`UI \u6269\u5C55\u672A\u80FD\u90E8\u7F72\uFF1A${status.extension.reason ?? ""}`);
     if (status.extension.manual) log.warn(status.extension.manual);
   }
@@ -92554,7 +92716,10 @@ async function startPlugin(opts) {
   if (status.chromium.path) log.info(`\u4F7F\u7528 Chromium\uFF1A${status.chromium.path}`);
   else log.warn(`\u6CA1\u6709\u627E\u5230 Chrome/Chromium\uFF0C\u65E0\u5934\u6D4F\u89C8\u5668\u65E0\u6CD5\u542F\u52A8\u3002${status.chromium.hint ?? ""}`);
   channel.onEvent((e) => {
-    if (e.type === "selfCheck") {
+    if (e.type === "hello") {
+      const warning = versionMismatchWarning(opts.version ?? VERSION, e.extVersion);
+      if (warning) log.warn(warning);
+    } else if (e.type === "selfCheck") {
       status.hostChecks = e.items;
       for (const item of e.items) (item.ok ? log.info : item.name === "csrf" ? log.error : log.warn)(`\u9875\u9762\u81EA\u68C0 ${item.name}\uFF1A${item.ok ? "\u901A\u8FC7" : "\u5931\u8D25"}${item.detail ? `\uFF08${item.detail}\uFF09` : ""}`);
     } else if (e.type === "hostLog") {
@@ -92635,7 +92800,7 @@ var info = {
 var runtime = null;
 async function init(router) {
   try {
-    const pluginDir = resolve8(dirname8(fileURLToPath2(import.meta.url)), "..");
+    const pluginDir = resolve8(dirname9(fileURLToPath2(import.meta.url)), "..");
     runtime = await startPlugin({ router, pluginDir });
     if (runtime) attachBridge(runtime);
   } catch (e) {
