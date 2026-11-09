@@ -90225,6 +90225,11 @@ var BrowserManager = class {
     this.browser = null;
     this.stateValue = "stopped";
     this.startedAt = void 0;
+    try {
+      browser.kill();
+      this.opts.log.info(`\u8FDE\u63A5\u65AD\u5F00\uFF0C\u5DF2\u7ED3\u675F\u6B8B\u7559\u7684\u6D4F\u89C8\u5668\u8FDB\u7A0B\uFF08PID ${browser.pid ?? "\u672A\u77E5"}\uFF09`);
+    } catch {
+    }
     void this.cleanupDir();
     this.emit({ type: "crashed", detail: "\u6D4F\u89C8\u5668\u8FDB\u7A0B\u610F\u5916\u9000\u51FA" });
   }

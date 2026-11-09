@@ -438,6 +438,14 @@ export class BrowserManager {
     this.browser = null;
     this.stateValue = 'stopped';
     this.startedAt = undefined;
+    // 连接断开（CDP 通道断了）不等于 Chromium 进程退出，进程可能还活着。
+    // 先 SIGKILL 兜底再清理目录（进程还在写 profile 时删目录会报错），否则每断一次留下一个孤儿占内存。
+    try {
+      browser.kill();
+      this.opts.log.info(`连接断开，已结束残留的浏览器进程（PID ${browser.pid ?? '未知'}）`);
+    } catch {
+      // 进程已经退出
+    }
     void this.cleanupDir();
     this.emit({ type: 'crashed', detail: '浏览器进程意外退出' });
   }

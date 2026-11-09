@@ -1,3 +1,4 @@
+import { existsSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserManager, chromiumArgs, hostUrl, type BrowserEvent, type HostLink, type LaunchedBrowser, type Launcher, type PageLike } from '../src/server/browser';
 import { captureLogger } from './helpers';
@@ -37,15 +38,18 @@ class FakeHost implements HostLink {
 interface FakeBrowser extends LaunchedBrowser {
   closed: boolean;
   killed: boolean;
+  killCount: number;
+  /** kill() 被调用那一刻，临时 profile 目录是否还在 */
+  dirExistedAtKill?: boolean;
   disconnect(): void;
   crashPage(): void;
   gotoUrl?: string;
 }
 
-function fakeLauncher(host: FakeHost, opts: { connect?: boolean; redirectTo?: string } = {}) {
+function fakeLauncher(host: FakeHost, opts: { connect?: boolean; redirectTo?: string; killThrows?: boolean } = {}) {
   const launched: FakeBrowser[] = [];
   const argsSeen: string[][] = [];
-  const launcher: Launcher = async ({ args }) => {
+  const launcher: Launcher = async ({ args, userDataDir }) => {
     argsSeen.push(args);
     let onDisc: (() => void) | null = null;
     let onPageError: ((e: Error) => void) | null = null;
@@ -53,6 +57,7 @@ function fakeLauncher(host: FakeHost, opts: { connect?: boolean; redirectTo?: st
       pid: 1000 + launched.length,
       closed: false,
       killed: false,
+      killCount: 0,
       async newPage(): Promise<PageLike> {
         let url = '';
         return {
@@ -73,7 +78,12 @@ function fakeLauncher(host: FakeHost, opts: { connect?: boolean; redirectTo?: st
         b.closed = true;
         host.setConnected(false);
       },
-      kill: () => void (b.killed = true),
+      kill: () => {
+        b.killed = true;
+        b.killCount++;
+        b.dirExistedAtKill = existsSync(userDataDir);
+        if (opts.killThrows) throw new Error('kill ESRCH');
+      },
       onDisconnected: (fn) => void (onDisc = fn),
       disconnect: () => {
         host.setConnected(false);
@@ -277,6 +287,60 @@ describe('BrowserManager', () => {
     expect(events.at(-1)).toEqual({ type: 'crashed', detail: '浏览器进程意外退出' });
     await m.ensureRunning();
     expect(launched).toHaveLength(2);
+    await m.dispose();
+  });
+
+  it('浏览器意外退出：连接断开不等于进程退出，要结束残留进程（恰好一次，且在清理目录之前）', async () => {
+    const host = new FakeHost();
+    const { launcher, launched } = fakeLauncher(host);
+    const { m, log } = make(host, launcher);
+    await m.ensureRunning();
+    launched[0].disconnect();
+    expect(launched[0].killCount).toBe(1);
+    expect(launched[0].dirExistedAtKill).toBe(true);
+    expect(log.lines.some((l) => l.includes('已结束残留的浏览器进程') && l.includes('1000'))).toBe(true);
+    await m.dispose();
+  });
+
+  it('浏览器意外退出：进程已经退出（kill 抛错）时不抛出，仍发 crashed 事件', async () => {
+    const host = new FakeHost();
+    const { launcher, launched } = fakeLauncher(host, { killThrows: true });
+    const { m, events } = make(host, launcher);
+    await m.ensureRunning();
+    expect(() => launched[0].disconnect()).not.toThrow();
+    expect(events.at(-1)).toEqual({ type: 'crashed', detail: '浏览器进程意外退出' });
+    expect(m.state).toBe('stopped');
+    await m.dispose();
+  });
+
+  it('stop() / dispose() 期间触发的断开不重复 kill', async () => {
+    const host = new FakeHost();
+    const { launcher, launched } = fakeLauncher(host);
+    const { m } = make(host, launcher);
+    await m.ensureRunning();
+    const stopping = m.stop('test');
+    launched[0].disconnect();
+    await stopping;
+    expect(launched[0].killCount).toBe(0);
+    await m.ensureRunning();
+    const disposing = m.dispose();
+    launched[1].disconnect();
+    await disposing;
+    expect(launched[1].killCount).toBe(0);
+  });
+
+  it('旧实例的 disconnected 在新实例启动后才到达：不会杀到新实例', async () => {
+    const host = new FakeHost();
+    const { launcher, launched } = fakeLauncher(host);
+    const { m } = make(host, launcher);
+    await m.ensureRunning();
+    launched[0].disconnect();
+    expect(launched[0].killCount).toBe(1);
+    await m.ensureRunning();
+    launched[0].disconnect();
+    expect(launched[0].killCount).toBe(1);
+    expect(launched[1].killCount).toBe(0);
+    expect(m.state).toBe('running');
     await m.dispose();
   });
 
