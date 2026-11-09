@@ -209,7 +209,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 | “扩展”设置栏里的 Silly TG 显示“还需要安装服务端插件” | 没装服务端插件，或没开启 `enableServerPlugins`（默认 `false`），或装好后没有重启 ST |
 | 面板安装扩展时报错“目录已存在” | 已经装过一份：先在面板里删除旧的，或直接点“更新” |
 | 日志提示 UI 扩展与服务端插件版本不一致 | 两边没有一起更新：面板里更新 UI 扩展，同时更新 `plugins/silly-tg`（`git pull`），然后重启 ST |
-| 日志提示“扩展没有连接” | 到 ST 的“扩展”管理里确认 Silly TG 存在且没有被停用 |
+| 日志提示“扩展没有连接” | 到 ST 的“扩展”管理里确认 Silly TG 存在且没有被停用。面板安装的 `silly-tg-bridge-plugin` 或自动部署的 `silly-tg`，有一份可用就行；两份都没有时，重启 ST 让插件重新部署，或按“安装”一节重新装一份 |
 | 日志提示找不到 Chrome/Chromium，或浏览器启动报错 | 安装 Chrome/Chromium，或设置 `chromiumPath`。Linux 服务器见 [docs/install-linux.md](docs/install-linux.md)（Ubuntu 请用 Google Chrome 的 deb，不要用 snap 版）。报错后面的 `💡 修法` 会说明具体怎么改 |
 | 连接 Telegram 失败 | 网络访问不了 Telegram，配置 `telegramProxy`（仅支持 HTTP 代理）。代理的配置和验证方法见 [docs/install-linux.md](docs/install-linux.md#代理) |
 | 提示“请先发 /chars 选择角色” | 还没选过角色，发 `/chars` 选一个 |

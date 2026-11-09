@@ -5,7 +5,7 @@
   "optional": [],
   "js": "index.js",
   "author": "incohua",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "homePage": "https://github.com/incohua/silly-tg-bridge-plugin",
   "auto_update": true,
   "silly_tg": true
