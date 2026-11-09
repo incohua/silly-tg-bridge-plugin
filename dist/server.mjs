@@ -93082,7 +93082,8 @@ async function startRuntime(ctx, config2, warnings, signal) {
         const hint = e instanceof TelegramApiError ? e.errorCode === 401 ? "Telegram \u5DF2\u54CD\u5E94\uFF0C\u7F51\u7EDC\u548C\u4EE3\u7406\u6CA1\u95EE\u9898\uFF0C\u662F botToken \u88AB\u62D2\u7EDD\uFF0C\u68C0\u67E5\u9762\u677F\uFF08\u6216 config.json\uFF09\u91CC\u7684 botToken\u3002" : "" : proxyFailureHint(proxy);
         const message = redactError(e.message, secrets);
         status.telegramError = `${message}\u3002${hint}`;
-        log.error(`\u8FDE\u63A5 Telegram \u5931\u8D25\uFF1A${message}\u3002${hint}\u5C06\u7EE7\u7EED\u5728\u540E\u53F0\u91CD\u8BD5\u3002`);
+        const rejected = e instanceof TelegramApiError && e.errorCode === 401;
+        log.error(`\u8FDE\u63A5 Telegram \u5931\u8D25\uFF1A${message}\u3002${hint}${rejected ? "" : "\u5C06\u7EE7\u7EED\u5728\u540E\u53F0\u91CD\u8BD5\u3002"}`);
       }
     }
     if (signal?.aborted) throw new Error("\u542F\u52A8\u5DF2\u53D6\u6D88");

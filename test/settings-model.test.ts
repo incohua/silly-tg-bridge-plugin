@@ -166,8 +166,8 @@ describe('classifyConfigFailure（服务端插件是否没装）', () => {
 });
 
 describe('INSTALL_GUIDE（引导文案）', () => {
-  it('克隆命令带显式目标目录 plugins/silly-tg，且不含凭据', () => {
-    expect(INSTALL_GUIDE.command).toBe('git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg');
+  it('克隆命令带显式目标目录 plugins/silly-tg-bridge-plugin，且不含凭据', () => {
+    expect(INSTALL_GUIDE.command).toBe('git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg-bridge-plugin');
     expect(INSTALL_GUIDE.command).not.toMatch(/@|token/i);
   });
   it('步骤里说明了 enableServerPlugins、plugins 目录和只需重启一次；保存后无需再重启', () => {

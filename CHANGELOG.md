@@ -15,7 +15,12 @@
 - `allowedUserIds` 改为立即生效：面板保存后无需重启，也不触发重新连接。
 - 原来标注“需重启 ST 才生效”的字段（`botToken`、`telegramProxy`、`stBaseUrl`、`basicAuth`）改为保存后自动重新连接，面板里不再出现“重启 ST 后生效”的提示。
 - README 的安装改为单一路径：`git clone` → 开启 `enableServerPlugins`（已是 `true` 就不用改）→ 重启 ST 一次 → 刷新页面，在扩展栏填写并保存 → 在 Telegram 发 `/status`；“在 ST 里粘贴链接装 UI 扩展”降级为备选。`docs/install-linux.md` 同步。
-- `docs/install-linux.md` 去掉 `SILLYTAVERN_ENABLESERVERPLUGINS` 环境变量的写法（尚未实测，实测通过后再补回）。
+- 克隆命令改为 `git clone <仓库地址> plugins/silly-tg-bridge-plugin`，不用再改目录名：实测 ST 按目录里的 `package.json` 入口加载，路由由插件自己的 id（`silly-tg`）决定，目录名不影响加载。面板里的安装引导同步。
+- 文档补充用环境变量 `SILLYTAVERN_ENABLESERVERPLUGINS=true` 启动也能开启服务端插件（在全新的 Debian 13 容器里实测通过；只对该次启动的进程有效，用 systemd 托管时写进 `Environment=`）。
+
+### 修复
+- 自动部署到 `third-party/silly-tg` 的 UI 扩展清单不再带 `auto_update`：它不是 git 仓库，带着会让 ST 第一次打开页面时报“Directory is not a Git repository”。通过面板安装的副本（仓库根的 `manifest.json`）仍然带它。
+- Telegram 拒绝 token（401）时，日志不再同时写“将继续在后台重试”和“轮询已停止”。
 
 ## [0.3.0] - 2026-11-09
 

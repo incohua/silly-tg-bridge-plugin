@@ -67,19 +67,19 @@ google-chrome-stable --version
 在 ST 根目录：
 
 ```bash
-git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg
+git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg-bridge-plugin
 ```
 
-1. 编辑 `config.yaml`（ST 第一次运行后才会生成，没有的话先 `./start.sh` 跑一次再 Ctrl+C），设置 `enableServerPlugins: true`。**不开启时插件根本不会被加载，也不会有任何提示。** 已经是 `true` 就不用改。
+1. 编辑 `config.yaml`（ST 第一次运行后才会生成，没有的话先 `./start.sh` 跑一次再 Ctrl+C），设置 `enableServerPlugins: true`。**不开启时插件根本不会被加载，也不会有任何提示。** 已经是 `true` 就不用改。 也可以不改文件，启动前设置环境变量 `SILLYTAVERN_ENABLESERVERPLUGINS=true`（ST 的配置项都能用 `SILLYTAVERN_<键名大写，点换下划线>` 覆盖；只对这次启动的进程有效，systemd 里用这种方式更方便）。
 2. 启动（或重启）ST：`./start.sh`（它会先 `npm install` 装好依赖）。这是整个流程里**唯一需要的一次重启**。此时还没有 `config.json`，日志里会出现 `[silly-tg] UI 扩展已部署到 ...` 和“插件已待命”，这是正常的。如果你已经在 ST 的“扩展”面板里粘贴链接装过 UI 扩展（见 [README 的安装一节](../README.md#安装)），日志会改为“检测到已通过 ST 安装的 UI 扩展……跳过自动复制”，也是正常的。
 3. 填写配置，二选一：
    - 通过 SSH 隧道（见[首次配置 API](#首次配置-api用-ssh-隧道)）在电脑浏览器里打开 ST，在“扩展”设置栏的 Silly TG 里填 Bot Token 和允许的用户 ID，保存。**保存后自动连接，不需要重启 ST。**
-   - 或者在第 2 步之前复制 `plugins/silly-tg/config.example.json` 为 `plugins/silly-tg/config.json`，至少填 `botToken` 和 `allowedUserIds`，启动时就直接连接。
+   - 或者在第 2 步之前复制 `plugins/silly-tg-bridge-plugin/config.example.json` 为 `plugins/silly-tg-bridge-plugin/config.json`，至少填 `botToken` 和 `allowedUserIds`，启动时就直接连接。
 4. 日志里应出现 `Telegram 已连接，bot：@...`。给 bot 发 `/status`，应看到 Chromium、ST 页面都正常。再发 `/chars` 选角色。
 
 ST 默认只监听 `127.0.0.1`，无头 Chromium 也访问这个地址，不需要改任何网络设置。
 
-**更新插件**：ST 默认在启动时对 `plugins/` 下的 git 目录自动 `git pull`（`config.yaml` 的 `enableServerPluginsAutoUpdate`，默认开启），重启 ST 就会更新；`dist/` 已提交到仓库，不需要自己构建。想手动更新就在 `plugins/silly-tg` 里 `git pull` 再重启 ST。
+**更新插件**：ST 默认在启动时对 `plugins/` 下的 git 目录自动 `git pull`（`config.yaml` 的 `enableServerPluginsAutoUpdate`，默认开启），重启 ST 就会更新；`dist/` 已提交到仓库，不需要自己构建。想手动更新就在 `plugins/silly-tg-bridge-plugin` 里 `git pull` 再重启 ST。
 
 ## 沙箱：什么时候需要关
 
@@ -129,6 +129,8 @@ ExecStart=/usr/bin/node server.js
 Restart=on-failure
 RestartSec=5
 
+# 没改 config.yaml 的话，用环境变量开启服务端插件
+#Environment=SILLYTAVERN_ENABLESERVERPLUGINS=true
 # 需要时取消注释（见“沙箱”和“代理”两节）
 #Environment=PUPPETEER_DANGEROUS_NO_SANDBOX=true
 #Environment=HTTPS_PROXY=http://127.0.0.1:7890

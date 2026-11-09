@@ -246,6 +246,8 @@ describe('bootPlugin', () => {
     expect(out).toMatch(/401 Unauthorized/);
     expect(out).toMatch(/botToken 被拒绝/);
     expect(out).not.toMatch(/检查代理是否可用/);
+    // token 被拒绝后轮询会停止，不能再说“将继续在后台重试”
+    expect(out).not.toMatch(/将继续在后台重试/);
     expect(out).not.toContain(FAKE_TOKEN);
   });
 

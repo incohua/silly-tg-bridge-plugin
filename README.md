@@ -67,17 +67,17 @@
 1. 在 ST 根目录执行：
 
    ```bash
-   git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg
+   git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg-bridge-plugin
    ```
 
-   `dist/` 已包含构建产物，不需要安装 pnpm，也不需要构建。命令里的 `plugins/silly-tg` 不能省：不写的话目录会叫仓库名 `silly-tg-bridge-plugin`；用 `pnpm plugins:install` 之类按仓库名克隆的方式也一样，克隆完请把目录改名为 `silly-tg`。**不要在克隆地址里带 token 或密码**：`.git/config` 会保存地址，而 ST 会把 `public/` 下的文件静态公开。
-2. 打开 ST 根目录的 `config.yaml`，设置 `enableServerPlugins: true`。**必须开启：不开启时插件根本不会被加载，也不会有任何提示。** 如果文件里已经是 `true`（例如装过小白X 的后台），不用改。
+   `dist/` 已包含构建产物，不需要安装 pnpm，也不需要构建。目录名不影响加载（实测 `plugins/silly-tg-bridge-plugin` 可正常加载，ST 按目录里的 `package.json` 入口加载，路由由插件自己的 id 决定）；下文统一写作 `plugins/silly-tg-bridge-plugin`，你用别的目录名也一样。**不要在克隆地址里带 token 或密码**：`.git/config` 会保存地址，而 ST 会把 `public/` 下的文件静态公开。
+2. 打开 ST 根目录的 `config.yaml`，设置 `enableServerPlugins: true`。**必须开启：不开启时插件根本不会被加载，也不会有任何提示。** 如果文件里已经是 `true`（例如装过小白X 的后台），不用改。 不想改文件的话，也可以用环境变量启动：`SILLYTAVERN_ENABLESERVERPLUGINS=true node server.js`（ST 的配置项都能用 `SILLYTAVERN_<键名大写，点换下划线>` 覆盖；只对这次启动的进程有效，用 systemd 托管时写进 `Environment=`）。
 3. **重启 ST（整个流程只需要这一次）**，然后刷新页面。插件启动时会把 UI 扩展自动部署到 `public/scripts/extensions/third-party/silly-tg`；此时还没有 `config.json`，插件会在日志里写明“已待命”，不连接 Telegram。
-4. 在 ST 的“扩展”设置栏里找到“Silly TG”，填写 Bot Token 和允许的用户 ID，点保存。**保存后插件会立即连接 Telegram 并启动无头浏览器，不需要再重启 ST**，面板会显示连接结果；日志里应出现 `[silly-tg] Telegram 已连接，bot：@...`。（也可以在第 3 步重启之前，复制 `plugins/silly-tg/config.example.json` 为 `plugins/silly-tg/config.json` 并填好，启动时就直接连接。）
+4. 在 ST 的“扩展”设置栏里找到“Silly TG”，填写 Bot Token 和允许的用户 ID，点保存。**保存后插件会立即连接 Telegram 并启动无头浏览器，不需要再重启 ST**，面板会显示连接结果；日志里应出现 `[silly-tg] Telegram 已连接，bot：@...`。（也可以在第 3 步重启之前，复制 `plugins/silly-tg-bridge-plugin/config.example.json` 为 `plugins/silly-tg-bridge-plugin/config.json` 并填好，启动时就直接连接。）
 5. 在 Telegram 里给你的 bot 发 `/status`，确认 Chromium、ST 页面和当前角色正常。
 6. 首次使用先发 `/chars` 选择一个角色，再发文字。选过的角色和聊天会被记住，重启后自动恢复。
 
-部署 UI 扩展失败时日志会给出手动步骤：把 `plugins/silly-tg/dist/extension` 整个目录复制为 `public/scripts/extensions/third-party/silly-tg`，然后重启 ST。配置有误时，插件会在日志里说明要改哪个字段并保持待命，ST 本身照常启动；改好后在面板里保存即可恢复。
+部署 UI 扩展失败时日志会给出手动步骤：把 `plugins/silly-tg-bridge-plugin/dist/extension` 整个目录复制为 `public/scripts/extensions/third-party/silly-tg`，然后重启 ST。配置有误时，插件会在日志里说明要改哪个字段并保持待命，ST 本身照常启动；改好后在面板里保存即可恢复。
 
 #### 备选：先在 ST 里粘贴链接装 UI 扩展
 
@@ -135,7 +135,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 - 对话样式、预览方式和刷新间隔、行动选项排版、日志级别、空闲关闭时间、允许的用户 ID **立即生效**（`lowMemory` 要等下次启动 Chromium 才用上）。
 - Bot Token、代理、ST 地址、basic auth 保存后插件**自动重新连接**：停掉旧的轮询和无头浏览器，用新配置重新拉起。连接失败（例如 token 被拒绝）时面板会显示原因，改正后再保存一次即可。
 
-也可以手动编辑 `plugins/silly-tg/config.json`（已被 gitignore，不会被提交）；`chromiumPath` 只能在文件里改。手动改文件后需要重启 ST 才会重新加载。
+也可以手动编辑 `plugins/silly-tg-bridge-plugin/config.json`（已被 gitignore，不会被提交）；`chromiumPath` 只能在文件里改。手动改文件后需要重启 ST 才会重新加载。
 
 | 键 | 默认值 | 说明 |
 |---|---|---|
@@ -203,10 +203,10 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 |---|---|
 | 日志里完全没有 `[silly-tg]` | 没开启 `enableServerPlugins`，或插件目录位置不对 |
 | 日志写“插件已待命” | 还没有 `config.json`（或配置有误）。在“扩展”设置栏的 Silly TG 里填写 Bot Token 和允许的用户 ID 并保存，不用重启 ST；配置有误时日志会写明字段 |
-| “扩展”设置栏里的 Silly TG 显示“服务端插件没有加载” | 页面访问不到服务端插件的接口：没装服务端插件（目录应为 `plugins/silly-tg`），或没开启 `enableServerPlugins`（默认 `false`），或装好后没有重启 ST |
+| “扩展”设置栏里的 Silly TG 显示“服务端插件没有加载” | 页面访问不到服务端插件的接口：没装服务端插件（应放在 ST 的 `plugins/` 目录下），或没开启 `enableServerPlugins`（默认 `false`），或装好后没有重启 ST |
 | 保存后面板显示连接 Telegram 失败 | 面板会写明原因：token 被拒绝（检查 `botToken`），或网络不通（配置 `telegramProxy`）。改正后再保存一次即可，不用重启 ST |
 | 面板安装扩展时报错“目录已存在” | 已经装过一份：先在面板里删除旧的，或直接点“更新” |
-| 日志提示 UI 扩展与服务端插件版本不一致 | 两边没有一起更新：面板里更新 UI 扩展，同时更新 `plugins/silly-tg`（`git pull`），然后重启 ST |
+| 日志提示 UI 扩展与服务端插件版本不一致 | 两边没有一起更新：面板里更新 UI 扩展，同时更新 `plugins/silly-tg-bridge-plugin`（`git pull`），然后重启 ST |
 | 日志提示“扩展没有连接” | 到 ST 的“扩展”管理里确认 Silly TG 存在且没有被停用。面板安装的 `silly-tg-bridge-plugin` 或自动部署的 `silly-tg`，有一份可用就行；两份都没有时，重启 ST 让插件重新部署，或按[安装](#安装)一节重新装一份 |
 | 日志提示找不到 Chrome/Chromium，或浏览器启动报错 | 安装 Chrome/Chromium，或设置 `chromiumPath`。Linux 服务器见 [docs/install-linux.md](docs/install-linux.md)（Ubuntu 请用 Google Chrome 的 deb，不要用 snap 版）。报错后面的 `💡 修法` 会说明具体怎么改 |
 | 连接 Telegram 失败 | 网络访问不了 Telegram，配置 `telegramProxy`（仅支持 HTTP 代理）。代理的配置和验证方法见 [docs/install-linux.md](docs/install-linux.md#代理) |
@@ -249,8 +249,8 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 
 UI 扩展和服务端插件各自更新，节奏不同，升级后请两边都检查一下，保持同一版本（版本不一致时服务端日志会警告）。
 
-- **UI 扩展是面板安装的**：UI 扩展在“扩展”面板里点更新。清单里带 `auto_update`，ST 升级后也会自动更新，并会提示有新版本。服务端插件（`plugins/silly-tg`）是 git 仓库，ST 默认（`enableServerPluginsAutoUpdate: true`）会在启动时自动 `git pull`，也可以手动在目录里 `git pull`，然后重启 ST。
-- **只 `git clone` 了服务端插件**：`git pull` 更新 `plugins/silly-tg` 后重启 ST，UI 扩展会随插件启动自动覆盖，不需要另外操作。
+- **UI 扩展是面板安装的**：UI 扩展在“扩展”面板里点更新。清单里带 `auto_update`，ST 升级后也会自动更新，并会提示有新版本。服务端插件（`plugins/silly-tg-bridge-plugin`）是 git 仓库，ST 默认（`enableServerPluginsAutoUpdate: true`）会在启动时自动 `git pull`，也可以手动在目录里 `git pull`，然后重启 ST。
+- **只 `git clone` 了服务端插件**：`git pull` 更新 `plugins/silly-tg-bridge-plugin` 后重启 ST，UI 扩展会随插件启动自动覆盖，不需要另外操作。
 - **自动部署出来的 `third-party/silly-tg` 不是 git 仓库，不要在面板里点它的“更新”**（会报错）。它随服务端插件更新。
 
 ### 卸载
@@ -258,11 +258,11 @@ UI 扩展和服务端插件各自更新，节奏不同，升级后请两边都�
 <details>
 <summary>展开步骤</summary>
 
-1. 删除 `plugins/silly-tg`。其中的 `data/state.json` 存有消息映射和最近使用的角色、聊天，一并删除。
+1. 删除 `plugins/silly-tg-bridge-plugin`。其中的 `data/state.json` 存有消息映射和最近使用的角色、聊天，一并删除。
 2. 删除 UI 扩展：在“扩展”面板里删除面板安装的那份；自动部署的 `public/scripts/extensions/third-party/silly-tg` 直接删除目录即可。
 3. 如不再需要其他服务端插件，可把 `enableServerPlugins` 改回 `false`。重启 ST。
 
-**只删 UI 扩展而保留服务端插件的话，服务端插件下次启动会重新部署一份**，要彻底去掉请先删 `plugins/silly-tg`。
+**只删 UI 扩展而保留服务端插件的话，服务端插件下次启动会重新部署一份**，要彻底去掉请先删 `plugins/silly-tg-bridge-plugin`。
 
 ST 恢复原状，聊天数据不受影响。
 

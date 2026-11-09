@@ -18,15 +18,16 @@ describe('manifest', () => {
     expect(rootManifest.js).toBe('dist/extension/index.js');
     expect(srcManifest.js).toBe('index.js');
   });
-  it('两份 manifest 除 js 外内容一致', () => {
-    const { js: _a, ...a } = rootManifest;
-    const { js: _b, ...b } = srcManifest;
+  it('两份 manifest 除 js 和 auto_update 外内容一致', () => {
+    const { js: _a, auto_update: _au, ...a } = rootManifest;
+    const { js: _b, auto_update: _bu, ...b } = srcManifest;
     expect(a).toEqual(b);
   });
-  it('带 auto_update 和 silly_tg 标记（去重靠 silly_tg 识别）', () => {
-    for (const m of [rootManifest, srcManifest]) {
-      expect(m.auto_update).toBe(true);
-      expect(m.silly_tg).toBe(true);
-    }
+  it('带 silly_tg 标记（去重靠 silly_tg 识别）', () => {
+    for (const m of [rootManifest, srcManifest]) expect(m.silly_tg).toBe(true);
+  });
+  it('只有面板安装的根 manifest 开启 auto_update；自动部署的副本不是 git 仓库，不能带它', () => {
+    expect(rootManifest.auto_update).toBe(true);
+    expect(srcManifest.auto_update).toBeUndefined();
   });
 });

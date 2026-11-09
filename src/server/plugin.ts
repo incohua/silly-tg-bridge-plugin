@@ -305,7 +305,9 @@ async function startRuntime(ctx: RuntimeContext, config: Config, warnings: Confi
             : proxyFailureHint(proxy);
         const message = redactError((e as Error).message, secrets);
         status.telegramError = `${message}。${hint}`;
-        log.error(`连接 Telegram 失败：${message}。${hint}将继续在后台重试。`);
+        // 401 表示 token 被拒绝，轮询会停止，不能说“继续重试”
+        const rejected = e instanceof TelegramApiError && e.errorCode === 401;
+        log.error(`连接 Telegram 失败：${message}。${hint}${rejected ? '' : '将继续在后台重试。'}`);
       }
     }
 

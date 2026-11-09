@@ -7,6 +7,5 @@
   "author": "incohua",
   "version": "0.3.0",
   "homePage": "https://github.com/incohua/silly-tg-bridge-plugin",
-  "auto_update": true,
   "silly_tg": true
 }

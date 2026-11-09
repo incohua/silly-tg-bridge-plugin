@@ -218,9 +218,9 @@ export function classifyConfigFailure(status: number): ConfigFailure {
 export const INSTALL_GUIDE = {
   title: '服务端插件没有加载',
   intro: '这个扩展只是 Silly TG 的页面部分，需要配套的服务端插件才能工作。出现这段说明，是因为 ST 没有加载它：可能还没装到 ST 的 plugins 目录，或者 config.yaml 里的 enableServerPlugins 不是 true。请按下面的步骤检查：',
-  command: 'git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg',
+  command: 'git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg-bridge-plugin',
   steps: [
-    '在 SillyTavern 的根目录执行上面的命令（需要已安装 git）。已经有 plugins/silly-tg 目录就不用再执行。',
+    '在 SillyTavern 的根目录执行上面的命令（需要已安装 git）。plugins 目录下已经有它（目录名随意）就不用再执行。',
     '打开 ST 根目录的 config.yaml，把 enableServerPlugins 改成 true（已经是 true 就不用改）。默认是 false，不开启时插件不会被加载，也没有任何提示。',
     '重启 ST 一次，然后刷新本页面，回到这里填写 Bot Token 和允许的用户 ID 并保存。保存后立即生效，无需再重启。',
   ],
