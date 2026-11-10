@@ -529,17 +529,8 @@
     return { restored: false, reason: `\u6253\u5F00\u89D2\u8272 ${key} \u8D85\u65F6` };
   }
 
-  // src/extension/heap.ts
-  function readHeap(perf = globalThis.performance) {
-    const mem = perf?.memory;
-    if (!mem) return void 0;
-    const { usedJSHeapSize: used, jsHeapSizeLimit: limit } = mem;
-    if (typeof used !== "number" || typeof limit !== "number") return void 0;
-    if (!Number.isFinite(used) || !Number.isFinite(limit) || used < 0 || limit < 0) return void 0;
-    return { used, limit };
-  }
-
   // src/extension/settings-model.ts
+  var NEXT_START_FIELDS = ["lowMemory", "pageHeapLimitMB"];
   function parseUserIds(text) {
     const parts = text.split(/[\s,，、;；]+/).filter(Boolean);
     const ids = [];
@@ -566,6 +557,9 @@
     if (!Number.isFinite(idle)) errors.push({ field: "idleShutdownMinutes", message: "\u7A7A\u95F2\u5173\u95ED\u65F6\u95F4\u5FC5\u987B\u662F\u6570\u5B57\uFF08\u5206\u949F\uFF09\uFF0C0 \u8868\u793A\u4E0D\u5173\u95ED\u3002" });
     else patch.idleShutdownMinutes = idle;
     patch.lowMemory = form.lowMemory;
+    const heap = form.pageHeapLimitMB.trim() === "" ? 256 : Number(form.pageHeapLimitMB);
+    if (!Number.isInteger(heap) || heap < 128 || heap > 4096) errors.push({ field: "pageHeapLimitMB", message: "\u9875\u9762\u5185\u5B58\u4E0A\u9650\u5FC5\u987B\u662F 128\u20134096 \u4E4B\u95F4\u7684\u6574\u6570\uFF08MB\uFF09\uFF0C\u9ED8\u8BA4 256\u3002" });
+    else patch.pageHeapLimitMB = heap;
     patch.dialogueStyle = form.dialogueStyle;
     patch.logLevel = form.logLevel;
     patch.draftMode = form.draftMode;
@@ -582,7 +576,10 @@
     const rt = r.runtime;
     const head = r.reconnected ? "\u5DF2\u6309 config.json \u91CD\u65B0\u8FDE\u63A5" : changed.length > 0 ? "\u5DF2\u4FDD\u5B58" : r.reloadedRuntime ? "\u6CA1\u6709\u6539\u52A8\uFF0C\u5DF2\u6309\u73B0\u6709 config.json \u91CD\u65B0\u542F\u52A8" : "\u6CA1\u6709\u6539\u52A8";
     const parts = [`${head}\u3002`];
-    if (hot.length > 0) parts.push(`\u5DF2\u7ACB\u5373\u751F\u6548\uFF1A${hot.map(fieldLabel).join("\u3001")}\u3002`);
+    const nextStart = hot.filter((f) => NEXT_START_FIELDS.includes(f));
+    const immediate = hot.filter((f) => !NEXT_START_FIELDS.includes(f));
+    if (immediate.length > 0) parts.push(`\u5DF2\u7ACB\u5373\u751F\u6548\uFF1A${immediate.map(fieldLabel).join("\u3001")}\u3002`);
+    if (nextStart.length > 0) parts.push(`\u4E0B\u6B21\u542F\u52A8\u65E0\u5934\u6D4F\u89C8\u5668\u65F6\u751F\u6548\uFF1A${nextStart.map(fieldLabel).join("\u3001")}\u3002`);
     if (!rt || !r.reloadedRuntime && reloaded.length === 0 && rt.state === "running" && rt.telegram !== "error") return parts.join("");
     if (runtimeSettling(rt)) return `${parts.join("")}\u6B63\u5728\u91CD\u65B0\u8FDE\u63A5\u2026`;
     if (rt.state === "standby") return `${head}\uFF0C\u4F46\u63D2\u4EF6\u6CA1\u6709\u542F\u52A8\uFF1A${rt.errors?.map((e) => e.message).join("\uFF1B") || "\u8BF7\u68C0\u67E5\u914D\u7F6E"}`;
@@ -639,6 +636,7 @@
     basicAuth: "ST \u767B\u5F55\u8D26\u53F7",
     idleShutdownMinutes: "\u7A7A\u95F2\u5173\u95ED\u65F6\u95F4",
     lowMemory: "\u4F4E\u5185\u5B58\u6A21\u5F0F",
+    pageHeapLimitMB: "\u9875\u9762\u5185\u5B58\u4E0A\u9650",
     dialogueStyle: "\u5BF9\u8BDD\u6837\u5F0F",
     logLevel: "\u65E5\u5FD7\u7EA7\u522B",
     draftIntervalSeconds: "\u8349\u7A3F\u5237\u65B0\u95F4\u9694",
@@ -809,6 +807,7 @@
       basicAuthPassword: input("password", ""),
       idleShutdownMinutes: input("number", "0"),
       lowMemory: el("input", { type: "checkbox" }),
+      pageHeapLimitMB: input("number", "256"),
       dialogueStyle: select([
         ["bold", "\u52A0\u7C97"],
         ["italic", "\u659C\u4F53"],
@@ -839,6 +838,12 @@
       basicAuth: row("ST \u767B\u5F55\u8D26\u53F7", RECONNECT, f.basicAuthUser),
       idleShutdownMinutes: row("\u7A7A\u95F2\u5173\u95ED\uFF08\u5206\u949F\uFF09", "\u7ACB\u5373\u751F\u6548", f.idleShutdownMinutes, "0 \u8868\u793A\u4E0D\u81EA\u52A8\u5173\u95ED\u65E0\u5934\u6D4F\u89C8\u5668\u3002"),
       lowMemory: row("\u4F4E\u5185\u5B58\u6A21\u5F0F", "\u4E0B\u6B21\u542F\u52A8\u6D4F\u89C8\u5668\u65F6\u751F\u6548", f.lowMemory),
+      pageHeapLimitMB: row(
+        "\u9875\u9762\u5185\u5B58\u4E0A\u9650\uFF08MB\uFF09",
+        "\u4E0B\u6B21\u542F\u52A8\u6D4F\u89C8\u5668\u65F6\u751F\u6548",
+        f.pageHeapLimitMB,
+        "\u4F4E\u5185\u5B58\u6A21\u5F0F\u4E0B\u65E0\u5934\u9875\u9762 JS \u5185\u5B58\u7684\u4E0A\u9650\uFF0C128\u20134096\uFF0C\u9ED8\u8BA4 256\u3002\u9875\u9762\u5185\u5B58\u4F1A\u968F\u8FD0\u884C\u65F6\u95F4\u7F13\u6162\u589E\u957F\uFF0C\u7A7A\u95F2\u65F6\u7528\u91CF\u8FBE\u5230\u4E0A\u9650\u7684 75% \u5C31\u4F1A\u81EA\u52A8\u91CD\u8F7D\u9875\u9762\u56DE\u6536\uFF1B\u5185\u5B58\u5145\u88D5\u7684\u673A\u5668\u53EF\u4EE5\u8C03\u5927\uFF08\u4F8B\u5982 512\uFF09\uFF0C\u91CD\u8F7D\u4F1A\u5C11\u4E00\u4E9B\uFF0C\u4F46\u6D4F\u89C8\u5668\u5360\u7528\u5185\u5B58\u66F4\u591A\u3002"
+      ),
       dialogueStyle: row("\u5BF9\u8BDD\u6837\u5F0F", "\u7ACB\u5373\u751F\u6548", f.dialogueStyle),
       draftIntervalSeconds: row("\u8349\u7A3F\u5237\u65B0\u95F4\u9694\uFF08\u79D2\uFF09", "\u7ACB\u5373\u751F\u6548", f.draftIntervalSeconds, "\u751F\u6210\u65F6\u6BCF\u9694\u8FD9\u4E48\u4E45\u66F4\u65B0\u4E00\u6B21\u8349\u7A3F\uFF0C0.5\u201330\u3002\u8C03\u5927\u53EF\u51CF\u5C11\u804A\u5929\u7A97\u53E3\u4E0A\u4E0B\u6EDA\u52A8\u3002"),
       draftMode: row("\u8349\u7A3F\u663E\u793A\u65B9\u5F0F", "\u7ACB\u5373\u751F\u6548", f.draftMode, "\u201C\u53EA\u663E\u793A\u8FDB\u5EA6\u201D\u65F6\u751F\u6210\u8FC7\u7A0B\u4E2D\u4E0D\u663E\u793A\u6B63\u6587\uFF0C\u804A\u5929\u7A97\u53E3\u4E0D\u4F1A\u6EDA\u52A8\u3002"),
@@ -880,6 +885,7 @@
       f.basicAuthPassword.placeholder = v.basicAuth?.passwordSet ? "\u5DF2\u8BBE\u7F6E\uFF0C\u7559\u7A7A\u8868\u793A\u4E0D\u4FEE\u6539" : "\u5BC6\u7801";
       f.idleShutdownMinutes.value = String(v.idleShutdownMinutes);
       f.lowMemory.checked = v.lowMemory;
+      f.pageHeapLimitMB.value = String(v.pageHeapLimitMB);
       f.dialogueStyle.value = v.dialogueStyle;
       f.draftIntervalSeconds.value = String(v.draftIntervalSeconds);
       f.draftMode.value = v.draftMode;
@@ -975,6 +981,7 @@
           basicAuthPassword: f.basicAuthPassword.value,
           idleShutdownMinutes: f.idleShutdownMinutes.value,
           lowMemory: f.lowMemory.checked,
+          pageHeapLimitMB: f.pageHeapLimitMB.value,
           dialogueStyle: f.dialogueStyle.value,
           draftIntervalSeconds: f.draftIntervalSeconds.value,
           draftMode: f.draftMode.value,
@@ -1154,10 +1161,7 @@
     es.onerror = () => {
       if (es.readyState === EventSource.CLOSED) shutdown("SSE \u8FDE\u63A5\u88AB\u5173\u95ED");
     };
-    const hb = setInterval(() => {
-      const heap = readHeap();
-      report(heap ? { type: "heartbeat", heap } : { type: "heartbeat" });
-    }, HEARTBEAT_MS);
+    const hb = setInterval(() => report({ type: "heartbeat" }), HEARTBEAT_MS);
     cleanups.push(() => clearInterval(hb));
     const runChecks = async () => {
       const api = await queue.run(() => ensureApiConnected());

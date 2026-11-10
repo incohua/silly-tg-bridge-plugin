@@ -11,6 +11,7 @@ const form = (over: Partial<FormValues> = {}): FormValues => ({
   basicAuthPassword: '',
   idleShutdownMinutes: '0',
   lowMemory: true,
+  pageHeapLimitMB: '256',
   dialogueStyle: 'bold',
   logLevel: 'info',
   draftIntervalSeconds: '1',
@@ -27,6 +28,7 @@ const original: SettingsValues = {
   basicAuth: { username: 'u', passwordSet: true },
   idleShutdownMinutes: 0,
   lowMemory: true,
+  pageHeapLimitMB: 256,
   dialogueStyle: 'bold',
   logLevel: 'info',
   draftIntervalSeconds: 1,
@@ -45,6 +47,17 @@ describe('parseUserIds', () => {
 });
 
 describe('buildPatch', () => {
+  it('页面内存上限：128–4096 的整数；留空取默认 256；非法值报错', () => {
+    const ok = buildPatch(form({ pageHeapLimitMB: '512' }), original);
+    expect(ok.ok && ok.patch.pageHeapLimitMB).toBe(512);
+    const blank = buildPatch(form({ pageHeapLimitMB: '' }), original);
+    expect(blank.ok && blank.patch.pageHeapLimitMB).toBe(256);
+    for (const bad of ['64', '5000', '300.5', 'abc', '-1']) {
+      const r = buildPatch(form({ pageHeapLimitMB: bad }), original);
+      expect(r.ok).toBe(false);
+      if (!r.ok) expect(r.errors[0].field).toBe('pageHeapLimitMB');
+    }
+  });
   it('草稿与选项排版字段', () => {
     const r = buildPatch(form({ draftIntervalSeconds: '2.5', draftMode: 'progress', choiceLayout: 'rows' }), original);
     expect(r.ok && r.patch).toMatchObject({ draftIntervalSeconds: 2.5, draftMode: 'progress', choiceLayout: 'rows' });
@@ -80,6 +93,15 @@ describe('buildPatch', () => {
 });
 
 const running: RuntimeStatus = { state: 'running', telegram: 'ok', botUsername: 'mybot', chromium: { found: true }, hostConnected: true, hostPage: { stVersion: '1.13.0' } };
+
+describe('saveResultMessage：下次启动才生效的字段', () => {
+  it('lowMemory / pageHeapLimitMB 不说“已立即生效”，而是“下次启动无头浏览器时生效”', () => {
+    const m = saveResultMessage({ ok: true, changed: ['pageHeapLimitMB', 'logLevel'], hot: ['pageHeapLimitMB', 'logLevel'], reloaded: [], reloadedRuntime: false });
+    expect(m).toMatch(/已立即生效：日志级别/);
+    expect(m).toMatch(/下次启动无头浏览器时生效：页面内存上限/);
+    expect(m).not.toMatch(/已立即生效：[^。]*页面内存上限/);
+  });
+});
 
 describe('saveResultMessage：重新连接', () => {
   const running = { state: 'running', telegram: 'ok', botUsername: 'testbot', chromium: { found: true }, hostConnected: true } as const;

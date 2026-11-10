@@ -34,6 +34,9 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher; env
     get lowMemory() {
       return config.lowMemory;
     },
+    get pageHeapLimitMB() {
+      return config.pageHeapLimitMB;
+    },
     get idleShutdownMs() {
       return config.idleShutdownMinutes * 60_000;
     },
@@ -84,8 +87,14 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher; env
     heapStatus: () => heapGuard.status(),
     choiceRules: () => choiceRules.get(),
   });
-  // 页面 JS 堆接近低内存模式的上限时，空闲时重载页面（见 heap-guard.ts）。按当前这个 Chromium 启动时的参数判断是否有上限
-  const heapGuard: HeapGuard = new HeapGuard({ host: channel, isIdle: () => !bot.busy, recycle: () => bot.recyclePage(), enabled: () => browser.heapLimited, log });
+  // 页面 JS 堆接近低内存模式的上限时，空闲时重载页面（见 heap-guard.ts）。上限按当前这个 Chromium 启动时的参数判断
+  const heapGuard: HeapGuard = new HeapGuard({
+    sample: () => browser.sampleHeapUsed(),
+    limitMB: () => browser.heapLimitMB,
+    isIdle: () => !bot.busy,
+    recycle: () => bot.recyclePage(),
+    log,
+  });
   rt.setUpdateHandler((u) => bot.handleUpdate(u));
   // 命令菜单：输入 / 时可选。失败只记警告，不影响使用。
   if (env.SILLY_TG_OFFLINE !== '1') {

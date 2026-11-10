@@ -2,6 +2,9 @@
 
 import type { RuntimeStatus } from '../shared/runtime-status';
 
+/** 保存后不影响正在运行的浏览器、下次启动 Chromium 才生效的字段。 */
+const NEXT_START_FIELDS: readonly string[] = ['lowMemory', 'pageHeapLimitMB'];
+
 export interface SettingsValues {
   botToken: { set: boolean };
   allowedUserIds: number[];
@@ -10,6 +13,7 @@ export interface SettingsValues {
   basicAuth: { username: string; passwordSet: boolean } | null;
   idleShutdownMinutes: number;
   lowMemory: boolean;
+  pageHeapLimitMB: number;
   dialogueStyle: string;
   logLevel: string;
   draftIntervalSeconds: number;
@@ -49,6 +53,7 @@ export interface FormValues {
   basicAuthPassword: string;
   idleShutdownMinutes: string;
   lowMemory: boolean;
+  pageHeapLimitMB: string;
   dialogueStyle: string;
   logLevel: string;
   draftIntervalSeconds: string;
@@ -98,6 +103,9 @@ export function buildPatch(form: FormValues, original: SettingsValues | undefine
   else patch.idleShutdownMinutes = idle;
 
   patch.lowMemory = form.lowMemory;
+  const heap = form.pageHeapLimitMB.trim() === '' ? 256 : Number(form.pageHeapLimitMB);
+  if (!Number.isInteger(heap) || heap < 128 || heap > 4096) errors.push({ field: 'pageHeapLimitMB', message: '页面内存上限必须是 128–4096 之间的整数（MB），默认 256。' });
+  else patch.pageHeapLimitMB = heap;
   patch.dialogueStyle = form.dialogueStyle;
   patch.logLevel = form.logLevel;
   patch.draftMode = form.draftMode;
@@ -119,7 +127,11 @@ export function saveResultMessage(r: SettingsResponse): string {
   // 待命时没有改动也会重新启动一次（例如手动改好了 config.json，在面板里点保存让它生效）
   const head = r.reconnected ? '已按 config.json 重新连接' : changed.length > 0 ? '已保存' : r.reloadedRuntime ? '没有改动，已按现有 config.json 重新启动' : '没有改动';
   const parts: string[] = [`${head}。`];
-  if (hot.length > 0) parts.push(`已立即生效：${hot.map(fieldLabel).join('、')}。`);
+  // 这两项保存后不会动正在运行的浏览器，下次启动 Chromium 才用上新值
+  const nextStart = hot.filter((f) => NEXT_START_FIELDS.includes(f));
+  const immediate = hot.filter((f) => !NEXT_START_FIELDS.includes(f));
+  if (immediate.length > 0) parts.push(`已立即生效：${immediate.map(fieldLabel).join('、')}。`);
+  if (nextStart.length > 0) parts.push(`下次启动无头浏览器时生效：${nextStart.map(fieldLabel).join('、')}。`);
   // 只有重新加载过、或者当前不在正常运行时，才补一句运行状态
   if (!rt || (!r.reloadedRuntime && reloaded.length === 0 && rt.state === 'running' && rt.telegram !== 'error')) return parts.join('');
   if (runtimeSettling(rt)) return `${parts.join('')}正在重新连接…`;
@@ -192,6 +204,7 @@ export const FIELD_LABELS: Record<string, string> = {
   basicAuth: 'ST 登录账号',
   idleShutdownMinutes: '空闲关闭时间',
   lowMemory: '低内存模式',
+  pageHeapLimitMB: '页面内存上限',
   dialogueStyle: '对话样式',
   logLevel: '日志级别',
   draftIntervalSeconds: '草稿刷新间隔',

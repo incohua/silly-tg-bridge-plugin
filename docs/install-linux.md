@@ -19,7 +19,7 @@
 
 - SillyTavern 1.19 及以上，Node.js 20 及以上。Debian 13 的 apt 自带 Node 20.19，直接 `apt install nodejs npm` 就够；Debian 12、Ubuntu 的 apt 版本可能低于 20（先看 `apt-cache policy nodejs`），这时用 [nvm](https://github.com/nvm-sh/nvm) 或 NodeSource 安装。装完 `node -v` 确认。
 - 已有 Telegram bot 的 token 和你自己的数字 ID（见 [README 前提条件](../README.md#前提条件)）。
-- 约 1 GB 可用内存（2 GB 的机器建议保持 `lowMemory: true` 并设置 `idleShutdownMinutes`）。`lowMemory: true` 会把无头页面的 JS 内存限制在 256 MB，页面长时间运行会涨到上限，插件会在 bot 空闲时自动重载页面回收（见 [README 使用提醒](../README.md#使用提醒)第 5 条）。
+- 约 1 GB 可用内存（2 GB 的机器建议保持 `lowMemory: true` 并设置 `idleShutdownMinutes`）。`lowMemory: true` 会把无头页面的 JS 内存限制在 `pageHeapLimitMB`（默认 256 MB），页面长时间运行会涨到上限，插件会在 bot 空闲时自动重载页面回收；内存充裕时可以调大它（例如 512）（见 [README 使用提醒](../README.md#使用提醒)第 5 条）。
 
 没有 ST 的话先装一份，并**用普通用户而不是 root 运行**：
 
@@ -192,7 +192,7 @@ curl -x http://127.0.0.1:7890 -sS -m 10 https://api.telegram.org/bot<token>/getM
 
    然后装 Node.js 20 及以上（见[前提](#前提)），再克隆 ST 和插件、配置、启动，步骤同 [Debian](#debian) 和[安装插件](#安装插件)。
 4. 让手机别休眠杀进程：在 Termux 通知栏里点 “Acquire wakelock”，并把 Termux 加入电池优化白名单。
-5. 内存紧张时保持 `lowMemory: true`，并设置 `idleShutdownMinutes`（例如 10）。日志里偶尔出现 `Page crashed!` 说明页面撞上了 256 MB 的 JS 内存上限，插件会自动重启并在空闲时提前回收；仍然频繁时才考虑把 `lowMemory` 设为 `false`（需要更多内存）。
+5. 内存紧张时保持 `lowMemory: true`，并设置 `idleShutdownMinutes`（例如 10）。日志里偶尔出现 `Page crashed!` 说明页面撞上了 JS 内存上限，插件会自动重启并在空闲时提前回收；仍然频繁时先调大 `pageHeapLimitMB`，再考虑把 `lowMemory` 设为 `false`（需要更多内存）。
 
 如果日志出现沙箱相关的错误，按上面[沙箱](#沙箱什么时候需要关)一节设置 `PUPPETEER_DANGEROUS_NO_SANDBOX=true`。
 

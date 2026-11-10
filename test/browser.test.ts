@@ -1,7 +1,6 @@
 import { existsSync } from 'node:fs';
 import { describe, expect, it, vi } from 'vitest';
 import { BrowserManager, chromiumArgs, hostUrl, type BrowserEvent, type HostLink, type LaunchedBrowser, type Launcher, type PageLike } from '../src/server/browser';
-import { OLD_SPACE_LIMIT_MB } from '../src/server/heap-guard';
 import { captureLogger } from './helpers';
 
 const wait = (ms: number) => new Promise((r) => setTimeout(r, ms));
@@ -37,6 +36,9 @@ class FakeHost implements HostLink {
 }
 
 interface FakeBrowser extends LaunchedBrowser {
+  /** 假页面当前的 JS 堆已用字节数；heapThrows 为真时 heapUsed 抛错（页面重载中）。 */
+  heapBytes: number;
+  heapThrows: boolean;
   closed: boolean;
   killed: boolean;
   killCount: number;
@@ -59,6 +61,8 @@ function fakeLauncher(host: FakeHost, opts: { connect?: boolean; redirectTo?: st
       closed: false,
       killed: false,
       killCount: 0,
+      heapBytes: 123 * 1024 * 1024,
+      heapThrows: false,
       async newPage(): Promise<PageLike> {
         let url = '';
         return {
@@ -70,6 +74,10 @@ function fakeLauncher(host: FakeHost, opts: { connect?: boolean; redirectTo?: st
             return { status: () => 200 };
           },
           url: () => url,
+          heapUsed: async () => {
+            if (b.heapThrows) throw new Error('Execution context was destroyed');
+            return b.heapBytes;
+          },
           on: ((ev: string, fn: (e: Error) => void) => {
             if (ev === 'error') onPageError = fn;
           }) as PageLike['on'],
@@ -131,9 +139,9 @@ describe('chromiumArgs / hostUrl', () => {
     const low = chromiumArgs({ lowMemory: true, isRoot: true });
     expect(low).toContain('--renderer-process-limit=1');
     expect(low).toContain('--no-sandbox');
-    // 回收阈值和启动参数共用同一个常量
-    expect(low).toContain(`--js-flags=--max-old-space-size=${OLD_SPACE_LIMIT_MB}`);
+    // 上限默认 256，可通过 heapLimitMB 调整；非低内存模式没有这个参数
     expect(low).toContain('--js-flags=--max-old-space-size=256');
+    expect(chromiumArgs({ lowMemory: true, isRoot: false, heapLimitMB: 512 })).toContain('--js-flags=--max-old-space-size=512');
     expect(base.some((a) => a.startsWith('--js-flags'))).toBe(false);
   });
   it('host URL 带 nonce 参数', () => {
@@ -349,10 +357,11 @@ describe('BrowserManager', () => {
     await m.dispose();
   });
 
-  it('heapLimited：按这次启动时的 lowMemory 判断，之后热改配置不影响正在运行的浏览器', async () => {
+  it('heapLimitMB：按这次启动时的 lowMemory / pageHeapLimitMB 判断，之后热改配置不影响正在运行的浏览器', async () => {
     const host = new FakeHost();
-    const { launcher } = fakeLauncher(host);
+    const { launcher, argsSeen } = fakeLauncher(host);
     let low = true;
+    let limit = 512;
     const m = new BrowserManager({
       log: captureLogger(),
       host,
@@ -362,6 +371,9 @@ describe('BrowserManager', () => {
       get lowMemory() {
         return low;
       },
+      get pageHeapLimitMB() {
+        return limit;
+      },
       idleShutdownMs: 0,
       fetch: okFetch,
       tickMs: 10,
@@ -369,15 +381,46 @@ describe('BrowserManager', () => {
       reconnectGraceMs: 50,
       isRoot: false,
     });
-    expect(m.heapLimited).toBe(false);
+    expect(m.heapLimitMB).toBeUndefined();
     await m.ensureRunning();
-    expect(m.heapLimited).toBe(true);
+    expect(m.heapLimitMB).toBe(512);
+    expect(argsSeen[0]).toContain('--js-flags=--max-old-space-size=512');
     low = false;
-    expect(m.heapLimited).toBe(true);
+    limit = 1024;
+    expect(m.heapLimitMB).toBe(512); // 正在运行的浏览器不受影响
     await m.stop();
-    expect(m.heapLimited).toBe(false);
+    expect(m.heapLimitMB).toBeUndefined();
+    await m.ensureRunning(); // 下次启动才用新值：lowMemory 已关，没有上限
+    expect(m.heapLimitMB).toBeUndefined();
+    expect(argsSeen[1].some((a) => a.startsWith('--js-flags'))).toBe(false);
+    low = true;
+    await m.stop();
     await m.ensureRunning();
-    expect(m.heapLimited).toBe(false);
+    expect(m.heapLimitMB).toBe(1024);
+    await m.dispose();
+  });
+
+  it('pageHeapLimitMB 缺省为 256', async () => {
+    const host = new FakeHost();
+    const { launcher } = fakeLauncher(host);
+    const { m } = make(host, launcher);
+    await m.ensureRunning();
+    expect(m.heapLimitMB).toBe(256);
+    await m.dispose();
+  });
+
+  it('sampleHeapUsed：运行中读页面堆用量；没在运行或页面暂时取不到时返回 undefined，不抛错', async () => {
+    const host = new FakeHost();
+    const { launcher, launched } = fakeLauncher(host);
+    const { m } = make(host, launcher);
+    expect(await m.sampleHeapUsed()).toBeUndefined();
+    await m.ensureRunning();
+    expect(await m.sampleHeapUsed()).toBe(123 * 1024 * 1024);
+    launched[0].heapThrows = true;
+    expect(await m.sampleHeapUsed()).toBeUndefined();
+    launched[0].heapThrows = false;
+    await m.stop();
+    expect(await m.sampleHeapUsed()).toBeUndefined();
     await m.dispose();
   });
 

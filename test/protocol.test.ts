@@ -9,14 +9,6 @@ describe('decodeHostEvent', () => {
     expect((decodeHostEvent(base) as { extVersion?: string }).extVersion).toBeUndefined();
     expect((decodeHostEvent({ ...base, extVersion: 3 }) as { extVersion?: string }).extVersion).toBeUndefined();
   });
-  it('heartbeat 的 heap 可选：合法值保留，旧版扩展（不带）与非法值（负数、NaN、字符串、缺字段）被忽略但心跳仍有效', () => {
-    expect(decodeHostEvent({ type: 'heartbeat', heap: { used: 100, limit: 200 } })).toEqual({ type: 'heartbeat', heap: { used: 100, limit: 200 } });
-    expect(decodeHostEvent({ type: 'heartbeat', heap: { used: 0, limit: 0 } })).toEqual({ type: 'heartbeat', heap: { used: 0, limit: 0 } });
-    for (const heap of [{ used: -1, limit: 200 }, { used: Number.NaN, limit: 200 }, { used: Infinity, limit: 200 }, { used: '100', limit: 200 }, { used: 100 }, 'x', null, 5]) {
-      expect(decodeHostEvent({ type: 'heartbeat', heap })).toEqual({ type: 'heartbeat' });
-    }
-    expect(decodeHostEvent({ type: 'heartbeat', heap: { used: 1, limit: 2, extra: 'x' } })).toEqual({ type: 'heartbeat', heap: { used: 1, limit: 2 } });
-  });
   it('解码各类事件', () => {
     expect(decodeHostEvent({ type: 'hello', nonce: 'n', stVersion: '1.19.0', hasTavernHelper: true })).toEqual({
       type: 'hello',

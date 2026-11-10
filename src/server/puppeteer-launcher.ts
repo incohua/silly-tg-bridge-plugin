@@ -1,5 +1,5 @@
 // 基于 puppeteer-core 的 Launcher 实现。只做类型适配，逻辑都在 browser.ts。
-import puppeteer from 'puppeteer-core';
+import puppeteer, { type CDPSession } from 'puppeteer-core';
 import type { Launcher, LaunchedBrowser, PageLike } from './browser';
 
 export const puppeteerLauncher: Launcher = async ({ executablePath, args, userDataDir }) => {
@@ -20,7 +20,18 @@ export const puppeteerLauncher: Launcher = async ({ executablePath, args, userDa
     pid: proc?.pid,
     async newPage(): Promise<PageLike> {
       const page = await browser.newPage();
+      let cdp: CDPSession | undefined;
       const adapter: PageLike = {
+        heapUsed: async () => {
+          try {
+            cdp ??= await page.createCDPSession();
+            const r = await cdp.send('Runtime.getHeapUsage');
+            return r.usedSize;
+          } catch (e) {
+            cdp = undefined; // 页面重载或崩溃后会话可能失效，下次重新建
+            throw e;
+          }
+        },
         authenticate: (c) => page.authenticate(c),
         goto: async (url, o) => {
           const r = await page.goto(url, o);

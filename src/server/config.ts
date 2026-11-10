@@ -15,6 +15,8 @@ export interface Config {
   idleShutdownMinutes: number;
   /** 使用低内存 Chromium 参数。 */
   lowMemory: boolean;
+  /** 低内存模式下无头页面的 JS 内存上限（MB），范围 128–4096，默认 256。空闲时堆用量达到它的 75% 就重载页面回收。 */
+  pageHeapLimitMB: number;
   /** 对话（带引号的内容）在 Telegram 里的样式：bold 加粗（默认）、italic 斜体、mark 高亮、plain 只保留引号。 */
   dialogueStyle: 'bold' | 'italic' | 'mark' | 'plain';
   logLevel: LogLevel;
@@ -48,6 +50,7 @@ const KNOWN_KEYS = new Set([
   'publicBaseUrl',
   'idleShutdownMinutes',
   'lowMemory',
+  'pageHeapLimitMB',
   'dialogueStyle',
   'logLevel',
   'draftIntervalSeconds',
@@ -55,6 +58,11 @@ const KNOWN_KEYS = new Set([
   'choiceLayout',
   'telegramApiBase',
 ]);
+
+/** 低内存模式下无头页面 JS 老生代上限（MB）的默认值与范围。 */
+export const DEFAULT_PAGE_HEAP_LIMIT_MB = 256;
+export const MIN_PAGE_HEAP_LIMIT_MB = 128;
+export const MAX_PAGE_HEAP_LIMIT_MB = 4096;
 
 const TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
 const LOG_LEVELS: readonly string[] = ['debug', 'info', 'warn', 'error'];
@@ -186,6 +194,15 @@ export function validateConfig(raw: unknown, source = 'config.json'): ConfigResu
     else lowMemory = raw.lowMemory;
   }
 
+  // pageHeapLimitMB
+  let pageHeapLimitMB = DEFAULT_PAGE_HEAP_LIMIT_MB;
+  if (!unset(raw.pageHeapLimitMB)) {
+    const m = raw.pageHeapLimitMB;
+    if (typeof m !== 'number' || !Number.isInteger(m) || m < MIN_PAGE_HEAP_LIMIT_MB || m > MAX_PAGE_HEAP_LIMIT_MB) {
+      err('pageHeapLimitMB', `pageHeapLimitMB 必须是 ${MIN_PAGE_HEAP_LIMIT_MB}–${MAX_PAGE_HEAP_LIMIT_MB} 的整数（MB），默认 ${DEFAULT_PAGE_HEAP_LIMIT_MB}。`);
+    } else pageHeapLimitMB = m;
+  }
+
   // dialogueStyle
   let dialogueStyle: Config['dialogueStyle'] = 'bold';
   if (!unset(raw.dialogueStyle)) {
@@ -238,7 +255,7 @@ export function validateConfig(raw: unknown, source = 'config.json'): ConfigResu
   return {
     ok: true,
     warnings,
-    config: { botToken, allowedUserIds, stBaseUrl, telegramProxy, chromiumPath, basicAuth, miniAppPort, publicBaseUrl, idleShutdownMinutes, lowMemory, dialogueStyle, logLevel, draftIntervalSeconds, draftMode, choiceLayout, telegramApiBase },
+    config: { botToken, allowedUserIds, stBaseUrl, telegramProxy, chromiumPath, basicAuth, miniAppPort, publicBaseUrl, idleShutdownMinutes, lowMemory, pageHeapLimitMB, dialogueStyle, logLevel, draftIntervalSeconds, draftMode, choiceLayout, telegramApiBase },
   };
 }
 

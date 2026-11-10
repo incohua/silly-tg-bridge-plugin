@@ -339,13 +339,13 @@ describe('Bot 路由', () => {
     let heap: { usedMB?: number; limitMB: number; recycled: number; suspended: boolean } | undefined;
     const ctx = setup({ heapStatus: () => heap });
     await ctx.bot.handleUpdate(text('/status'));
-    expect(ctx.telegram.texts()[0]).not.toMatch(/页面内存/);
+    expect(ctx.telegram.texts()[0]).not.toMatch(/页面 JS 堆/);
     heap = { usedMB: 180.4, limitMB: 256, recycled: 2, suspended: false };
     await ctx.bot.handleUpdate(text('/status'));
-    expect(ctx.telegram.texts()[1]).toMatch(/页面内存：180 \/ 256 MB；因堆回收重载 2 次/);
+    expect(ctx.telegram.texts()[1]).toMatch(/页面 JS 堆：180 \/ 256 MB；因堆回收重载 2 次/);
     heap = { limitMB: 256, recycled: 1, suspended: true };
     await ctx.bot.handleUpdate(text('/status'));
-    expect(ctx.telegram.texts()[2]).toMatch(/页面内存：上限 256 MB；因堆回收重载 1 次.*已停止自动回收/);
+    expect(ctx.telegram.texts()[2]).toMatch(/页面 JS 堆：上限 256 MB；因堆回收重载 1 次.*已停止自动回收/);
   });
 
   it('/status：显示 Telegram 代理的来源（配置 / 环境变量 / 无），不含凭据', async () => {

@@ -482,6 +482,7 @@ describe('bootPlugin', () => {
             authenticate: async () => {},
             goto: async () => ({ status: () => 200 }),
             url: () => 'http://127.0.0.1/',
+            heapUsed: async () => 0,
             on: (() => {}) as PageLike['on'],
           }),
           close: async () => void events.push(`close${id}`),

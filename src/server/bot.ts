@@ -773,8 +773,9 @@ export class Bot {
     if (wd) lines.push(`🐕 看门狗：${wd}`);
     const heap = this.opts.heapStatus?.();
     if (heap && (heap.usedMB !== undefined || heap.recycled > 0 || heap.suspended)) {
-      const used = heap.usedMB !== undefined ? `${Math.round(heap.usedMB)} / ${heap.limitMB} MB` : `上限 ${heap.limitMB} MB`;
-      lines.push(`🧠 页面内存：${used}；因堆回收重载 ${heap.recycled} 次${heap.suspended ? '（回收后用量立即回升，已停止自动回收）' : ''}`);
+      const used = heap.usedMB === undefined ? '' : heap.limitMB === undefined ? `${Math.round(heap.usedMB)} MB` : `${Math.round(heap.usedMB)} / ${heap.limitMB} MB`;
+      const limit = heap.limitMB === undefined ? '' : `上限 ${heap.limitMB} MB`;
+      lines.push(`🧠 页面 JS 堆：${used || limit || '暂无数据'}；因堆回收重载 ${heap.recycled} 次${heap.suspended ? '（回收后用量立即回升，已停止自动回收）' : ''}`);
     }
     if (host.connected && host.hello) {
       lines.push(`🟢 ST 页面：已连接（${host.hello.stVersion}，酒馆助手${host.hello.hasTavernHelper ? '已加载' : '未加载'}）`);

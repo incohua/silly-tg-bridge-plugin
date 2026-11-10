@@ -35,7 +35,7 @@ describe('viewSettings：掩码', () => {
   it('没有配置文件：缺省值与 validateConfig 一致', () => {
     const v = viewSettings({}, false);
     expect(v.exists).toBe(false);
-    expect(v.values).toMatchObject({ botToken: { set: false }, allowedUserIds: [], stBaseUrl: 'http://127.0.0.1:8000', lowMemory: true, dialogueStyle: 'bold', logLevel: 'info', idleShutdownMinutes: 0 });
+    expect(v.values).toMatchObject({ botToken: { set: false }, allowedUserIds: [], stBaseUrl: 'http://127.0.0.1:8000', lowMemory: true, pageHeapLimitMB: 256, dialogueStyle: 'bold', logLevel: 'info', idleShutdownMinutes: 0 });
   });
   it('maskProxy', () => {
     expect(maskProxy('http://127.0.0.1:7890')).toBe('http://127.0.0.1:7890');
@@ -85,6 +85,19 @@ describe('applySettings', () => {
     expect(r.reload.sort()).toEqual(['stBaseUrl']);
     expect(Object.values(FIELD_EFFECTS)).not.toContain('restart');
     expect(FIELD_EFFECTS).toMatchObject({ botToken: 'reload', telegramProxy: 'reload', basicAuth: 'reload', stBaseUrl: 'reload', allowedUserIds: 'hot' });
+  });
+
+  it('pageHeapLimitMB：属于立即写入配置的字段（下次启动浏览器时生效），不触发重新加载；非法值被拒绝', () => {
+    const r = applySettings(base, { pageHeapLimitMB: 512 });
+    expect(r.ok).toBe(true);
+    if (!r.ok) return;
+    expect(r.hot).toEqual(['pageHeapLimitMB']);
+    expect(r.reload).toEqual([]);
+    expect(r.raw.pageHeapLimitMB).toBe(512);
+    expect(viewSettings(r.raw, true).values.pageHeapLimitMB).toBe(512);
+    const bad = applySettings(base, { pageHeapLimitMB: 64 });
+    expect(bad.ok).toBe(false);
+    if (!bad.ok) expect(bad.errors[0].field).toBe('pageHeapLimitMB');
   });
 
   it('校验失败：返回逐字段错误，不产生结果', () => {

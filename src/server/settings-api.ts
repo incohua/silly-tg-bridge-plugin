@@ -12,7 +12,7 @@ import { chmodSync, existsSync, mkdirSync, readFileSync, renameSync, writeFileSy
 import { dirname } from 'node:path';
 import type { Router } from 'express';
 import type { RuntimeStatus } from '../shared/runtime-status';
-import { validateConfig, type Config, type ConfigIssue } from './config';
+import { DEFAULT_PAGE_HEAP_LIMIT_MB, validateConfig, type Config, type ConfigIssue } from './config';
 import type { Logger } from './logger';
 import { redactError } from './redact';
 
@@ -22,7 +22,7 @@ export const MASK = '********';
  * 保存后立即生效的字段（写进运行中的同一个 Config 对象，消费方用 getter 或每次读取）。
  * allowedUserIds 的读取点只有轮询过滤（plugin.ts）和通知（bridge.ts 的 notify），都是每次实时读。
  */
-export const HOT_FIELDS = ['allowedUserIds', 'dialogueStyle', 'logLevel', 'idleShutdownMinutes', 'lowMemory', 'draftIntervalSeconds', 'draftMode', 'choiceLayout'] as const;
+export const HOT_FIELDS = ['allowedUserIds', 'dialogueStyle', 'logLevel', 'idleShutdownMinutes', 'lowMemory', 'pageHeapLimitMB', 'draftIntervalSeconds', 'draftMode', 'choiceLayout'] as const;
 /** 保存后触发运行时重新加载的字段（重建 Telegram 客户端、轮询和无头浏览器），无需重启 ST。 */
 export const RELOAD_FIELDS = ['botToken', 'telegramProxy', 'basicAuth', 'stBaseUrl'] as const;
 export const MANAGED_FIELDS: readonly string[] = [...RELOAD_FIELDS, ...HOT_FIELDS];
@@ -31,7 +31,7 @@ export type Effect = 'hot' | 'reload';
 export const FIELD_EFFECTS: Record<string, Effect> = {
   ...Object.fromEntries(HOT_FIELDS.map((f) => [f, 'hot' as const])),
   ...Object.fromEntries(RELOAD_FIELDS.map((f) => [f, 'reload' as const])),
-  // lowMemory 的新值在下次启动 Chromium 时才会用上，界面上单独说明
+  // lowMemory、pageHeapLimitMB 的新值在下次启动 Chromium 时才会用上，界面上单独说明
 };
 
 const isRecord = (v: unknown): v is Record<string, unknown> => typeof v === 'object' && v !== null && !Array.isArray(v);
@@ -59,6 +59,7 @@ export interface SettingsView {
     basicAuth: { username: string; passwordSet: boolean } | null;
     idleShutdownMinutes: number;
     lowMemory: boolean;
+    pageHeapLimitMB: number;
     dialogueStyle: string;
     logLevel: string;
     draftIntervalSeconds: number;
@@ -80,6 +81,7 @@ export function viewSettings(raw: Record<string, unknown>, exists: boolean): Set
       basicAuth: isRecord(ba) && typeof ba.username === 'string' ? { username: ba.username, passwordSet: typeof ba.password === 'string' && ba.password !== '' } : null,
       idleShutdownMinutes: typeof raw.idleShutdownMinutes === 'number' ? raw.idleShutdownMinutes : 0,
       lowMemory: typeof raw.lowMemory === 'boolean' ? raw.lowMemory : true,
+      pageHeapLimitMB: typeof raw.pageHeapLimitMB === 'number' ? raw.pageHeapLimitMB : DEFAULT_PAGE_HEAP_LIMIT_MB,
       dialogueStyle: typeof raw.dialogueStyle === 'string' && raw.dialogueStyle ? raw.dialogueStyle : 'bold',
       logLevel: typeof raw.logLevel === 'string' && raw.logLevel ? raw.logLevel : 'info',
       draftIntervalSeconds: typeof raw.draftIntervalSeconds === 'number' ? raw.draftIntervalSeconds : 1,
@@ -344,6 +346,6 @@ export function registerSettingsRoutes(router: Router, opts: SettingsRouteOption
     );
     const runtime = needReload ? await reloadCapped() : opts.runtime.status();
     // reloadedRuntime：这次保存是否重新加载了运行时（待命时即使没有改动也会按现有文件重新启动一次）
-    res.json({ ok: true, changed: r.changed, hot, reloaded, reloadedRuntime: needReload, lowMemoryNote: r.changed.includes('lowMemory'), warnings: r.warnings, runtime, ...viewSettings(r.raw, true) });
+    res.json({ ok: true, changed: r.changed, hot, reloaded, reloadedRuntime: needReload, lowMemoryNote: r.changed.includes('lowMemory') || r.changed.includes('pageHeapLimitMB'), warnings: r.warnings, runtime, ...viewSettings(r.raw, true) });
   });
 }
