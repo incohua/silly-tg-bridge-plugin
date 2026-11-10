@@ -47,11 +47,11 @@ describe('parseUserIds', () => {
 });
 
 describe('buildPatch', () => {
-  it('页面内存上限：128–4096 的整数；留空取默认 256；非法值报错', () => {
-    const ok = buildPatch(form({ pageHeapLimitMB: '512' }), original);
-    expect(ok.ok && ok.patch.pageHeapLimitMB).toBe(512);
+  it('页面内存上限：128–4096 的整数；留空取默认 512；非法值报错', () => {
+    const ok = buildPatch(form({ pageHeapLimitMB: '768' }), original);
+    expect(ok.ok && ok.patch.pageHeapLimitMB).toBe(768);
     const blank = buildPatch(form({ pageHeapLimitMB: '' }), original);
-    expect(blank.ok && blank.patch.pageHeapLimitMB).toBe(256);
+    expect(blank.ok && blank.patch.pageHeapLimitMB).toBe(512);
     for (const bad of ['64', '5000', '300.5', 'abc', '-1']) {
       const r = buildPatch(form({ pageHeapLimitMB: bad }), original);
       expect(r.ok).toBe(false);

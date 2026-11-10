@@ -9,7 +9,7 @@
   "publicBaseUrl": "",
   "idleShutdownMinutes": 0,
   "lowMemory": true,
-  "pageHeapLimitMB": 256,
+  "pageHeapLimitMB": 512,
   "dialogueStyle": "bold",
   "logLevel": "info"
 }

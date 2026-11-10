@@ -139,9 +139,10 @@ describe('chromiumArgs / hostUrl', () => {
     const low = chromiumArgs({ lowMemory: true, isRoot: true });
     expect(low).toContain('--renderer-process-limit=1');
     expect(low).toContain('--no-sandbox');
-    // 上限默认 256，可通过 heapLimitMB 调整；非低内存模式没有这个参数
-    expect(low).toContain('--js-flags=--max-old-space-size=256');
-    expect(chromiumArgs({ lowMemory: true, isRoot: false, heapLimitMB: 512 })).toContain('--js-flags=--max-old-space-size=512');
+    // 上限默认 512，可通过 heapLimitMB 调整；非低内存模式没有这个参数
+    expect(low).toContain('--js-flags=--max-old-space-size=512');
+    expect(chromiumArgs({ lowMemory: true, isRoot: false, heapLimitMB: 256 })).toContain('--js-flags=--max-old-space-size=256');
+    expect(chromiumArgs({ lowMemory: true, isRoot: false, heapLimitMB: 768 })).toContain('--js-flags=--max-old-space-size=768');
     expect(base.some((a) => a.startsWith('--js-flags'))).toBe(false);
   });
   it('host URL 带 nonce 参数', () => {
@@ -400,12 +401,12 @@ describe('BrowserManager', () => {
     await m.dispose();
   });
 
-  it('pageHeapLimitMB 缺省为 256', async () => {
+  it('pageHeapLimitMB 缺省为 512', async () => {
     const host = new FakeHost();
     const { launcher } = fakeLauncher(host);
     const { m } = make(host, launcher);
     await m.ensureRunning();
-    expect(m.heapLimitMB).toBe(256);
+    expect(m.heapLimitMB).toBe(512);
     await m.dispose();
   });
 

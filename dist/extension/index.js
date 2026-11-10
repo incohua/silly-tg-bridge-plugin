@@ -557,8 +557,8 @@
     if (!Number.isFinite(idle)) errors.push({ field: "idleShutdownMinutes", message: "\u7A7A\u95F2\u5173\u95ED\u65F6\u95F4\u5FC5\u987B\u662F\u6570\u5B57\uFF08\u5206\u949F\uFF09\uFF0C0 \u8868\u793A\u4E0D\u5173\u95ED\u3002" });
     else patch.idleShutdownMinutes = idle;
     patch.lowMemory = form.lowMemory;
-    const heap = form.pageHeapLimitMB.trim() === "" ? 256 : Number(form.pageHeapLimitMB);
-    if (!Number.isInteger(heap) || heap < 128 || heap > 4096) errors.push({ field: "pageHeapLimitMB", message: "\u9875\u9762\u5185\u5B58\u4E0A\u9650\u5FC5\u987B\u662F 128\u20134096 \u4E4B\u95F4\u7684\u6574\u6570\uFF08MB\uFF09\uFF0C\u9ED8\u8BA4 256\u3002" });
+    const heap = form.pageHeapLimitMB.trim() === "" ? 512 : Number(form.pageHeapLimitMB);
+    if (!Number.isInteger(heap) || heap < 128 || heap > 4096) errors.push({ field: "pageHeapLimitMB", message: "\u9875\u9762\u5185\u5B58\u4E0A\u9650\u5FC5\u987B\u662F 128\u20134096 \u4E4B\u95F4\u7684\u6574\u6570\uFF08MB\uFF09\uFF0C\u9ED8\u8BA4 512\u3002" });
     else patch.pageHeapLimitMB = heap;
     patch.dialogueStyle = form.dialogueStyle;
     patch.logLevel = form.logLevel;
@@ -807,7 +807,7 @@
       basicAuthPassword: input("password", ""),
       idleShutdownMinutes: input("number", "0"),
       lowMemory: el("input", { type: "checkbox" }),
-      pageHeapLimitMB: input("number", "256"),
+      pageHeapLimitMB: input("number", "512"),
       dialogueStyle: select([
         ["bold", "\u52A0\u7C97"],
         ["italic", "\u659C\u4F53"],
@@ -842,7 +842,7 @@
         "\u9875\u9762\u5185\u5B58\u4E0A\u9650\uFF08MB\uFF09",
         "\u4E0B\u6B21\u542F\u52A8\u6D4F\u89C8\u5668\u65F6\u751F\u6548",
         f.pageHeapLimitMB,
-        "\u4F4E\u5185\u5B58\u6A21\u5F0F\u4E0B\u65E0\u5934\u9875\u9762 JS \u5185\u5B58\u7684\u4E0A\u9650\uFF0C128\u20134096\uFF0C\u9ED8\u8BA4 256\u3002\u9875\u9762\u5185\u5B58\u4F1A\u968F\u8FD0\u884C\u65F6\u95F4\u7F13\u6162\u589E\u957F\uFF0C\u7A7A\u95F2\u65F6\u7528\u91CF\u8FBE\u5230\u4E0A\u9650\u7684 75% \u5C31\u4F1A\u81EA\u52A8\u91CD\u8F7D\u9875\u9762\u56DE\u6536\uFF1B\u5185\u5B58\u5145\u88D5\u7684\u673A\u5668\u53EF\u4EE5\u8C03\u5927\uFF08\u4F8B\u5982 512\uFF09\uFF0C\u91CD\u8F7D\u4F1A\u5C11\u4E00\u4E9B\uFF0C\u4F46\u6D4F\u89C8\u5668\u5360\u7528\u5185\u5B58\u66F4\u591A\u3002"
+        "\u4F4E\u5185\u5B58\u6A21\u5F0F\u4E0B\u65E0\u5934\u9875\u9762 JS \u5185\u5B58\u7684\u4E0A\u9650\uFF0C128\u20134096\uFF0C\u9ED8\u8BA4 512\u3002\u9875\u9762\u5185\u5B58\u4F1A\u968F\u8FD0\u884C\u65F6\u95F4\u7F13\u6162\u589E\u957F\uFF0C\u7A7A\u95F2\u65F6\u7528\u91CF\u8FBE\u5230\u4E0A\u9650\u7684 75% \u5C31\u4F1A\u81EA\u52A8\u91CD\u542F\u6D4F\u89C8\u5668\u56DE\u6536\uFF1B\u8C03\u5927\u56DE\u6536\u66F4\u5C11\u4F46\u6D4F\u89C8\u5668\u5360\u7528\u5185\u5B58\u66F4\u591A\uFF0C\u53EF\u7528\u5185\u5B58\u7D27\u5F20\u7684\u673A\u5668\uFF08\u4E0D\u5230 1.5 GB \u53EF\u7528\uFF09\u8BF7\u8C03\u5C0F\uFF08\u4F8B\u5982 256\uFF09\u3002"
       ),
       dialogueStyle: row("\u5BF9\u8BDD\u6837\u5F0F", "\u7ACB\u5373\u751F\u6548", f.dialogueStyle),
       draftIntervalSeconds: row("\u8349\u7A3F\u5237\u65B0\u95F4\u9694\uFF08\u79D2\uFF09", "\u7ACB\u5373\u751F\u6548", f.draftIntervalSeconds, "\u751F\u6210\u65F6\u6BCF\u9694\u8FD9\u4E48\u4E45\u66F4\u65B0\u4E00\u6B21\u8349\u7A3F\uFF0C0.5\u201330\u3002\u8C03\u5927\u53EF\u51CF\u5C11\u804A\u5929\u7A97\u53E3\u4E0A\u4E0B\u6EDA\u52A8\u3002"),

@@ -84,11 +84,21 @@ describe('validateConfig', () => {
     const r = validateConfig({ ...base, publicBaseUrl: 'https://x.example/' });
     expect(r.ok && r.config.publicBaseUrl).toBe('https://x.example');
   });
+  it('pageHeapLimitMB：缺省为 512，可配置', () => {
+    const d = validateConfig(base);
+    expect(d.ok && d.config.pageHeapLimitMB).toBe(512);
+    const c = validateConfig({ ...base, pageHeapLimitMB: 768 });
+    expect(c.ok && c.config.pageHeapLimitMB).toBe(768);
+  });
   it('basicAuth 与数值项校验', () => {
     expect(errorsOf({ ...base, basicAuth: { username: 'a' } })).toHaveProperty('basicAuth');
     expect(errorsOf({ ...base, miniAppPort: 70000 })).toHaveProperty('miniAppPort');
     expect(errorsOf({ ...base, idleShutdownMinutes: -1 })).toHaveProperty('idleShutdownMinutes');
     expect(errorsOf({ ...base, lowMemory: 'yes' })).toHaveProperty('lowMemory');
+    // pageHeapLimitMB：128–4096 的整数
+    for (const bad of [64, 127, 4097, 300.5, '512', true]) expect(errorsOf({ ...base, pageHeapLimitMB: bad })).toHaveProperty('pageHeapLimitMB');
+    expect(errorsOf({ ...base, pageHeapLimitMB: 64 }).pageHeapLimitMB).toMatch(/128–4096.*默认 512/);
+    expect(errorsOf({ ...base, pageHeapLimitMB: 4096 })).not.toHaveProperty('pageHeapLimitMB');
     expect(errorsOf({ ...base, dialogueStyle: 'neon' })).toHaveProperty('dialogueStyle');
     expect(errorsOf({ ...base, dialogueStyle: 'italic' })).not.toHaveProperty('dialogueStyle');
     expect(errorsOf({ ...base, draftIntervalSeconds: 0.1 })).toHaveProperty('draftIntervalSeconds');

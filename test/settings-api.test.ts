@@ -35,7 +35,7 @@ describe('viewSettings：掩码', () => {
   it('没有配置文件：缺省值与 validateConfig 一致', () => {
     const v = viewSettings({}, false);
     expect(v.exists).toBe(false);
-    expect(v.values).toMatchObject({ botToken: { set: false }, allowedUserIds: [], stBaseUrl: 'http://127.0.0.1:8000', lowMemory: true, pageHeapLimitMB: 256, dialogueStyle: 'bold', logLevel: 'info', idleShutdownMinutes: 0 });
+    expect(v.values).toMatchObject({ botToken: { set: false }, allowedUserIds: [], stBaseUrl: 'http://127.0.0.1:8000', lowMemory: true, pageHeapLimitMB: 512, dialogueStyle: 'bold', logLevel: 'info', idleShutdownMinutes: 0 });
   });
   it('maskProxy', () => {
     expect(maskProxy('http://127.0.0.1:7890')).toBe('http://127.0.0.1:7890');

@@ -90260,7 +90260,7 @@ var KNOWN_KEYS = /* @__PURE__ */ new Set([
   "choiceLayout",
   "telegramApiBase"
 ]);
-var DEFAULT_PAGE_HEAP_LIMIT_MB = 256;
+var DEFAULT_PAGE_HEAP_LIMIT_MB = 512;
 var MIN_PAGE_HEAP_LIMIT_MB = 128;
 var MAX_PAGE_HEAP_LIMIT_MB = 4096;
 var TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;

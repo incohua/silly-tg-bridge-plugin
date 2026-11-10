@@ -103,8 +103,8 @@ export function buildPatch(form: FormValues, original: SettingsValues | undefine
   else patch.idleShutdownMinutes = idle;
 
   patch.lowMemory = form.lowMemory;
-  const heap = form.pageHeapLimitMB.trim() === '' ? 256 : Number(form.pageHeapLimitMB);
-  if (!Number.isInteger(heap) || heap < 128 || heap > 4096) errors.push({ field: 'pageHeapLimitMB', message: '页面内存上限必须是 128–4096 之间的整数（MB），默认 256。' });
+  const heap = form.pageHeapLimitMB.trim() === '' ? 512 : Number(form.pageHeapLimitMB);
+  if (!Number.isInteger(heap) || heap < 128 || heap > 4096) errors.push({ field: 'pageHeapLimitMB', message: '页面内存上限必须是 128–4096 之间的整数（MB），默认 512。' });
   else patch.pageHeapLimitMB = heap;
   patch.dialogueStyle = form.dialogueStyle;
   patch.logLevel = form.logLevel;

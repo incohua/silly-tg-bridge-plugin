@@ -145,7 +145,7 @@ function buildDrawer(container: HTMLElement): void {
     basicAuthPassword: input('password', ''),
     idleShutdownMinutes: input('number', '0'),
     lowMemory: el('input', { type: 'checkbox' }),
-    pageHeapLimitMB: input('number', '256'),
+    pageHeapLimitMB: input('number', '512'),
     dialogueStyle: select([
       ['bold', '加粗'],
       ['italic', '斜体'],
@@ -180,7 +180,7 @@ function buildDrawer(container: HTMLElement): void {
       '页面内存上限（MB）',
       '下次启动浏览器时生效',
       f.pageHeapLimitMB,
-      '低内存模式下无头页面 JS 内存的上限，128–4096，默认 256。页面内存会随运行时间缓慢增长，空闲时用量达到上限的 75% 就会自动重载页面回收；内存充裕的机器可以调大（例如 512），重载会少一些，但浏览器占用内存更多。',
+      '低内存模式下无头页面 JS 内存的上限，128–4096，默认 512。页面内存会随运行时间缓慢增长，空闲时用量达到上限的 75% 就会自动重启浏览器回收；调大回收更少但浏览器占用内存更多，可用内存紧张的机器（不到 1.5 GB 可用）请调小（例如 256）。',
     ),
     dialogueStyle: row('对话样式', '立即生效', f.dialogueStyle),
     draftIntervalSeconds: row('草稿刷新间隔（秒）', '立即生效', f.draftIntervalSeconds, '生成时每隔这么久更新一次草稿，0.5–30。调大可减少聊天窗口上下滚动。'),
