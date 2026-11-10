@@ -5,6 +5,7 @@ import { SerialQueue } from '../src/extension/queue';
 import { activeCharacterFromSettingsResponse } from '../src/extension/restore';
 import { isGreetingOnly, normalizeChats } from '../src/extension/commands';
 import { regenerateRejection } from '../src/extension/generation';
+import { recheckUntilOk } from '../src/extension/retry';
 
 const NONCE = '0123456789abcdef0123456789abcdef';
 
@@ -149,5 +150,37 @@ describe('isGreetingOnly（新聊天判定）', () => {
     expect(isGreetingOnly([{}, { is_user: true }])).toBe(false);
     expect(isGreetingOnly([{ is_user: true }])).toBe(false);
     expect(isGreetingOnly([{ is_system: true }])).toBe(false);
+  });
+});
+
+describe('recheckUntilOk（自检复查）', () => {
+  const noSleep = async (): Promise<void> => {};
+  it('首次就通过：不复查', async () => {
+    let calls = 0;
+    const r = await recheckUntilOk(() => ({ ok: (calls++, true) }), { retries: 3, delayMs: 1, sleep: noSleep });
+    expect(r.ok).toBe(true);
+    expect(calls).toBe(1);
+  });
+  it('复查时变为通过：返回通过的结果', async () => {
+    let calls = 0;
+    const r = await recheckUntilOk(() => ({ ok: ++calls >= 3 }), { retries: 5, delayMs: 1, sleep: noSleep });
+    expect(r.ok).toBe(true);
+    expect(calls).toBe(3);
+  });
+  it('一直失败：复查 retries 次后返回失败', async () => {
+    let calls = 0;
+    const r = await recheckUntilOk(() => ({ ok: (calls++, false) }), { retries: 3, delayMs: 1, sleep: noSleep });
+    expect(r.ok).toBe(false);
+    expect(calls).toBe(4);
+  });
+  it('页面已停止：不再复查', async () => {
+    let calls = 0;
+    await recheckUntilOk(() => ({ ok: (calls++, false) }), { retries: 3, delayMs: 1, sleep: noSleep, keepGoing: () => false });
+    expect(calls).toBe(1);
+  });
+  it('每次复查之间按 delayMs 等待', async () => {
+    const waits: number[] = [];
+    await recheckUntilOk(() => ({ ok: false }), { retries: 2, delayMs: 2000, sleep: async (ms) => void waits.push(ms) });
+    expect(waits).toEqual([2000, 2000]);
   });
 });

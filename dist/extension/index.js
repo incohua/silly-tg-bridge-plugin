@@ -553,6 +553,18 @@
     return { restored: false, reason: `\u6253\u5F00\u89D2\u8272 ${key} \u8D85\u65F6` };
   }
 
+  // src/extension/retry.ts
+  async function recheckUntilOk(check, opts) {
+    const sleep2 = opts.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    let result = check();
+    for (let i = 0; i < opts.retries && !result.ok; i++) {
+      if (opts.keepGoing && !opts.keepGoing()) break;
+      await sleep2(opts.delayMs);
+      result = check();
+    }
+    return result;
+  }
+
   // src/shared/page-heap.ts
   var DEFAULT_PAGE_HEAP_LIMIT_MB = 512;
   var MIN_PAGE_HEAP_LIMIT_MB = 128;
@@ -1089,6 +1101,8 @@
 
   // src/extension/index.ts
   var HEARTBEAT_MS = 15e3;
+  var MVU_RECHECKS = 6;
+  var MVU_RECHECK_MS = 2e3;
   var READY_TIMEOUT_MS = 18e4;
   var LOG = "[silly-tg]";
   async function stVersion() {
@@ -1109,7 +1123,7 @@
     return ok ? { name: "mvu", ok: true } : {
       name: "mvu",
       ok: false,
-      detail: "\u5F53\u524D\u89D2\u8272\u6CA1\u6709\u52A0\u8F7D MVU\u3002\u5982\u679C\u8FD9\u5F20\u5361\u4F9D\u8D56 MVU \u53D8\u91CF\uFF0C\u9700\u8981\u5728\u9152\u9986\u52A9\u624B\u91CC\u542F\u7528\u89D2\u8272\u811A\u672C\uFF1B\u4E0D\u7528 MVU \u7684\u5361\u53EF\u4EE5\u5FFD\u7565\u3002"
+      detail: "\u5F53\u524D\u89D2\u8272\u6CA1\u6709\u52A0\u8F7D MVU\uFF08\u5DF2\u7B49\u5F85\u7EA6 12 \u79D2\u590D\u67E5\uFF09\u3002\u5982\u679C\u8FD9\u5F20\u5361\u4F9D\u8D56 MVU \u53D8\u91CF\uFF0C\u9700\u8981\u5728\u9152\u9986\u52A9\u624B\u91CC\u542F\u7528\u89D2\u8272\u811A\u672C\uFF1B\u4E0D\u7528 MVU \u7684\u5361\u53EF\u4EE5\u5FFD\u7565\u3002"
     };
   }
   async function main() {
@@ -1197,7 +1211,8 @@
     cleanups.push(() => clearInterval(hb));
     const runChecks = async () => {
       const api = await queue.run(() => ensureApiConnected());
-      if (alive) report({ type: "selfCheck", items: [csrf, tavernHelperCheck(), mvuCheck(), api] });
+      const mvu = await recheckUntilOk(mvuCheck, { retries: MVU_RECHECKS, delayMs: MVU_RECHECK_MS, keepGoing: () => alive });
+      if (alive) report({ type: "selfCheck", items: [csrf, tavernHelperCheck(), mvu, api] });
     };
     void runChecks();
     const c = ctx();

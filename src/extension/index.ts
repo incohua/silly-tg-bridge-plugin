@@ -14,11 +14,14 @@ import { captureToasts, runGeneration, type GenerationRequest } from './generati
 import { parseHostNonce, parseHostTestFlags } from './host-mode';
 import { SerialQueue } from './queue';
 import { restoreActiveCharacter } from './restore';
+import { recheckUntilOk } from './retry';
 import { mountSettings } from './settings-ui';
 import { claimSingleton, duplicateMessage } from './singleton';
 import { PLUGIN_BASE, Uplink } from './uplink';
 
 const HEARTBEAT_MS = 15_000;
+const MVU_RECHECKS = 6;
+const MVU_RECHECK_MS = 2000;
 const READY_TIMEOUT_MS = 180_000;
 const LOG = '[silly-tg]';
 
@@ -46,7 +49,7 @@ function mvuCheck(): SelfCheckItem {
     : {
         name: 'mvu',
         ok: false,
-        detail: '当前角色没有加载 MVU。如果这张卡依赖 MVU 变量，需要在酒馆助手里启用角色脚本；不用 MVU 的卡可以忽略。',
+        detail: '当前角色没有加载 MVU（已等待约 12 秒复查）。如果这张卡依赖 MVU 变量，需要在酒馆助手里启用角色脚本；不用 MVU 的卡可以忽略。',
       };
 }
 
@@ -157,7 +160,9 @@ async function main(): Promise<void> {
   // 7. 自检：CSRF、酒馆助手、MVU、API 连接
   const runChecks = async (): Promise<void> => {
     const api = await queue.run(() => ensureApiConnected());
-    if (alive) report({ type: 'selfCheck', items: [csrf, tavernHelperCheck(), mvuCheck(), api] });
+    // 页面刚打开时角色脚本还没跑完，Mvu 此刻未定义是常态：失败先复查几次（共约 12 秒），再决定报不报
+    const mvu = await recheckUntilOk(mvuCheck, { retries: MVU_RECHECKS, delayMs: MVU_RECHECK_MS, keepGoing: () => alive });
+    if (alive) report({ type: 'selfCheck', items: [csrf, tavernHelperCheck(), mvu, api] });
   };
   void runChecks();
   // MVU 由角色脚本在聊天加载后异步初始化，切换聊天后稍等再查一次。
