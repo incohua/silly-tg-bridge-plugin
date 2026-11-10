@@ -36,4 +36,11 @@ describe('createFetch', () => {
     expect(await res.text()).toBe('hi');
     srv.close();
   });
+
+  it('用代理时返回的 fetch 带 close()，直连时没有', async () => {
+    const f = createFetch('http://127.0.0.1:1');
+    expect(typeof f.close).toBe('function');
+    await f.close!();
+    expect(createFetch().close).toBeUndefined();
+  });
 });

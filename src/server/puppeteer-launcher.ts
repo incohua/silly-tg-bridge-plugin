@@ -28,7 +28,10 @@ export const puppeteerLauncher: Launcher = async ({ executablePath, args, userDa
             const r = await cdp.send('Runtime.getHeapUsage');
             return r.usedSize;
           } catch (e) {
-            cdp = undefined; // 页面重载或崩溃后会话可能失效，下次重新建
+            // 页面重载或崩溃后会话可能失效：先释放旧会话（detach 自己的错误忽略），下次重新建
+            const stale = cdp;
+            cdp = undefined;
+            await stale?.detach().catch(() => {});
             throw e;
           }
         },

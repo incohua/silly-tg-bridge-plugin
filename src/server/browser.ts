@@ -499,13 +499,16 @@ export class BrowserManager {
 
   /** 正常关闭，5 秒内没关掉就强制结束进程。 */
   private async closeBrowser(browser: LaunchedBrowser): Promise<void> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
     const closed = await Promise.race([
       browser.close().then(
         () => true,
         () => false,
       ),
-      sleep(5000).then(() => false),
-    ]);
+      new Promise<boolean>((r) => {
+        timer = setTimeout(() => r(false), 5000);
+      }),
+    ]).finally(() => clearTimeout(timer));
     if (!closed) {
       this.opts.log.warn('关闭浏览器超时，强制结束进程');
       try {

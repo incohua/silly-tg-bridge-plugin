@@ -449,6 +449,30 @@
     return () => clearInterval(timer);
   }
 
+  // src/extension/error-dedupe.ts
+  var ERROR_DEDUPE_WINDOW_MS = 3e4;
+  var ERROR_DEDUPE_MAX_ENTRIES = 200;
+  function createErrorDedupe(windowMs = ERROR_DEDUPE_WINDOW_MS, maxEntries = ERROR_DEDUPE_MAX_ENTRIES) {
+    const seen = /* @__PURE__ */ new Map();
+    return {
+      /** 窗口内已报过返回 false；否则记录并返回 true。 */
+      shouldReport(message, now) {
+        if ((seen.get(message) ?? 0) > now - windowMs) return false;
+        for (const [k, t] of seen) {
+          if (t > now - windowMs) break;
+          seen.delete(k);
+        }
+        seen.delete(message);
+        seen.set(message, now);
+        while (seen.size > maxEntries) seen.delete(seen.keys().next().value);
+        return true;
+      },
+      get size() {
+        return seen.size;
+      }
+    };
+  }
+
   // src/extension/host-mode.ts
   var HOST_PARAM = "silly_tg_host";
   var SKIP_CSRF_PATCH_PARAM = "silly_tg_test_skip_csrf_patch";
@@ -668,6 +692,7 @@
 
   // src/extension/uplink.ts
   var PLUGIN_BASE = "/api/plugins/silly-tg";
+  var UPLINK_TIMEOUT_MS = 3e4;
   var Uplink = class {
     constructor(nonce, onRejected) {
       this.nonce = nonce;
@@ -685,7 +710,8 @@
       const res = await fetch(`${PLUGIN_BASE}/host/message`, {
         method: "POST",
         headers: ctx().getRequestHeaders(),
-        body: JSON.stringify({ nonce: this.nonce, event })
+        body: JSON.stringify({ nonce: this.nonce, event }),
+        signal: AbortSignal.timeout(UPLINK_TIMEOUT_MS)
       });
       return res.status;
     }
@@ -1181,13 +1207,14 @@
       chatTimer = setTimeout(() => void runChecks(), 3e3);
     };
     c.eventSource.on(c.eventTypes.CHAT_CHANGED, onChatChanged);
-    cleanups.push(() => c.eventSource.removeListener(c.eventTypes.CHAT_CHANGED, onChatChanged));
-    const seen = /* @__PURE__ */ new Map();
+    cleanups.push(() => {
+      c.eventSource.removeListener(c.eventTypes.CHAT_CHANGED, onChatChanged);
+      if (chatTimer) clearTimeout(chatTimer);
+    });
+    const dedupe = createErrorDedupe();
     const reportError = (message) => {
       if (isKnownNoise({ kind: "error", message })) return;
-      const now = Date.now();
-      if ((seen.get(message) ?? 0) > now - 3e4) return;
-      seen.set(message, now);
+      if (!dedupe.shouldReport(message, Date.now())) return;
       report({ type: "hostError", message: message.slice(0, 500) });
     };
     const onError = (e) => reportError(`${e.message}${e.filename ? ` (${e.filename}:${e.lineno})` : ""}`);

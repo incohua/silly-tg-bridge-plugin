@@ -88902,8 +88902,16 @@ var TelegramClient = class {
     }
   }
   async callOnce(method, params, opts) {
-    const timeout2 = AbortSignal.timeout(opts.timeoutMs ?? 3e4);
-    const signal = opts.signal ? AbortSignal.any([opts.signal, timeout2]) : timeout2;
+    const ctrl = new AbortController();
+    let timedOut = false;
+    const onExternalAbort = () => ctrl.abort();
+    const timer2 = setTimeout(() => {
+      timedOut = true;
+      ctrl.abort();
+    }, opts.timeoutMs ?? 3e4);
+    if (opts.signal?.aborted) ctrl.abort();
+    else opts.signal?.addEventListener("abort", onExternalAbort, { once: true });
+    const signal = ctrl.signal;
     let res;
     let body;
     try {
@@ -88920,8 +88928,11 @@ var TelegramClient = class {
         throw new Error(`\u54CD\u5E94\u4E0D\u662F JSON\uFF08HTTP ${res.status}\uFF09`);
       }
     } catch (e) {
-      const reason = signal.aborted ? opts.signal?.aborted ? "\u8BF7\u6C42\u88AB\u53D6\u6D88" : "\u8BF7\u6C42\u8D85\u65F6" : e instanceof Error ? e.message : String(e);
+      const reason = signal.aborted ? timedOut && !opts.signal?.aborted ? "\u8BF7\u6C42\u8D85\u65F6" : "\u8BF7\u6C42\u88AB\u53D6\u6D88" : e instanceof Error ? e.message : String(e);
       throw new TelegramNetworkError(method, redact(reason, this.secrets));
+    } finally {
+      clearTimeout(timer2);
+      opts.signal?.removeEventListener("abort", onExternalAbort);
     }
     const r = body;
     if (r.ok === true) return r.result;
@@ -90240,7 +90251,9 @@ function createFetch(proxy) {
     // 显式传入全部三项，不让 undici 再去读一遍环境变量；noProxy 为空串表示没有例外
     new import_undici.EnvHttpProxyAgent({ httpProxy: r.url, httpsProxy: r.url, noProxy: r.noProxy ?? "" })
   ) : new import_undici.ProxyAgent(r.url);
-  return (input2, init2) => (0, import_undici.fetch)(input2, { ...init2, dispatcher });
+  const f = (input2, init2) => (0, import_undici.fetch)(input2, { ...init2, dispatcher });
+  f.close = () => dispatcher.close();
+  return f;
 }
 
 // src/shared/page-heap.ts
@@ -90826,13 +90839,16 @@ var BrowserManager = class {
   }
   /** 正常关闭，5 秒内没关掉就强制结束进程。 */
   async closeBrowser(browser) {
+    let timer2;
     const closed = await Promise.race([
       browser.close().then(
         () => true,
         () => false
       ),
-      sleep(5e3).then(() => false)
-    ]);
+      new Promise((r) => {
+        timer2 = setTimeout(() => r(false), 5e3);
+      })
+    ]).finally(() => clearTimeout(timer2));
     if (!closed) {
       this.opts.log.warn("\u5173\u95ED\u6D4F\u89C8\u5668\u8D85\u65F6\uFF0C\u5F3A\u5236\u7ED3\u675F\u8FDB\u7A0B");
       try {
@@ -92465,7 +92481,10 @@ var puppeteerLauncher = async ({ executablePath: executablePath2, args, userData
             const r = await cdp.send("Runtime.getHeapUsage");
             return r.usedSize;
           } catch (e) {
+            const stale = cdp;
             cdp = void 0;
+            await stale?.detach().catch(() => {
+            });
             throw e;
           }
         },
@@ -93425,9 +93444,10 @@ async function startRuntime(ctx, config2, warnings, signal) {
       log.warn(`\u9875\u9762\u9519\u8BEF\uFF1A${e.message}`);
     }
   });
+  const ownFetch = opts.fetch ? void 0 : createFetch(proxy);
   const telegram = new TelegramClient({
     token: config2.botToken,
-    fetch: opts.fetch ?? createFetch(proxy),
+    fetch: opts.fetch ?? ownFetch,
     log,
     secrets,
     apiRoot: config2.telegramApiBase
@@ -93459,6 +93479,11 @@ async function startRuntime(ctx, config2, warnings, signal) {
         }
       }
       await Promise.race([polling, new Promise((r) => setTimeout(r, 3e3).unref())]);
+      try {
+        await ownFetch?.close?.();
+      } catch (e) {
+        log.debug(`\u5173\u95ED\u4EE3\u7406\u8FDE\u63A5\u6C60\u51FA\u9519\uFF1A${redactError(e, secrets)}`);
+      }
     })()
   };
   try {

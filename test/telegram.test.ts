@@ -101,6 +101,38 @@ describe('TelegramClient', () => {
       new Promise((_r, reject) => init!.signal!.addEventListener('abort', () => reject(new DOMException('t', 'TimeoutError'))));
     await expect(client(f).call('x', {}, { timeoutMs: 10 })).rejects.toThrow(/超时/);
   });
+
+  it('带外部 signal 的请求超时：仍报超时，且调用结束后外部 signal 上不留监听', async () => {
+    const ac = new AbortController();
+    const add = vi.spyOn(ac.signal, 'addEventListener');
+    const remove = vi.spyOn(ac.signal, 'removeEventListener');
+    const f: FetchLike = (_u, init) =>
+      new Promise((_r, reject) => init!.signal!.addEventListener('abort', () => reject(new DOMException('t', 'TimeoutError'))));
+    await expect(client(f).call('x', {}, { signal: ac.signal, timeoutMs: 10 })).rejects.toThrow(/请求超时/);
+    expect(add.mock.calls.filter((c) => c[0] === 'abort')).toHaveLength(1);
+    expect(remove.mock.calls.filter((c) => c[0] === 'abort')).toHaveLength(1);
+    expect(remove.mock.calls[0]![1]).toBe(add.mock.calls[0]![1]);
+  });
+
+  it('成功的请求结束后也摘掉外部 signal 上的监听', async () => {
+    const ac = new AbortController();
+    const add = vi.spyOn(ac.signal, 'addEventListener');
+    const remove = vi.spyOn(ac.signal, 'removeEventListener');
+    await client(async () => ok(true)).call('x', {}, { signal: ac.signal });
+    expect(add).toHaveBeenCalledTimes(1);
+    expect(remove).toHaveBeenCalledTimes(1);
+    expect(remove.mock.calls[0]![1]).toBe(add.mock.calls[0]![1]);
+  });
+
+  it('外部 signal 一开始就已取消：直接报取消', async () => {
+    const ac = new AbortController();
+    ac.abort();
+    const f: FetchLike = (_u, init) =>
+      new Promise((_r, reject) => {
+        if (init!.signal!.aborted) reject(new DOMException('aborted', 'AbortError'));
+      });
+    await expect(client(f).call('x', {}, { signal: ac.signal })).rejects.toThrow(/请求被取消/);
+  });
 });
 
 describe('pollUpdates', () => {

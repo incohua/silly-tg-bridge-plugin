@@ -242,9 +242,11 @@ async function startRuntime(ctx: RuntimeContext, config: Config, warnings: Confi
     }
   });
 
+  // 外部传入的 fetch 由外部负责；自己创建的（可能带代理 dispatcher）在 stop 时关掉
+  const ownFetch = opts.fetch ? undefined : createFetch(proxy);
   const telegram = new TelegramClient({
     token: config.botToken,
-    fetch: opts.fetch ?? createFetch(proxy),
+    fetch: opts.fetch ?? ownFetch!,
     log,
     secrets,
     apiRoot: config.telegramApiBase,
@@ -279,6 +281,12 @@ async function startRuntime(ctx: RuntimeContext, config: Config, warnings: Confi
         }
         // 轮询在 abort 后会很快返回；给个上限，避免卡住 ST 退出或重新加载。
         await Promise.race([polling, new Promise((r) => setTimeout(r, 3000).unref())]);
+        // 轮询结束后再关代理连接池；每次重载都会新建一个，不关会一直攒着
+        try {
+          await ownFetch?.close?.();
+        } catch (e) {
+          log.debug(`关闭代理连接池出错：${redactError(e, secrets)}`);
+        }
       })()),
   };
 

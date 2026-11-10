@@ -130,8 +130,18 @@ export class TelegramClient {
   }
 
   private async callOnce<T>(method: string, params: Record<string, unknown>, opts: CallOptions): Promise<T> {
-    const timeout = AbortSignal.timeout(opts.timeoutMs ?? 30_000);
-    const signal = opts.signal ? AbortSignal.any([opts.signal, timeout]) : timeout;
+    // 不用 AbortSignal.any：外部 signal 在整个运行期间都活着，旧版 Node 里 any 派生的 signal 会一直挂在它上面。
+    // 手动合并，并在调用结束时摘掉监听、清掉定时器。
+    const ctrl = new AbortController();
+    let timedOut = false;
+    const onExternalAbort = (): void => ctrl.abort();
+    const timer = setTimeout(() => {
+      timedOut = true;
+      ctrl.abort();
+    }, opts.timeoutMs ?? 30_000);
+    if (opts.signal?.aborted) ctrl.abort();
+    else opts.signal?.addEventListener('abort', onExternalAbort, { once: true });
+    const signal = ctrl.signal;
     let res: Response;
     let body: unknown;
     try {
@@ -149,8 +159,11 @@ export class TelegramClient {
       }
     } catch (e) {
       // 不保留 cause：fetch 的错误可能带着含 token 的 URL。
-      const reason = signal.aborted ? (opts.signal?.aborted ? '请求被取消' : '请求超时') : e instanceof Error ? e.message : String(e);
+      const reason = signal.aborted ? (timedOut && !opts.signal?.aborted ? '请求超时' : '请求被取消') : e instanceof Error ? e.message : String(e);
       throw new TelegramNetworkError(method, redact(reason, this.secrets));
+    } finally {
+      clearTimeout(timer);
+      opts.signal?.removeEventListener('abort', onExternalAbort);
     }
     const r = body as { ok?: boolean; result?: T; error_code?: number; description?: string; parameters?: { retry_after?: number } };
     if (r.ok === true) return r.result as T;

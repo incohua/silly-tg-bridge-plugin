@@ -9,6 +9,7 @@ import { hostStatus, listCharacters, listChats, listPresets, newChat, openChat, 
 import { ensureApiConnected } from './api-connect';
 import { applyCsrfPatchAndCheck } from './csrf';
 import { startDialogWatcher } from './dialog-watcher';
+import { createErrorDedupe } from './error-dedupe';
 import { captureToasts, runGeneration, type GenerationRequest } from './generation';
 import { parseHostNonce, parseHostTestFlags } from './host-mode';
 import { SerialQueue } from './queue';
@@ -167,15 +168,16 @@ async function main(): Promise<void> {
     chatTimer = setTimeout(() => void runChecks(), 3000);
   };
   c.eventSource.on(c.eventTypes.CHAT_CHANGED, onChatChanged);
-  cleanups.push(() => c.eventSource.removeListener(c.eventTypes.CHAT_CHANGED, onChatChanged));
+  cleanups.push(() => {
+    c.eventSource.removeListener(c.eventTypes.CHAT_CHANGED, onChatChanged);
+    if (chatTimer) clearTimeout(chatTimer);
+  });
 
   // 8. 页面错误上报（过滤忽略清单，同一条 30 秒内只报一次）
-  const seen = new Map<string, number>();
+  const dedupe = createErrorDedupe();
   const reportError = (message: string): void => {
     if (isKnownNoise({ kind: 'error', message })) return;
-    const now = Date.now();
-    if ((seen.get(message) ?? 0) > now - 30_000) return;
-    seen.set(message, now);
+    if (!dedupe.shouldReport(message, Date.now())) return;
     report({ type: 'hostError', message: message.slice(0, 500) });
   };
   const onError = (e: ErrorEvent): void => reportError(`${e.message}${e.filename ? ` (${e.filename}:${e.lineno})` : ''}`);

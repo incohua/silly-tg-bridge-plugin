@@ -6,6 +6,9 @@ import { ctx } from './adapter';
 
 export const PLUGIN_BASE = '/api/plugins/silly-tg';
 
+/** 单次上行请求的超时；卡住的请求会堵住整条串行链。 */
+export const UPLINK_TIMEOUT_MS = 30_000;
+
 export class Uplink {
   private chain: Promise<unknown> = Promise.resolve();
   private dead = false;
@@ -26,6 +29,7 @@ export class Uplink {
       method: 'POST',
       headers: ctx().getRequestHeaders(),
       body: JSON.stringify({ nonce: this.nonce, event } satisfies HostUpload),
+      signal: AbortSignal.timeout(UPLINK_TIMEOUT_MS),
     });
     return res.status;
   }

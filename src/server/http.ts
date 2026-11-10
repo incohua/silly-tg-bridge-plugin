@@ -2,6 +2,9 @@ import { EnvHttpProxyAgent, ProxyAgent, fetch as undiciFetch } from 'undici';
 
 export type FetchLike = (input: string, init?: RequestInit) => Promise<Response>;
 
+/** createFetch 的返回值。用代理时带 close()，用来关掉底层连接池；直连时没有。 */
+export type ClosableFetch = FetchLike & { close?: () => Promise<void> };
+
 /** 按优先级排列的代理环境变量，取第一个非空的。 */
 export const PROXY_ENV_KEYS = ['HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY', 'http_proxy', 'ALL_PROXY', 'all_proxy'] as const;
 const NO_PROXY_ENV_KEYS = ['NO_PROXY', 'no_proxy'] as const;
@@ -61,7 +64,7 @@ export function describeProxy(r: ProxyResolution): string {
  * 参数：字符串视为 config.json 里的代理地址；也可以传 resolveProxy 的结果。不会自己去读环境变量。
  * 只支持 http/https 代理。
  */
-export function createFetch(proxy?: string | ProxyResolution): FetchLike {
+export function createFetch(proxy?: string | ProxyResolution): ClosableFetch {
   const r: ProxyResolution = typeof proxy === 'string' ? { source: 'config', url: proxy } : (proxy ?? { source: 'none' });
   if (r.source === 'none' || !r.url) return (input, init) => fetch(input, init);
   const dispatcher =
@@ -69,5 +72,7 @@ export function createFetch(proxy?: string | ProxyResolution): FetchLike {
       ? // 显式传入全部三项，不让 undici 再去读一遍环境变量；noProxy 为空串表示没有例外
         new EnvHttpProxyAgent({ httpProxy: r.url, httpsProxy: r.url, noProxy: r.noProxy ?? '' })
       : new ProxyAgent(r.url);
-  return (input, init) => undiciFetch(input, { ...(init as object), dispatcher }) as unknown as Promise<Response>;
+  const f: ClosableFetch = (input, init) => undiciFetch(input, { ...(init as object), dispatcher }) as unknown as Promise<Response>;
+  f.close = () => dispatcher.close();
+  return f;
 }

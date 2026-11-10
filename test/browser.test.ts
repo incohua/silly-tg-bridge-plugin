@@ -480,6 +480,32 @@ describe('BrowserManager', () => {
     expect(Date.now() - t).toBeGreaterThanOrEqual(4900);
   }, 10_000);
 
+  it('正常关闭：5 秒超时定时器被清掉，不会挂到超时才释放', async () => {
+    const host = new FakeHost();
+    const { launcher, launched } = fakeLauncher(host);
+    const { m } = make(host, launcher);
+    await m.ensureRunning();
+    const created: Array<{ id: unknown; ms: unknown }> = [];
+    const realSet = globalThis.setTimeout;
+    const setSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((fn: () => void, ms?: number, ...a: unknown[]) => {
+      const id = realSet(fn, ms, ...a);
+      created.push({ id, ms });
+      return id;
+    }) as typeof setTimeout);
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+    try {
+      await m.dispose();
+    } finally {
+      setSpy.mockRestore();
+    }
+    const guard = created.find((c) => c.ms === 5000);
+    expect(guard).toBeDefined();
+    expect(clearSpy.mock.calls.some((c) => c[0] === guard!.id)).toBe(true);
+    expect(launched[0].closed).toBe(true);
+    expect(launched[0].killed).toBe(false);
+    clearSpy.mockRestore();
+  });
+
   it('dispose 之后不再启动', async () => {
     const host = new FakeHost();
     const { launcher } = fakeLauncher(host);
