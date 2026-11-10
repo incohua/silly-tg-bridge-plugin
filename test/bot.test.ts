@@ -52,7 +52,10 @@ class FakeTelegram implements BotTelegram {
     }
     return true as T;
   }
+  /** 模拟 Telegram 响应慢：sendMessage 过这么久才算发出去（调用记录也在发出去之后才有）。 */
+  sendDelayMs = 0;
   async sendMessage(params: { chat_id: number; text: string }) {
+    if (this.sendDelayMs) await new Promise((r) => setTimeout(r, this.sendDelayMs));
     this.calls.push({ method: 'sendMessage', params });
     const err = this.plainErrors.shift();
     if (err) throw err;
@@ -438,6 +441,45 @@ describe('Bot 对话', () => {
     expect(telegram.texts()).toHaveLength(n);
     // 没有进行中的一轮时 dispose 无副作用
     bot.dispose();
+  });
+
+  it('dispose 会等“没有完成”的提示真正发出去再返回（ST 退出前不能赶不上）', async () => {
+    const { bot, telegram, host } = setup({ turnIdleTimeoutMs: 60_000 });
+    await bot.handleUpdate(text('hi'));
+    await vi.waitFor(() => expect(host.requests.some((r) => r.type === 'send')).toBe(true), { timeout: 4000, interval: 2 });
+    telegram.sendDelayMs = 60;
+    await bot.dispose();
+    // 没有额外等 bot.idle()：dispose 返回时提示已经发出
+    expect(telegram.texts().at(-1)).toMatch(/这一轮回复没有完成：插件正在重新加载或退出/);
+    expect(bot.busy).toBe(false);
+  });
+
+  it('dispose 有等待上限：Telegram 一直不响应时不会卡住退出', async () => {
+    const { bot, telegram, host } = setup({ turnIdleTimeoutMs: 60_000 });
+    await bot.handleUpdate(text('hi'));
+    await vi.waitFor(() => expect(host.requests.some((r) => r.type === 'send')).toBe(true), { timeout: 4000, interval: 2 });
+    telegram.sendDelayMs = 400;
+    const t0 = Date.now();
+    await bot.dispose('测试', 40);
+    expect(Date.now() - t0).toBeLessThan(300);
+    await bot.idle();
+  });
+
+  it('dispose 时消息还没发给 ST（浏览器启动中）：立即告知“没有发给角色”，之后不再发送也不重复提示', async () => {
+    const { bot, telegram, host, browser } = setup();
+    let release!: () => void;
+    browser.ensureImpl = () => new Promise<void>((r) => (release = r));
+    await bot.handleUpdate(text('hi'));
+    await wait(5);
+    expect(bot.busy).toBe(true);
+    await bot.dispose();
+    expect(telegram.texts().filter((t) => /没有发给角色/.test(t))).toHaveLength(1);
+    release(); // 浏览器后来才启动完
+    await bot.idle();
+    expect(host.requests.some((r) => r.type === 'send')).toBe(false);
+    expect(telegram.texts().filter((t) => /没有发给角色|没有完成/.test(t))).toHaveLength(1);
+    expect(bot.busy).toBe(false);
+    expect(browser.leases).toBe(0);
   });
 
   it('不支持流式：收到正式消息前一直 typing，没有草稿', async () => {

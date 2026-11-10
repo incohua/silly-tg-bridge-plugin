@@ -27,6 +27,8 @@ interface StateFile {
   session?: SessionRecord;
   /** 已发过开场白的 ST 聊天名。 */
   greeted?: string[];
+  /** 最近一个已处理的 Telegram update_id，按 bot 区分（update_id 是每个 bot 各自的序列）。 */
+  telegramOffset?: { botId: string; lastUpdateId: number };
 }
 
 const MAX_REPLIES = 100;
@@ -61,6 +63,7 @@ export class BridgeStore {
   private replies: ReplyRecord[] = [];
   private sessionValue: SessionRecord | undefined;
   private greeted: string[] = [];
+  private offset: { botId: string; lastUpdateId: number } | undefined;
 
   constructor(
     private readonly file: string,
@@ -101,6 +104,20 @@ export class BridgeStore {
     return true;
   }
 
+  /**
+   * 该 bot 最近一个已处理的 update_id。重启后从它的下一个开始拉取，避免 Telegram 把已经转给 ST 的消息再投递一遍。
+   * 换了 bot（token 对应的 bot id 不同）就不能沿用，update_id 是每个 bot 各自的序列。
+   */
+  lastUpdateId(botId: string): number | undefined {
+    return this.offset?.botId === botId ? this.offset.lastUpdateId : undefined;
+  }
+
+  setLastUpdateId(botId: string, lastUpdateId: number): void {
+    if (this.offset?.botId === botId && this.offset.lastUpdateId >= lastUpdateId) return;
+    this.offset = { botId, lastUpdateId };
+    this.save();
+  }
+
   setSession(s: SessionRecord): void {
     this.sessionValue = decodeSession(s);
     this.save();
@@ -119,13 +136,15 @@ export class BridgeStore {
       this.replies = Array.isArray(j.replies) ? j.replies.map(decodeReply).filter((r): r is ReplyRecord => r !== null) : [];
       this.sessionValue = decodeSession(j.session);
       this.greeted = Array.isArray(j.greeted) ? j.greeted.filter((x): x is string => typeof x === 'string') : [];
+      const o = j.telegramOffset;
+      this.offset = o && typeof o.botId === 'string' && Number.isSafeInteger(o.lastUpdateId) && o.lastUpdateId >= 0 ? { botId: o.botId, lastUpdateId: o.lastUpdateId } : undefined;
     } catch {
       this.log.warn(`${this.file} 不是合法的 JSON，消息映射从空开始（原文件会在下次写入时被覆盖）`);
     }
   }
 
   private save(): void {
-    const data: StateFile = { version: 1, replies: this.replies, session: this.sessionValue, greeted: this.greeted };
+    const data: StateFile = { version: 1, replies: this.replies, session: this.sessionValue, greeted: this.greeted, telegramOffset: this.offset };
     try {
       mkdirSync(dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;

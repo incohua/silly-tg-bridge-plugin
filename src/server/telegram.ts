@@ -211,6 +211,10 @@ export interface PollOptions {
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   /** 退避范围（毫秒），默认 1s 到 30s。 */
   backoffMs?: { min: number; max: number };
+  /** 从这个 update_id 开始拉取（上次已处理的最大 update_id + 1）。重启后用它避免重复投递。 */
+  initialOffset?: number;
+  /** 一个 update 处理完（成功或出错）后调用，传入它的 update_id；用来持久化“已处理到哪里”。 */
+  onProcessed?: (updateId: number) => void;
 }
 
 /**
@@ -222,7 +226,7 @@ export async function pollUpdates(opts: PollOptions): Promise<'aborted' | 'unaut
   const { client, onUpdate, signal, log } = opts;
   const sleep = opts.sleep ?? defaultSleep;
   const { min, max } = opts.backoffMs ?? { min: 1000, max: 30_000 };
-  let offset: number | undefined;
+  let offset: number | undefined = opts.initialOffset;
   let delay = min;
 
   while (!signal.aborted) {
@@ -246,6 +250,8 @@ export async function pollUpdates(opts: PollOptions): Promise<'aborted' | 'unaut
       continue;
     }
     for (const update of updates) {
+      // 关闭中：这一批里还没处理的不要再交给 bot（运行时正在拆）。它们没有被记录为已处理，重启后会重新投递
+      if (signal.aborted) break;
       // 先推进 offset，避免某条消息的处理一直抛错而被反复拉取。
       offset = update.update_id + 1;
       log.debug(`拉到 update ${update.update_id}：${Object.keys(update).filter((k) => k !== 'update_id').join(',')}`);
@@ -253,6 +259,12 @@ export async function pollUpdates(opts: PollOptions): Promise<'aborted' | 'unaut
         await onUpdate(update);
       } catch (e) {
         log.error(`处理 update ${update.update_id} 出错：${(e as Error).message}`);
+      }
+      // 处理完才记录：处理到一半被杀时没有记录，重启后 Telegram 会再投递这一条（至少一次），不会丢
+      try {
+        opts.onProcessed?.(update.update_id);
+      } catch (e) {
+        log.warn(`记录 update ${update.update_id} 的处理进度失败：${(e as Error).message}`);
       }
     }
   }

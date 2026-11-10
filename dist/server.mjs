@@ -88968,7 +88968,7 @@ async function pollUpdates(opts) {
   const { client, onUpdate, signal, log } = opts;
   const sleep2 = opts.sleep ?? defaultSleep;
   const { min, max } = opts.backoffMs ?? { min: 1e3, max: 3e4 };
-  let offset;
+  let offset = opts.initialOffset;
   let delay = min;
   while (!signal.aborted) {
     let updates;
@@ -88991,12 +88991,18 @@ async function pollUpdates(opts) {
       continue;
     }
     for (const update of updates) {
+      if (signal.aborted) break;
       offset = update.update_id + 1;
       log.debug(`\u62C9\u5230 update ${update.update_id}\uFF1A${Object.keys(update).filter((k) => k !== "update_id").join(",")}`);
       try {
         await onUpdate(update);
       } catch (e) {
         log.error(`\u5904\u7406 update ${update.update_id} \u51FA\u9519\uFF1A${e.message}`);
+      }
+      try {
+        opts.onProcessed?.(update.update_id);
+      } catch (e) {
+        log.warn(`\u8BB0\u5F55 update ${update.update_id} \u7684\u5904\u7406\u8FDB\u5EA6\u5931\u8D25\uFF1A${e.message}`);
       }
     }
   }
@@ -89118,8 +89124,14 @@ var Bot = class {
    * 运行时停止（面板保存后重新加载，或 ST 退出）：进行中的一轮不再等页面结果，立即按“中断”告知用户。
    * 否则新运行时的页面连上后，旧这一轮会一直等到空闲超时（10 分钟）才用旧的 bot 回复。
    */
-  dispose(reason = "\u63D2\u4EF6\u6B63\u5728\u91CD\u65B0\u52A0\u8F7D\u6216\u9000\u51FA") {
-    this.turn?.abandon?.(reason);
+  async dispose(reason = "\u63D2\u4EF6\u6B63\u5728\u91CD\u65B0\u52A0\u8F7D\u6216\u9000\u51FA", waitMs = 3e3) {
+    const turn = this.turn;
+    if (!turn?.abandon) return;
+    const starting = turn.phase === "starting";
+    const done = Promise.resolve(turn.abandon(reason)).then(() => starting ? void 0 : turn.promise);
+    let timer2;
+    await Promise.race([done, new Promise((r) => timer2 = setTimeout(r, waitMs))]);
+    clearTimeout(timer2);
   }
   get busy() {
     return this.turn !== null || this.op !== null;
@@ -89728,7 +89740,14 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
     };
     let resolveResult;
     const result = new Promise((r) => resolveResult = r);
-    turn.abandon = (reason) => resolveResult({ kind: "lost", reason });
+    turn.abandon = (reason) => {
+      if (turn.phase === "starting") {
+        turn.abandonedReason = reason;
+        log.warn(`\u751F\u6210\u672A\u5F00\u59CB\u5C31\u88AB\u4E2D\u65AD gen=${gen}\uFF1A${reason}`);
+        return this.reply(chatId, `\u26A0\uFE0F ${reason}\uFF0C\u8FD9\u6761\u6D88\u606F\u6CA1\u6709\u53D1\u7ED9\u89D2\u8272\u3002\u6062\u590D\u540E\u8BF7\u91CD\u65B0\u53D1\u9001\u3002`).then(() => void 0);
+      }
+      resolveResult({ kind: "lost", reason });
+    };
     let idleTimer = null;
     const idleMs = this.opts.turnIdleTimeoutMs ?? 10 * 6e4;
     const bump = () => {
@@ -89763,12 +89782,15 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
       try {
         await browser.ensureRunning();
       } catch (e) {
+        if (turn.abandonedReason) return;
         log.warn(`\u65E0\u5934\u6D4F\u89C8\u5668\u542F\u52A8\u5931\u8D25 gen=${gen}\uFF1A${errMsg(e)}`);
         await this.reply(chatId, `\u274C \u65E0\u5934\u6D4F\u89C8\u5668\u542F\u52A8\u5931\u8D25\uFF1A${errMsg(e)}
 \u53EF\u4EE5\u53D1 /status \u67E5\u770B\u8BE6\u60C5\uFF0C\u4FEE\u597D\u540E\u76F4\u63A5\u518D\u53D1\u6D88\u606F\u5373\u53EF\u91CD\u8BD5`);
         return;
       }
+      if (turn.abandonedReason) return;
       await this.ensureSession();
+      if (turn.abandonedReason) return;
       if (turn.cancelled) {
         log.info(`\u5DF2\u53D6\u6D88 gen=${gen}\uFF08\u542F\u52A8\u671F\u95F4\u6536\u5230\u505C\u6B62\uFF09`);
         await this.reply(chatId, "\u23F9\uFE0F \u5DF2\u53D6\u6D88\uFF0C\u8FD9\u6761\u6D88\u606F\u6CA1\u6709\u53D1\u7ED9\u89D2\u8272\u3002");
@@ -90459,6 +90481,7 @@ var BridgeStore = class {
   replies = [];
   sessionValue;
   greeted = [];
+  offset;
   get session() {
     return this.sessionValue;
   }
@@ -90486,6 +90509,18 @@ var BridgeStore = class {
     this.save();
     return true;
   }
+  /**
+   * 该 bot 最近一个已处理的 update_id。重启后从它的下一个开始拉取，避免 Telegram 把已经转给 ST 的消息再投递一遍。
+   * 换了 bot（token 对应的 bot id 不同）就不能沿用，update_id 是每个 bot 各自的序列。
+   */
+  lastUpdateId(botId) {
+    return this.offset?.botId === botId ? this.offset.lastUpdateId : void 0;
+  }
+  setLastUpdateId(botId, lastUpdateId) {
+    if (this.offset?.botId === botId && this.offset.lastUpdateId >= lastUpdateId) return;
+    this.offset = { botId, lastUpdateId };
+    this.save();
+  }
   setSession(s) {
     this.sessionValue = decodeSession(s);
     this.save();
@@ -90503,12 +90538,14 @@ var BridgeStore = class {
       this.replies = Array.isArray(j2.replies) ? j2.replies.map(decodeReply).filter((r) => r !== null) : [];
       this.sessionValue = decodeSession(j2.session);
       this.greeted = Array.isArray(j2.greeted) ? j2.greeted.filter((x2) => typeof x2 === "string") : [];
+      const o = j2.telegramOffset;
+      this.offset = o && typeof o.botId === "string" && Number.isSafeInteger(o.lastUpdateId) && o.lastUpdateId >= 0 ? { botId: o.botId, lastUpdateId: o.lastUpdateId } : void 0;
     } catch {
       this.log.warn(`${this.file} \u4E0D\u662F\u5408\u6CD5\u7684 JSON\uFF0C\u6D88\u606F\u6620\u5C04\u4ECE\u7A7A\u5F00\u59CB\uFF08\u539F\u6587\u4EF6\u4F1A\u5728\u4E0B\u6B21\u5199\u5165\u65F6\u88AB\u8986\u76D6\uFF09`);
     }
   }
   save() {
-    const data = { version: 1, replies: this.replies, session: this.sessionValue, greeted: this.greeted };
+    const data = { version: 1, replies: this.replies, session: this.sessionValue, greeted: this.greeted, telegramOffset: this.offset };
     try {
       mkdirSync(dirname(this.file), { recursive: true });
       const tmp = `${this.file}.tmp`;
@@ -93268,10 +93305,15 @@ async function startRuntime(ctx, config2, warnings, signal) {
     if (signal?.aborted) throw new Error("\u542F\u52A8\u5DF2\u53D6\u6D88");
     rt.bridge = attachBridge(rt, { launcher: opts.launcher, env: env2 });
     if (!offline) {
+      const store = rt.bridge?.store;
+      const botId = config2.botToken.split(":")[0];
+      const last2 = store?.lastUpdateId(botId);
       polling = pollUpdates({
         client: telegram,
         signal: abort.signal,
         log,
+        initialOffset: last2 === void 0 ? void 0 : last2 + 1,
+        onProcessed: (id) => store?.setLastUpdateId(botId, id),
         allowedUpdates: ["message", "edited_message", "callback_query", "stopped_message_generation"],
         onUpdate: (u) => {
           if (!isAllowedUpdate(u, config2.allowedUserIds)) {

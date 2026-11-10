@@ -16,6 +16,25 @@ const rec = (over: Partial<ReplyRecord> = {}): ReplyRecord => ({
 });
 
 describe('BridgeStore', () => {
+  it('lastUpdateId：按 bot 记录，重启后仍在；换 bot 不沿用；不会倒退；坏数据忽略', () => {
+    const f = file();
+    const a = new BridgeStore(f, noopLogger);
+    expect(a.lastUpdateId('111')).toBeUndefined();
+    a.setLastUpdateId('111', 50);
+    a.setLastUpdateId('111', 40); // 不倒退
+    expect(a.lastUpdateId('111')).toBe(50);
+    const b = new BridgeStore(f, noopLogger);
+    expect(b.lastUpdateId('111')).toBe(50);
+    expect(b.lastUpdateId('222')).toBeUndefined(); // 另一个 bot 的 update_id 序列无关
+    b.setLastUpdateId('222', 7); // 换了 bot：覆盖，不混用
+    expect(b.lastUpdateId('111')).toBeUndefined();
+    expect(new BridgeStore(f, noopLogger).lastUpdateId('222')).toBe(7);
+    // 其他字段不受影响，文件里也不含 token
+    expect(readFileSync(f, 'utf8')).not.toMatch(/token/i);
+    writeFileSync(f, JSON.stringify({ version: 1, replies: [], telegramOffset: { botId: 5, lastUpdateId: 'x' } }));
+    expect(new BridgeStore(f, noopLogger).lastUpdateId('5')).toBeUndefined();
+  });
+
   it('markGreeted：同一聊天只返回一次 true，重启后仍记得；数量有上限', () => {
     const f = file();
     const a = new BridgeStore(f, noopLogger);

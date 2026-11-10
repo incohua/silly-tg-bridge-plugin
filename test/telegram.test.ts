@@ -126,6 +126,33 @@ describe('pollUpdates', () => {
     expect(offsets).toEqual([undefined, 12, 13]);
   });
 
+  it('initialOffset：第一次拉取就带上；onProcessed 在每条处理完（含出错）后调用，关闭时没处理的不记录也不交给 bot', async () => {
+    const ac = new AbortController();
+    const offsets: Array<number | undefined> = [];
+    const f: FetchLike = async (_u, init) => {
+      offsets.push(JSON.parse(String(init!.body)).offset);
+      return offsets.length === 1 ? ok([upd(21), upd(22), upd(23)]) : (ac.abort(), ok([]));
+    };
+    const got: number[] = [];
+    const processed: number[] = [];
+    await pollUpdates({
+      client: client(f),
+      signal: ac.signal,
+      log: noopLogger,
+      sleep: instantSleep,
+      initialOffset: 21,
+      onProcessed: (id) => void processed.push(id),
+      onUpdate: (u) => {
+        got.push(u.update_id);
+        if (u.update_id === 21) throw new Error('boom');
+        if (u.update_id === 22) ac.abort(); // 处理第 22 条时开始关闭
+      },
+    });
+    expect(offsets[0]).toBe(21);
+    expect(got).toEqual([21, 22]); // 23 没有交给 bot
+    expect(processed).toEqual([21, 22]); // 23 没有被记录为已处理，重启后 Telegram 会再投递
+  });
+
   it('单条处理失败不影响后续，并且不会重复拉取', async () => {
     const ac = new AbortController();
     let calls = 0;

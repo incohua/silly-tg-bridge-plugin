@@ -196,8 +196,12 @@ interface Turn {
   /** 在 requesting 阶段收到停止：页面确认后立即停止。 */
   stopRequested: boolean;
   promise: Promise<void>;
-  /** 不再等页面的结果，按“中断”收尾（运行时停止时用）。 */
-  abandon?: (reason: string) => void;
+  /**
+   * 不再等页面的结果，按“中断”收尾（运行时停止时用）。返回的 Promise 在告知用户的消息发出后结束。
+   * starting 阶段（消息还没发给 ST）直接告知“没有发给角色”，runTurn 醒来后看到 abandonedReason 就悄悄退出。
+   */
+  abandon?: (reason: string) => Promise<void> | void;
+  abandonedReason?: string;
 }
 
 const short = (id: string): string => id.slice(0, 8);
@@ -242,8 +246,15 @@ export class Bot {
    * 运行时停止（面板保存后重新加载，或 ST 退出）：进行中的一轮不再等页面结果，立即按“中断”告知用户。
    * 否则新运行时的页面连上后，旧这一轮会一直等到空闲超时（10 分钟）才用旧的 bot 回复。
    */
-  dispose(reason = '插件正在重新加载或退出'): void {
-    this.turn?.abandon?.(reason);
+  async dispose(reason = '插件正在重新加载或退出', waitMs = 3000): Promise<void> {
+    const turn = this.turn;
+    if (!turn?.abandon) return;
+    // starting 阶段 turn.promise 可能卡在启动浏览器上，只等“告知用户”这一步；其余阶段等整轮收尾（含最后那条提示）
+    const starting = turn.phase === 'starting';
+    const done = Promise.resolve(turn.abandon(reason)).then(() => (starting ? undefined : turn.promise));
+    let timer: NodeJS.Timeout | undefined;
+    await Promise.race([done, new Promise<void>((r) => (timer = setTimeout(r, waitMs)))]);
+    clearTimeout(timer);
   }
 
   get busy(): boolean {
@@ -899,7 +910,14 @@ export class Bot {
 
     let resolveResult!: (r: TurnResult) => void;
     const result = new Promise<TurnResult>((r) => (resolveResult = r));
-    turn.abandon = (reason) => resolveResult({ kind: 'lost', reason });
+    turn.abandon = (reason) => {
+      if (turn.phase === 'starting') {
+        turn.abandonedReason = reason;
+        log.warn(`生成未开始就被中断 gen=${gen}：${reason}`);
+        return this.reply(chatId, `⚠️ ${reason}，这条消息没有发给角色。恢复后请重新发送。`).then(() => undefined);
+      }
+      resolveResult({ kind: 'lost', reason });
+    };
     let idleTimer: NodeJS.Timeout | null = null;
     const idleMs = this.opts.turnIdleTimeoutMs ?? 10 * 60_000;
     const bump = (): void => {
@@ -936,11 +954,14 @@ export class Bot {
       try {
         await browser.ensureRunning();
       } catch (e) {
+        if (turn.abandonedReason) return;
         log.warn(`无头浏览器启动失败 gen=${gen}：${errMsg(e)}`);
         await this.reply(chatId, `❌ 无头浏览器启动失败：${errMsg(e)}\n可以发 /status 查看详情，修好后直接再发消息即可重试`);
         return;
       }
+      if (turn.abandonedReason) return;
       await this.ensureSession();
+      if (turn.abandonedReason) return;
       if (turn.cancelled) {
         log.info(`已取消 gen=${gen}（启动期间收到停止）`);
         await this.reply(chatId, '⏹️ 已取消，这条消息没有发给角色。');

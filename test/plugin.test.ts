@@ -216,6 +216,44 @@ describe('bootPlugin', () => {
     expect(log.lines.join('\n')).not.toContain(FAKE_TOKEN);
   });
 
+  it('重启后从上次处理到的位置继续拉取（offset 持久化，按 bot 区分），已处理的消息不会被再投递', async () => {
+    const offsets: Array<number | undefined> = [];
+    let polled = 0;
+    const mk = (id: number, batch: Array<{ update_id: number }>): FetchLike => async (url, init) => {
+      if (url.endsWith('/getMe')) return json({ ok: true, result: { id, username: 'testbot' } });
+      if (!url.endsWith('/getUpdates')) return json({ ok: true, result: true });
+      offsets.push(JSON.parse(String(init?.body ?? '{}')).offset);
+      if (polled++ === 0) return json({ ok: true, result: batch.map((u) => ({ ...u, message: { message_id: 1, chat: { id: 1, type: 'private' }, from: { id: 1 } } })) });
+      await wait(20);
+      return json({ ok: true, result: [] });
+    };
+    const first = await boot({ botToken: FAKE_TOKEN, allowedUserIds: [1] }, { env: {}, fetch: mk(123456789, [{ update_id: 40 }, { update_id: 41 }]) });
+    await first.shell.supervisor.whenSettled();
+    await until(() => expect(polled).toBeGreaterThanOrEqual(2));
+    await first.shell.stop();
+    expect(offsets).toEqual([undefined, 42]);
+    // 同一个 bot、同一个插件目录再启动：第一次拉取就带 offset 42
+    offsets.length = 0;
+    polled = 0;
+    const second = await bootPlugin({ router: express.Router(), pluginDir: first.dir, env: {}, log: captureLogger(), findChromium: () => ({ hint: 'x' }), deploy: async () => ({ ok: true, message: '' }), fetch: mk(123456789, []) });
+    shells.push(second);
+    await second.supervisor.whenSettled();
+    await until(() => expect(offsets.length).toBeGreaterThanOrEqual(1));
+    expect(offsets[0]).toBe(42);
+    await second.stop();
+    // 换成另一个 bot（token 里的 bot id 不同）：不沿用旧 offset
+    offsets.length = 0;
+    polled = 0;
+    const other = FAKE_TOKEN.replace('123456789', '987654321');
+    writeFileSync(join(first.dir, 'config.json'), JSON.stringify({ botToken: other, allowedUserIds: [1] }));
+    const third = await bootPlugin({ router: express.Router(), pluginDir: first.dir, env: {}, log: captureLogger(), findChromium: () => ({ hint: 'x' }), deploy: async () => ({ ok: true, message: '' }), fetch: mk(987654321, []) });
+    shells.push(third);
+    await third.supervisor.whenSettled();
+    await until(() => expect(offsets.length).toBeGreaterThanOrEqual(1));
+    expect(offsets[0]).toBeUndefined();
+    await third.stop();
+  });
+
   it('Telegram 不可达：不抛错，给出代理提示；面板状态里有原因且不含 token', async () => {
     const { shell, log } = await boot(
       { botToken: FAKE_TOKEN, allowedUserIds: [1] },

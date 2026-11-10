@@ -315,10 +315,16 @@ async function startRuntime(ctx: RuntimeContext, config: Config, warnings: Confi
     rt.bridge = attachBridge(rt, { launcher: opts.launcher, env });
 
     if (!offline) {
+      // 重启后从上次处理到的位置继续，避免已经转给 ST 的消息被 Telegram 再投递一遍。按 bot 区分，换 token 不沿用
+      const store = rt.bridge?.store;
+      const botId = config.botToken.split(':')[0];
+      const last = store?.lastUpdateId(botId);
       polling = pollUpdates({
         client: telegram,
         signal: abort.signal,
         log,
+        initialOffset: last === undefined ? undefined : last + 1,
+        onProcessed: (id) => store?.setLastUpdateId(botId, id),
         allowedUpdates: ['message', 'edited_message', 'callback_query', 'stopped_message_generation'],
         onUpdate: (u) => {
           // 每次实时读 allowedUserIds：面板保存后热生效
