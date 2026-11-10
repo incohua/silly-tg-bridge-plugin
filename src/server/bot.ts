@@ -44,6 +44,8 @@ export interface BotHost {
 
 export interface BotBrowser {
   ensureRunning(): Promise<void>;
+  /** 关闭浏览器（堆回收时用：先关再启动）。 */
+  stop(reason?: string): Promise<void>;
   acquire(): () => void;
   touch(): void;
   readonly state: BrowserState;
@@ -160,7 +162,7 @@ export function decodeMenuCallback(data: string | undefined): MenuAction | null 
 
 export const BUSY_TEXT = '⏳ 上一条消息还在生成回复，请等它完成后再发。这条消息没有发送给角色。';
 export const BUSY_COMMAND_TEXT = '⏳ 正在生成回复或切换中，请等它完成（或先 /stop）再执行这个命令。';
-export const RECYCLING_TEXT = '♻️ 正在重新加载无头页面以释放内存，几秒后继续处理你的消息…';
+export const RECYCLING_TEXT = '♻️ 正在重启无头浏览器以释放内存，稍等十几秒后继续处理你的消息…';
 export const COLD_START_TEXT = '🚀 正在启动无头浏览器，稍候…';
 export const NOTHING_TO_STOP_TEXT = 'ℹ️ 当前没有正在生成的回复。';
 export const NOTHING_TO_REGEN_TEXT = 'ℹ️ 没有可以重新生成的回复。只能重新生成 bot 在这里发出的上一条回复。';
@@ -463,18 +465,23 @@ export class Bot {
   }
 
   /**
-   * 堆回收：bot 空闲时重载无头页面，把 JS 堆清零，并恢复角色和聊天（HeapGuard 调用）。
-   * 期间 busy 为真；这段时间到达的消息由 waitForRecycle 挂起等待，页面恢复后照常处理。
-   * 页面没能重新连上时抛错（HeapGuard 只记 warn）。
+   * 堆回收：bot 空闲时重启无头浏览器，把 JS 堆和渲染进程的内存都清掉，并恢复角色和聊天（HeapGuard 调用）。
+   * 为什么不原地重载页面：重载时旧文档还没释放、新文档已经开始加载（重前端卡动辄上百 MB），峰值是两份叠加，
+   * 堆已经接近上限时这次重载本身就会把页面撑爆（Luker 实测：199/256 MB 时重载，8 秒后 Page crashed!）。
+   * 期间 busy 为真；这段时间到达的消息由 waitForRecycle 挂起等待，浏览器恢复后照常处理。
+   * 浏览器没能重新启动时抛错（HeapGuard 只记 warn）。
    */
   recyclePage(): Promise<void> {
     if (this.recycling) return this.recycling;
     if (this.busy) return Promise.reject(new Error('bot 正忙，不能回收页面'));
     const run = (async () => {
+      const { browser } = this.opts;
       this.op = 'recycle';
-      const release = this.opts.browser.acquire();
+      const release = browser.acquire();
       try {
-        if (!(await this.refreshHostPage())) throw new Error('重载页面失败或页面没有重新连上');
+        await browser.stop('堆回收');
+        await browser.ensureRunning();
+        await this.ensureSession(); // 浏览器重启后 startedAt 变了，会自动把角色和聊天恢复回来
       } finally {
         release();
         this.op = null;

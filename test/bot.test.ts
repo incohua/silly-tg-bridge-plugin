@@ -161,10 +161,19 @@ class FakeBrowser implements BotBrowser {
   leases = 0;
   ensureCalls = 0;
   ensureImpl: () => Promise<void> = async () => {};
+  stops: string[] = [];
+  /** 记录 stop 的顺序，供“先关再启动”的断言用 */
+  order: string[] = [];
   async ensureRunning() {
     this.ensureCalls++;
+    this.order.push('ensureRunning');
     await this.ensureImpl();
     this.state = 'running';
+  }
+  async stop(reason = 'manual') {
+    this.stops.push(reason);
+    this.order.push('stop');
+    this.state = 'stopped';
   }
   acquire() {
     this.leases++;
@@ -271,21 +280,39 @@ describe('Bot 路由', () => {
     expect(browser.ensureCalls).toBe(0);
   });
 
-  it('堆回收：空闲时重载页面并恢复会话；期间 busy，结束后释放浏览器租约', async () => {
+  it('堆回收：空闲时重启浏览器（先关再启动，不原地重载）并恢复会话；期间 busy，结束后释放浏览器租约', async () => {
     const ctx = setup();
     ctx.store.session = { characterAvatar: 'c5.png', chatId: 'E - 2' };
     ctx.browser.startedAt = 1;
+    const seen: string[] = [];
+    ctx.host.onRequest = async (cmd) => {
+      seen.push(cmd.type);
+      if (cmd.type === 'getStatus') return { characterAvatar: 'c5.png', chatId: 'E - 1' }; // 新浏览器回到别的聊天
+      return {};
+    };
+    ctx.browser.ensureImpl = async () => {
+      await wait(20);
+      ctx.browser.startedAt = 2; // 真实的 BrowserManager 每次启动都会换 startedAt，bot 据此恢复会话
+    };
     const p = ctx.bot.recyclePage();
     expect(ctx.bot.busy).toBe(true);
     expect(ctx.browser.leases).toBe(1);
     await p;
-    expect(ctx.host.requests.map((r) => r.type)).toContain('refreshPage');
+    expect(ctx.browser.stops).toEqual(['堆回收']);
+    expect(ctx.browser.order).toEqual(['stop', 'ensureRunning']);
+    // 不再用 refreshPage 原地重载：重载时新旧文档的内存叠加，堆接近上限时会把页面撑爆
+    expect(seen).not.toContain('refreshPage');
+    expect(ctx.host.requests.find((r) => r.type === 'openChat')).toEqual({ type: 'openChat', fileName: 'E - 2' });
     expect(ctx.bot.busy).toBe(false);
     expect(ctx.browser.leases).toBe(0);
   });
 
   it('堆回收期间发来的消息：先提示再等页面恢复，之后照常发给 ST，不按忙碌丢弃', async () => {
     const ctx = setup();
+    let restarts = 0;
+    ctx.browser.ensureImpl = async () => {
+      if (restarts++ === 0) await wait(60); // 回收的那次重启要一会儿
+    };
     const p = ctx.bot.recyclePage();
     await wait(5);
     const h = ctx.bot.handleUpdate(text('回收时发的消息'));
@@ -295,7 +322,8 @@ describe('Bot 路由', () => {
     expect(ctx.telegram.texts()).toEqual([RECYCLING_TEXT]);
     expect(ctx.telegram.texts()).not.toContain(BUSY_TEXT);
     const types = ctx.host.requests.map((r) => r.type);
-    expect(types.indexOf('refreshPage')).toBeLessThan(types.indexOf('send'));
+    expect(ctx.browser.order).toEqual(['stop', 'ensureRunning', 'ensureRunning']); // 回收的重启，然后这条消息的 ensureRunning
+    expect(types.indexOf('send')).toBeGreaterThan(-1);
     expect(ctx.host.requests.find((r) => r.type === 'send')).toMatchObject({ text: '回收时发的消息' });
     ctx.host.emit({ type: 'generationFailed', generationId: ctx.host.gen, reason: 'test' });
     await ctx.bot.idle();
@@ -304,6 +332,10 @@ describe('Bot 路由', () => {
   it('堆回收期间发来的命令（/regen 等）同样等待，不回复忙碌', async () => {
     const ctx = setup();
     ctx.store.replies.push({ telegramChatId: 7, telegramMessageIds: [1], stChatId: 'c', stMessageId: 3, sentAt: Date.now() });
+    let restarts = 0;
+    ctx.browser.ensureImpl = async () => {
+      if (restarts++ === 0) await wait(60);
+    };
     const p = ctx.bot.recyclePage();
     await wait(5);
     const h = ctx.bot.handleUpdate(text('/regen'));
@@ -322,15 +354,17 @@ describe('Bot 路由', () => {
     await ctx.bot.handleUpdate(text('你好'));
     await wait(5);
     await expect(ctx.bot.recyclePage()).rejects.toThrow(/正忙/);
-    expect(ctx.host.requests.some((r) => r.type === 'refreshPage')).toBe(false);
+    expect(ctx.browser.stops).toEqual([]);
     ctx.host.emit({ type: 'generationFailed', generationId: ctx.host.gen, reason: 'test' });
     await ctx.bot.idle();
   });
 
-  it('堆回收：页面没能重新连上时抛错，并且恢复到空闲、释放租约', async () => {
-    const ctx = setup({ hostReloadTimeoutMs: 300 });
-    ctx.host.reloadsOnRefresh = false;
-    await expect(ctx.bot.recyclePage()).rejects.toThrow();
+  it('堆回收：浏览器没能重新启动时抛错，并且恢复到空闲、释放租约', async () => {
+    const ctx = setup();
+    ctx.browser.ensureImpl = async () => {
+      throw new Error('启动失败');
+    };
+    await expect(ctx.bot.recyclePage()).rejects.toThrow(/启动失败/);
     expect(ctx.bot.busy).toBe(false);
     expect(ctx.browser.leases).toBe(0);
   });

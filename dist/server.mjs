@@ -89069,7 +89069,7 @@ function decodeMenuCallback(data) {
 }
 var BUSY_TEXT = "\u23F3 \u4E0A\u4E00\u6761\u6D88\u606F\u8FD8\u5728\u751F\u6210\u56DE\u590D\uFF0C\u8BF7\u7B49\u5B83\u5B8C\u6210\u540E\u518D\u53D1\u3002\u8FD9\u6761\u6D88\u606F\u6CA1\u6709\u53D1\u9001\u7ED9\u89D2\u8272\u3002";
 var BUSY_COMMAND_TEXT = "\u23F3 \u6B63\u5728\u751F\u6210\u56DE\u590D\u6216\u5207\u6362\u4E2D\uFF0C\u8BF7\u7B49\u5B83\u5B8C\u6210\uFF08\u6216\u5148 /stop\uFF09\u518D\u6267\u884C\u8FD9\u4E2A\u547D\u4EE4\u3002";
-var RECYCLING_TEXT = "\u267B\uFE0F \u6B63\u5728\u91CD\u65B0\u52A0\u8F7D\u65E0\u5934\u9875\u9762\u4EE5\u91CA\u653E\u5185\u5B58\uFF0C\u51E0\u79D2\u540E\u7EE7\u7EED\u5904\u7406\u4F60\u7684\u6D88\u606F\u2026";
+var RECYCLING_TEXT = "\u267B\uFE0F \u6B63\u5728\u91CD\u542F\u65E0\u5934\u6D4F\u89C8\u5668\u4EE5\u91CA\u653E\u5185\u5B58\uFF0C\u7A0D\u7B49\u5341\u51E0\u79D2\u540E\u7EE7\u7EED\u5904\u7406\u4F60\u7684\u6D88\u606F\u2026";
 var COLD_START_TEXT = "\u{1F680} \u6B63\u5728\u542F\u52A8\u65E0\u5934\u6D4F\u89C8\u5668\uFF0C\u7A0D\u5019\u2026";
 var NOTHING_TO_STOP_TEXT = "\u2139\uFE0F \u5F53\u524D\u6CA1\u6709\u6B63\u5728\u751F\u6210\u7684\u56DE\u590D\u3002";
 var NOTHING_TO_REGEN_TEXT = "\u2139\uFE0F \u6CA1\u6709\u53EF\u4EE5\u91CD\u65B0\u751F\u6210\u7684\u56DE\u590D\u3002\u53EA\u80FD\u91CD\u65B0\u751F\u6210 bot \u5728\u8FD9\u91CC\u53D1\u51FA\u7684\u4E0A\u4E00\u6761\u56DE\u590D\u3002";
@@ -89321,18 +89321,23 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
     return false;
   }
   /**
-   * 堆回收：bot 空闲时重载无头页面，把 JS 堆清零，并恢复角色和聊天（HeapGuard 调用）。
-   * 期间 busy 为真；这段时间到达的消息由 waitForRecycle 挂起等待，页面恢复后照常处理。
-   * 页面没能重新连上时抛错（HeapGuard 只记 warn）。
+   * 堆回收：bot 空闲时重启无头浏览器，把 JS 堆和渲染进程的内存都清掉，并恢复角色和聊天（HeapGuard 调用）。
+   * 为什么不原地重载页面：重载时旧文档还没释放、新文档已经开始加载（重前端卡动辄上百 MB），峰值是两份叠加，
+   * 堆已经接近上限时这次重载本身就会把页面撑爆（Luker 实测：199/256 MB 时重载，8 秒后 Page crashed!）。
+   * 期间 busy 为真；这段时间到达的消息由 waitForRecycle 挂起等待，浏览器恢复后照常处理。
+   * 浏览器没能重新启动时抛错（HeapGuard 只记 warn）。
    */
   recyclePage() {
     if (this.recycling) return this.recycling;
     if (this.busy) return Promise.reject(new Error("bot \u6B63\u5FD9\uFF0C\u4E0D\u80FD\u56DE\u6536\u9875\u9762"));
     const run = (async () => {
+      const { browser } = this.opts;
       this.op = "recycle";
-      const release = this.opts.browser.acquire();
+      const release = browser.acquire();
       try {
-        if (!await this.refreshHostPage()) throw new Error("\u91CD\u8F7D\u9875\u9762\u5931\u8D25\u6216\u9875\u9762\u6CA1\u6709\u91CD\u65B0\u8FDE\u4E0A");
+        await browser.stop("\u5806\u56DE\u6536");
+        await browser.ensureRunning();
+        await this.ensureSession();
       } finally {
         release();
         this.op = null;
