@@ -22,6 +22,7 @@ import type { PluginStatus } from './plugin';
 import type { CallOptions, TelegramCallbackQuery, TelegramMessage, TelegramUpdate } from './telegram';
 import { TelegramApiError } from './telegram';
 import { decodeSettingsCallback, nextValue, SETTING_DEFS, settingsKeyboard, settingsText, type BotSettings } from './bot-settings';
+import { meter, renderStatusHtml, renderStatusPlain, type StatusIssue, type StatusRow, type StatusView } from './status-view';
 import { streamPreview } from './text';
 import type { DialogueStyle } from '../shared/rich-html';
 
@@ -146,13 +147,19 @@ export const BOT_COMMANDS: ReadonlyArray<{ command: string; description: string 
 ];
 
 /** /menu 的按钮：callback_data 为 m|<动作>，动作对应同名命令。 */
-export const MENU_ACTIONS = ['chars', 'chats', 'preset', 'new', 'regen', 'status', 'settings'] as const;
+export const MENU_ACTIONS = ['chars', 'chats', 'preset', 'new', 'regen', 'status', 'settings', 'menu'] as const;
 export type MenuAction = (typeof MENU_ACTIONS)[number];
-const MENU_LABELS: Record<MenuAction, string> = { chars: '🎭 角色', chats: '💬 聊天', preset: '🎛️ 预设', new: '✨ 新建聊天', regen: '🔄 重新生成', status: '📊 状态', settings: '⚙️ 设置' };
+const MENU_LABELS: Record<MenuAction, string> = { chars: '🎭 角色', chats: '💬 聊天', preset: '🎛️ 预设', new: '✨ 新建聊天', regen: '🔄 重新生成', status: '📊 状态', settings: '⚙️ 设置', menu: '📋 菜单' };
 
 export function menuKeyboard(): Array<Array<{ text: string; callback_data: string }>> {
   const btn = (a: MenuAction) => ({ text: MENU_LABELS[a], callback_data: `m|${a}` });
   return [[btn('chars'), btn('chats'), btn('preset')], [btn('new'), btn('regen'), btn('status')], [btn('settings')]];
+}
+
+/** /status 消息下面的按钮：刷新（原地更新这条消息）、主菜单。 */
+export const STATUS_REFRESH_CALLBACK = 's|refresh';
+export function statusKeyboard(): Array<Array<{ text: string; callback_data: string }>> {
+  return [[{ text: '🔄 刷新', callback_data: STATUS_REFRESH_CALLBACK }, { text: MENU_LABELS.menu, callback_data: 'm|menu' }]];
 }
 
 export function decodeMenuCallback(data: string | undefined): MenuAction | null {
@@ -316,7 +323,7 @@ export class Bot {
         await this.reply(chatId, HELP_TEXT);
         return;
       case 'status':
-        await this.reply(chatId, await this.statusText(chatId));
+        await this.sendStatus(chatId);
         return;
       case 'stop':
         return this.requestStop(chatId, 'command');
@@ -631,6 +638,11 @@ export class Bot {
       await this.handleCommand(q.message?.chat.id ?? q.from.id, menu);
       return;
     }
+    if (q.data === STATUS_REFRESH_CALLBACK) {
+      await answer();
+      await this.refreshStatus(q);
+      return;
+    }
     const settingIndex = decodeSettingsCallback(q.data);
     if (settingIndex !== null) {
       await this.handleSettingsTap(q, settingIndex, answer);
@@ -758,56 +770,112 @@ export class Bot {
 
   // ───────────── 状态 ─────────────
 
-  async statusText(chatId?: number): Promise<string> {
+  /** 发 /status：HTML 排版，发送失败（例如解析出错）时退回纯文本。 */
+  private async sendStatus(chatId: number): Promise<void> {
+    const view = await this.statusView(chatId);
+    const extra = { reply_markup: { inline_keyboard: statusKeyboard() } };
+    try {
+      await this.opts.telegram.sendMessage({ chat_id: chatId, text: renderStatusHtml(view), parse_mode: 'HTML', ...extra });
+    } catch (e) {
+      this.opts.log.warn(`/status 以 HTML 发送失败，改用纯文本：${errMsg(e)}`);
+      await this.reply(chatId, renderStatusPlain(view), extra);
+    }
+  }
+
+  /** 状态消息上的「刷新」：原地更新那条消息。内容没变时 Telegram 会报 message is not modified，忽略即可。 */
+  private async refreshStatus(q: TelegramCallbackQuery): Promise<void> {
+    if (!q.message) return;
+    const chatId = q.message.chat.id;
+    const view = await this.statusView(chatId);
+    await this.opts.telegram
+      .editMessageText({ chat_id: chatId, message_id: q.message.message_id, text: renderStatusHtml(view), parse_mode: 'HTML', reply_markup: { inline_keyboard: statusKeyboard() } })
+      .catch((e) => this.opts.log.debug(`刷新状态消息失败：${errMsg(e)}`));
+  }
+
+  /** 收集 /status 要显示的数据。不唤醒浏览器：页面没连上就只显示连接和运行两组。 */
+  async statusView(chatId?: number): Promise<StatusView> {
     const { status, browser, host } = this.opts;
-    const lines = ['📊 silly-tg 状态'];
-    lines.push(`${status.telegram === 'ok' ? '🟢' : status.telegram === 'error' ? '🔴' : '⚪'} Telegram：${status.telegram === 'ok' ? `已连接${status.botUsername ? ` @${status.botUsername}` : ''}` : status.telegram === 'error' ? '连接失败' : '未连接（离线模式）'}`);
-    lines.push(`🌐 Telegram 代理：${status.proxy.description}`);
-    if (!status.chromium.path) lines.push('🔴 Chromium：未找到 Chrome/Chromium');
-    else {
-      const up = browser.startedAt ? `，已运行 ${Math.max(0, Math.round((this.now() - browser.startedAt) / 60_000))} 分钟` : '';
-      const s: Record<BrowserState, string> = {
-        running: `运行中${browser.pid ? `（PID ${browser.pid}${up}）` : ''}`,
-        starting: '启动中',
-        stopping: '正在关闭',
-        stopped: browser.lastError ? `已关闭，上次启动失败：${browser.lastError}` : '已关闭（收到消息时自动启动）',
-      };
-      lines.push(`${browser.state === 'running' ? '🟢' : browser.state === 'stopped' && browser.lastError ? '🔴' : browser.state === 'stopped' ? '⚪' : '🟡'} Chromium：${s[browser.state]}`);
-    }
-    const idle = this.opts.idleShutdownMinutes ?? 0;
-    lines.push(`💤 空闲关闭：${idle > 0 ? `空闲 ${idle} 分钟后关闭` : '未启用'}`);
-    const wd = this.opts.watchdogStatus?.();
-    if (wd) lines.push(`🐕 看门狗：${wd}`);
-    const heap = this.opts.heapStatus?.();
-    if (heap && (heap.usedMB !== undefined || heap.recycled > 0 || heap.suspended)) {
-      const used = heap.usedMB === undefined ? '' : heap.limitMB === undefined ? `${Math.round(heap.usedMB)} MB` : `${Math.round(heap.usedMB)} / ${heap.limitMB} MB`;
-      const limit = heap.limitMB === undefined ? '' : `上限 ${heap.limitMB} MB`;
-      lines.push(`🧠 页面 JS 堆：${used || limit || '暂无数据'}；因堆回收重载 ${heap.recycled} 次${heap.suspended ? '（回收后用量立即回升，已停止自动回收）' : ''}`);
-    }
+    const issues: StatusIssue[] = [];
+    const chat: StatusRow[] = [];
+    const conn: StatusRow[] = [];
+    const run: StatusRow[] = [];
+
+    if (status.telegram === 'ok') conn.push({ label: 'TG', mark: 'ok', value: status.botUsername ? `@${status.botUsername}` : '已连接' });
+    else if (status.telegram === 'error') {
+      conn.push({ label: 'TG', mark: 'bad', value: '连接失败' });
+      issues.push({ level: 'error', text: 'Telegram 连接失败' });
+    } else conn.push({ label: 'TG', mark: 'off', value: '离线模式' });
+    conn.push({ label: '代理', value: status.proxy.description });
+
     if (host.connected && host.hello) {
-      lines.push(`🟢 ST 页面：已连接（${host.hello.stVersion}，酒馆助手${host.hello.hasTavernHelper ? '已加载' : '未加载'}）`);
+      conn.push({ label: 'ST', mark: 'ok', value: `${host.hello.stVersion} · 酒馆助手 ${host.hello.hasTavernHelper ? '✓' : '✗'}` });
       try {
         const st = await host.request<HostStatus>({ type: 'getStatus' }, 5000);
-        lines.push(`🎭 当前角色：${st.characterName ?? '未选择'}`);
-        lines.push(`💬 当前聊天：${st.chatId ?? '无'}${st.messageCount !== undefined ? `（${st.messageCount} 条消息）` : ''}`);
-        if (st.presetName) lines.push(`🎛️ 预设：${st.presetName}`);
-        lines.push(`${st.onlineStatus && st.onlineStatus !== 'no_connection' ? '🟢' : '🔴'} API：${st.mainApi ?? '未知'}（${st.onlineStatus && st.onlineStatus !== 'no_connection' ? '已连接' : '未连接'}）`);
-        if (st.generating) lines.push('✍️ 正在生成回复');
-        if (st.formDuplicates?.length) lines.push(`⚠️ 警告：ST 角色编辑表单有重复字段（${st.formDuplicates.slice(0, 6).join('、')}），/chats 和 /new 已暂停，重启 ST 可恢复`);
+        const online = !!st.onlineStatus && st.onlineStatus !== 'no_connection';
+        chat.push({ label: '角色', value: st.characterName ?? '未选择' });
+        chat.push({ label: '聊天', value: st.chatId ?? '无' });
+        const msg = [st.messageCount !== undefined ? `${st.messageCount} 条` : '', chatId !== undefined && this.opts.store.lastReply(chatId) ? '可重新生成' : ''].filter(Boolean);
+        if (msg.length) chat.push({ label: '消息', value: msg.join(' · ') });
+        if (st.presetName) chat.push({ label: '预设', value: st.presetName });
+        chat.push({ label: 'API', mark: online ? 'ok' : 'bad', value: st.mainApi ?? '未知' });
+        if (st.generating) chat.push({ label: '状态', mark: 'busy', value: '正在生成回复' });
+        if (!online) issues.push({ level: 'error', text: `API 未连接（${st.mainApi ?? '未知'}），检查 ST 的 API 设置` });
+        if (st.formDuplicates?.length) issues.push({ level: 'error', text: `ST 角色编辑表单有重复字段（${st.formDuplicates.slice(0, 6).join('、')}），/chats 和 /new 已暂停，重启 ST 可恢复` });
       } catch (e) {
-        lines.push(`🔴 读取 ST 状态失败：${explainError(e)}`);
+        issues.push({ level: 'error', text: `读取 ST 状态失败：${explainError(e)}` });
       }
     } else {
-      lines.push('⚪ ST 页面：未连接（发条消息会自动启动）');
+      conn.push({ label: 'ST', mark: 'off', value: '未连接，发消息时自动启动' });
     }
-    if (chatId !== undefined) lines.push(`🔄 可重新生成上一条：${this.opts.store.lastReply(chatId) ? '是' : '否'}`);
-    const failed = status.hostChecks.filter((c) => !c.ok);
+
+    if (!status.chromium.path) {
+      run.push({ label: '浏览器', mark: 'bad', value: '未找到 Chrome/Chromium' });
+      issues.push({ level: 'error', text: '未找到 Chrome/Chromium' });
+    } else if (browser.state === 'running') {
+      const up = browser.startedAt ? `${Math.max(0, Math.round((this.now() - browser.startedAt) / 60_000))} 分钟` : '运行中';
+      run.push({ label: '浏览器', mark: 'ok', value: `${up}${browser.pid ? ` · PID ${browser.pid}` : ''}` });
+    } else if (browser.state === 'stopped') {
+      if (browser.lastError) {
+        run.push({ label: '浏览器', mark: 'bad', value: '启动失败' });
+        issues.push({ level: 'error', text: `浏览器启动失败：${browser.lastError}` });
+      } else run.push({ label: '浏览器', mark: 'off', value: '已关闭，收到消息时自动启动' });
+    } else {
+      run.push({ label: '浏览器', mark: 'busy', value: browser.state === 'starting' ? '启动中' : '正在关闭' });
+    }
+
+    const heap = this.opts.heapStatus?.();
+    if (heap && (heap.usedMB !== undefined || heap.recycled > 0 || heap.suspended)) {
+      const used = heap.usedMB === undefined ? undefined : Math.round(heap.usedMB);
+      const parts = [
+        used === undefined ? (heap.limitMB === undefined ? '暂无数据' : `上限 ${heap.limitMB} MB`) : heap.limitMB === undefined ? `${used} MB` : `${meter(used, heap.limitMB)} ${used}/${heap.limitMB} MB`,
+      ];
+      if (heap.recycled > 0) parts.push(`回收 ${heap.recycled} 次`);
+      run.push({ label: '内存', value: parts.join(' · ') });
+      if (heap.suspended) issues.push({ level: 'warn', text: '内存回收后用量立即回升，已停止自动回收' });
+      else if (used !== undefined && heap.limitMB !== undefined && used >= heap.limitMB * 0.85) issues.push({ level: 'warn', text: `内存 ${used}/${heap.limitMB} MB，接近上限` });
+    }
+    const wd = this.opts.watchdogStatus?.();
+    if (wd) {
+      run.push({ label: '看门狗', value: wd });
+      if (!wd.startsWith('正常')) issues.push({ level: 'warn', text: `看门狗：${wd}` });
+    }
+    const idle = this.opts.idleShutdownMinutes ?? 0;
+    run.push({ label: '休眠', value: idle > 0 ? `空闲 ${idle} 分钟后关闭` : '未启用' });
     if (status.hostChecks.length > 0) {
-      lines.push(failed.length === 0 ? '✅ 页面自检：全部通过' : '🩺 页面自检：');
-      for (const c of failed) lines.push(`  ⚠️ ${c.name} 未通过：${c.detail ?? ''}`);
+      const failed = status.hostChecks.filter((c) => !c.ok);
+      run.push({ label: '自检', mark: failed.length ? 'bad' : 'ok', value: failed.length ? failed.map((c) => c.name).join('、') : '全部通过' });
+      for (const c of failed) issues.push({ level: 'warn', text: `自检 ${c.name} 未通过${c.detail ? `：${c.detail}` : ''}` });
     }
-    if (status.lastHostError) lines.push(`🐞 最近页面错误：${status.lastHostError.slice(0, 300)}`);
-    return lines.join('\n');
+
+    return {
+      issues,
+      sections: [
+        { title: '🎭 聊天', rows: chat },
+        { title: '🔌 连接', rows: conn },
+        { title: '🖥 运行', rows: run },
+      ],
+      lastError: status.lastHostError?.slice(0, 300),
+    };
   }
 
   // ───────────── 生成 ─────────────

@@ -89030,6 +89030,61 @@ function decodeSettingsCallback(data) {
   return m && Number(m[1]) < SETTING_DEFS.length ? Number(m[1]) : null;
 }
 
+// src/server/status-view.ts
+var MARKS = { ok: "\u25CF", off: "\u25CB", busy: "\u25D0", bad: "\u2717" };
+var LABEL_WIDTH = 8;
+function escapeHtml(s) {
+  return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+}
+function displayWidth(s) {
+  let w2 = 0;
+  for (const ch of s) {
+    const c = ch.codePointAt(0) ?? 0;
+    w2 += c >= 4352 && c <= 4447 || c >= 11904 && c <= 42191 || c >= 44032 && c <= 55203 || c >= 63744 && c <= 64255 || c >= 65072 && c <= 65103 || c >= 65280 && c <= 65376 || c >= 65504 && c <= 65510 ? 2 : 1;
+  }
+  return w2;
+}
+function meter(used, limit, cells = 9) {
+  const filled = limit > 0 ? Math.min(cells, Math.max(0, Math.round(used / limit * cells))) : 0;
+  return `[${"\u2588".repeat(filled)}${"\u2591".repeat(cells - filled)}]`;
+}
+function rowText(r) {
+  const pad = " ".repeat(Math.max(1, LABEL_WIDTH - displayWidth(r.label)));
+  return `${r.label}${pad}${r.mark ? `${MARKS[r.mark]} ` : ""}${r.value}`;
+}
+function statusHeadline(v2) {
+  return v2.issues.length === 0 ? "\u{1F4CA} silly-tg  \u2705" : `\u{1F4CA} silly-tg  \u26A0\uFE0F ${v2.issues.length}`;
+}
+function issueText(i) {
+  return `${i.level === "error" ? "\u{1F534}" : "\u{1F7E1}"} ${i.text}`;
+}
+function renderStatusHtml(v2) {
+  let html = `<b>${statusHeadline(v2)}</b>
+`;
+  if (v2.issues.length > 0) html += `
+${v2.issues.map((i) => escapeHtml(issueText(i))).join("\n")}
+`;
+  for (const s of v2.sections) {
+    if (s.rows.length === 0) continue;
+    html += `
+<b>${escapeHtml(s.title)}</b>
+<pre>${s.rows.map((r) => escapeHtml(rowText(r))).join("\n")}</pre>`;
+  }
+  if (v2.lastError) html += `
+\u{1F41E} <code>${escapeHtml(v2.lastError)}</code>`;
+  return html;
+}
+function renderStatusPlain(v2) {
+  const out = [statusHeadline(v2)];
+  if (v2.issues.length > 0) out.push("", ...v2.issues.map(issueText));
+  for (const s of v2.sections) {
+    if (s.rows.length === 0) continue;
+    out.push("", s.title, ...s.rows.map((r) => `  ${rowText(r)}`));
+  }
+  if (v2.lastError) out.push("", `\u{1F41E} ${v2.lastError}`);
+  return out.join("\n");
+}
+
 // src/server/bot.ts
 var HELP_TEXT = [
   "\u{1F44B} \u5728\u8FD9\u91CC\u548C SillyTavern \u91CC\u5F53\u524D\u6253\u5F00\u7684\u89D2\u8272\u804A\u5929\uFF0C\u76F4\u63A5\u53D1\u6587\u5B57\u5373\u53EF\u3002",
@@ -89057,11 +89112,15 @@ var BOT_COMMANDS = [
   { command: "status", description: "\u{1F4CA} \u67E5\u770B\u8FD0\u884C\u72B6\u6001" },
   { command: "help", description: "\u{1F4D6} \u663E\u793A\u547D\u4EE4\u8BF4\u660E" }
 ];
-var MENU_ACTIONS = ["chars", "chats", "preset", "new", "regen", "status", "settings"];
-var MENU_LABELS = { chars: "\u{1F3AD} \u89D2\u8272", chats: "\u{1F4AC} \u804A\u5929", preset: "\u{1F39B}\uFE0F \u9884\u8BBE", new: "\u2728 \u65B0\u5EFA\u804A\u5929", regen: "\u{1F504} \u91CD\u65B0\u751F\u6210", status: "\u{1F4CA} \u72B6\u6001", settings: "\u2699\uFE0F \u8BBE\u7F6E" };
+var MENU_ACTIONS = ["chars", "chats", "preset", "new", "regen", "status", "settings", "menu"];
+var MENU_LABELS = { chars: "\u{1F3AD} \u89D2\u8272", chats: "\u{1F4AC} \u804A\u5929", preset: "\u{1F39B}\uFE0F \u9884\u8BBE", new: "\u2728 \u65B0\u5EFA\u804A\u5929", regen: "\u{1F504} \u91CD\u65B0\u751F\u6210", status: "\u{1F4CA} \u72B6\u6001", settings: "\u2699\uFE0F \u8BBE\u7F6E", menu: "\u{1F4CB} \u83DC\u5355" };
 function menuKeyboard() {
   const btn = (a2) => ({ text: MENU_LABELS[a2], callback_data: `m|${a2}` });
   return [[btn("chars"), btn("chats"), btn("preset")], [btn("new"), btn("regen"), btn("status")], [btn("settings")]];
+}
+var STATUS_REFRESH_CALLBACK = "s|refresh";
+function statusKeyboard() {
+  return [[{ text: "\u{1F504} \u5237\u65B0", callback_data: STATUS_REFRESH_CALLBACK }, { text: MENU_LABELS.menu, callback_data: "m|menu" }]];
 }
 function decodeMenuCallback(data) {
   const m = /^m\|([a-z]+)$/.exec(data ?? "");
@@ -89180,7 +89239,7 @@ var Bot = class {
         await this.reply(chatId, HELP_TEXT);
         return;
       case "status":
-        await this.reply(chatId, await this.statusText(chatId));
+        await this.sendStatus(chatId);
         return;
       case "stop":
         return this.requestStop(chatId, "command");
@@ -89475,6 +89534,11 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
       await this.handleCommand(q2.message?.chat.id ?? q2.from.id, menu);
       return;
     }
+    if (q2.data === STATUS_REFRESH_CALLBACK) {
+      await answer();
+      await this.refreshStatus(q2);
+      return;
+    }
     const settingIndex = decodeSettingsCallback(q2.data);
     if (settingIndex !== null) {
       await this.handleSettingsTap(q2, settingIndex, answer);
@@ -89593,56 +89657,103 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
     }
   }
   // ───────────── 状态 ─────────────
-  async statusText(chatId) {
+  /** 发 /status：HTML 排版，发送失败（例如解析出错）时退回纯文本。 */
+  async sendStatus(chatId) {
+    const view = await this.statusView(chatId);
+    const extra = { reply_markup: { inline_keyboard: statusKeyboard() } };
+    try {
+      await this.opts.telegram.sendMessage({ chat_id: chatId, text: renderStatusHtml(view), parse_mode: "HTML", ...extra });
+    } catch (e) {
+      this.opts.log.warn(`/status \u4EE5 HTML \u53D1\u9001\u5931\u8D25\uFF0C\u6539\u7528\u7EAF\u6587\u672C\uFF1A${errMsg(e)}`);
+      await this.reply(chatId, renderStatusPlain(view), extra);
+    }
+  }
+  /** 状态消息上的「刷新」：原地更新那条消息。内容没变时 Telegram 会报 message is not modified，忽略即可。 */
+  async refreshStatus(q2) {
+    if (!q2.message) return;
+    const chatId = q2.message.chat.id;
+    const view = await this.statusView(chatId);
+    await this.opts.telegram.editMessageText({ chat_id: chatId, message_id: q2.message.message_id, text: renderStatusHtml(view), parse_mode: "HTML", reply_markup: { inline_keyboard: statusKeyboard() } }).catch((e) => this.opts.log.debug(`\u5237\u65B0\u72B6\u6001\u6D88\u606F\u5931\u8D25\uFF1A${errMsg(e)}`));
+  }
+  /** 收集 /status 要显示的数据。不唤醒浏览器：页面没连上就只显示连接和运行两组。 */
+  async statusView(chatId) {
     const { status, browser, host } = this.opts;
-    const lines = ["\u{1F4CA} silly-tg \u72B6\u6001"];
-    lines.push(`${status.telegram === "ok" ? "\u{1F7E2}" : status.telegram === "error" ? "\u{1F534}" : "\u26AA"} Telegram\uFF1A${status.telegram === "ok" ? `\u5DF2\u8FDE\u63A5${status.botUsername ? ` @${status.botUsername}` : ""}` : status.telegram === "error" ? "\u8FDE\u63A5\u5931\u8D25" : "\u672A\u8FDE\u63A5\uFF08\u79BB\u7EBF\u6A21\u5F0F\uFF09"}`);
-    lines.push(`\u{1F310} Telegram \u4EE3\u7406\uFF1A${status.proxy.description}`);
-    if (!status.chromium.path) lines.push("\u{1F534} Chromium\uFF1A\u672A\u627E\u5230 Chrome/Chromium");
-    else {
-      const up = browser.startedAt ? `\uFF0C\u5DF2\u8FD0\u884C ${Math.max(0, Math.round((this.now() - browser.startedAt) / 6e4))} \u5206\u949F` : "";
-      const s = {
-        running: `\u8FD0\u884C\u4E2D${browser.pid ? `\uFF08PID ${browser.pid}${up}\uFF09` : ""}`,
-        starting: "\u542F\u52A8\u4E2D",
-        stopping: "\u6B63\u5728\u5173\u95ED",
-        stopped: browser.lastError ? `\u5DF2\u5173\u95ED\uFF0C\u4E0A\u6B21\u542F\u52A8\u5931\u8D25\uFF1A${browser.lastError}` : "\u5DF2\u5173\u95ED\uFF08\u6536\u5230\u6D88\u606F\u65F6\u81EA\u52A8\u542F\u52A8\uFF09"
-      };
-      lines.push(`${browser.state === "running" ? "\u{1F7E2}" : browser.state === "stopped" && browser.lastError ? "\u{1F534}" : browser.state === "stopped" ? "\u26AA" : "\u{1F7E1}"} Chromium\uFF1A${s[browser.state]}`);
-    }
-    const idle = this.opts.idleShutdownMinutes ?? 0;
-    lines.push(`\u{1F4A4} \u7A7A\u95F2\u5173\u95ED\uFF1A${idle > 0 ? `\u7A7A\u95F2 ${idle} \u5206\u949F\u540E\u5173\u95ED` : "\u672A\u542F\u7528"}`);
-    const wd = this.opts.watchdogStatus?.();
-    if (wd) lines.push(`\u{1F415} \u770B\u95E8\u72D7\uFF1A${wd}`);
-    const heap = this.opts.heapStatus?.();
-    if (heap && (heap.usedMB !== void 0 || heap.recycled > 0 || heap.suspended)) {
-      const used = heap.usedMB === void 0 ? "" : heap.limitMB === void 0 ? `${Math.round(heap.usedMB)} MB` : `${Math.round(heap.usedMB)} / ${heap.limitMB} MB`;
-      const limit = heap.limitMB === void 0 ? "" : `\u4E0A\u9650 ${heap.limitMB} MB`;
-      lines.push(`\u{1F9E0} \u9875\u9762 JS \u5806\uFF1A${used || limit || "\u6682\u65E0\u6570\u636E"}\uFF1B\u56E0\u5806\u56DE\u6536\u91CD\u8F7D ${heap.recycled} \u6B21${heap.suspended ? "\uFF08\u56DE\u6536\u540E\u7528\u91CF\u7ACB\u5373\u56DE\u5347\uFF0C\u5DF2\u505C\u6B62\u81EA\u52A8\u56DE\u6536\uFF09" : ""}`);
-    }
+    const issues = [];
+    const chat = [];
+    const conn = [];
+    const run = [];
+    if (status.telegram === "ok") conn.push({ label: "TG", mark: "ok", value: status.botUsername ? `@${status.botUsername}` : "\u5DF2\u8FDE\u63A5" });
+    else if (status.telegram === "error") {
+      conn.push({ label: "TG", mark: "bad", value: "\u8FDE\u63A5\u5931\u8D25" });
+      issues.push({ level: "error", text: "Telegram \u8FDE\u63A5\u5931\u8D25" });
+    } else conn.push({ label: "TG", mark: "off", value: "\u79BB\u7EBF\u6A21\u5F0F" });
+    conn.push({ label: "\u4EE3\u7406", value: status.proxy.description });
     if (host.connected && host.hello) {
-      lines.push(`\u{1F7E2} ST \u9875\u9762\uFF1A\u5DF2\u8FDE\u63A5\uFF08${host.hello.stVersion}\uFF0C\u9152\u9986\u52A9\u624B${host.hello.hasTavernHelper ? "\u5DF2\u52A0\u8F7D" : "\u672A\u52A0\u8F7D"}\uFF09`);
+      conn.push({ label: "ST", mark: "ok", value: `${host.hello.stVersion} \xB7 \u9152\u9986\u52A9\u624B ${host.hello.hasTavernHelper ? "\u2713" : "\u2717"}` });
       try {
         const st = await host.request({ type: "getStatus" }, 5e3);
-        lines.push(`\u{1F3AD} \u5F53\u524D\u89D2\u8272\uFF1A${st.characterName ?? "\u672A\u9009\u62E9"}`);
-        lines.push(`\u{1F4AC} \u5F53\u524D\u804A\u5929\uFF1A${st.chatId ?? "\u65E0"}${st.messageCount !== void 0 ? `\uFF08${st.messageCount} \u6761\u6D88\u606F\uFF09` : ""}`);
-        if (st.presetName) lines.push(`\u{1F39B}\uFE0F \u9884\u8BBE\uFF1A${st.presetName}`);
-        lines.push(`${st.onlineStatus && st.onlineStatus !== "no_connection" ? "\u{1F7E2}" : "\u{1F534}"} API\uFF1A${st.mainApi ?? "\u672A\u77E5"}\uFF08${st.onlineStatus && st.onlineStatus !== "no_connection" ? "\u5DF2\u8FDE\u63A5" : "\u672A\u8FDE\u63A5"}\uFF09`);
-        if (st.generating) lines.push("\u270D\uFE0F \u6B63\u5728\u751F\u6210\u56DE\u590D");
-        if (st.formDuplicates?.length) lines.push(`\u26A0\uFE0F \u8B66\u544A\uFF1AST \u89D2\u8272\u7F16\u8F91\u8868\u5355\u6709\u91CD\u590D\u5B57\u6BB5\uFF08${st.formDuplicates.slice(0, 6).join("\u3001")}\uFF09\uFF0C/chats \u548C /new \u5DF2\u6682\u505C\uFF0C\u91CD\u542F ST \u53EF\u6062\u590D`);
+        const online = !!st.onlineStatus && st.onlineStatus !== "no_connection";
+        chat.push({ label: "\u89D2\u8272", value: st.characterName ?? "\u672A\u9009\u62E9" });
+        chat.push({ label: "\u804A\u5929", value: st.chatId ?? "\u65E0" });
+        const msg = [st.messageCount !== void 0 ? `${st.messageCount} \u6761` : "", chatId !== void 0 && this.opts.store.lastReply(chatId) ? "\u53EF\u91CD\u65B0\u751F\u6210" : ""].filter(Boolean);
+        if (msg.length) chat.push({ label: "\u6D88\u606F", value: msg.join(" \xB7 ") });
+        if (st.presetName) chat.push({ label: "\u9884\u8BBE", value: st.presetName });
+        chat.push({ label: "API", mark: online ? "ok" : "bad", value: st.mainApi ?? "\u672A\u77E5" });
+        if (st.generating) chat.push({ label: "\u72B6\u6001", mark: "busy", value: "\u6B63\u5728\u751F\u6210\u56DE\u590D" });
+        if (!online) issues.push({ level: "error", text: `API \u672A\u8FDE\u63A5\uFF08${st.mainApi ?? "\u672A\u77E5"}\uFF09\uFF0C\u68C0\u67E5 ST \u7684 API \u8BBE\u7F6E` });
+        if (st.formDuplicates?.length) issues.push({ level: "error", text: `ST \u89D2\u8272\u7F16\u8F91\u8868\u5355\u6709\u91CD\u590D\u5B57\u6BB5\uFF08${st.formDuplicates.slice(0, 6).join("\u3001")}\uFF09\uFF0C/chats \u548C /new \u5DF2\u6682\u505C\uFF0C\u91CD\u542F ST \u53EF\u6062\u590D` });
       } catch (e) {
-        lines.push(`\u{1F534} \u8BFB\u53D6 ST \u72B6\u6001\u5931\u8D25\uFF1A${explainError(e)}`);
+        issues.push({ level: "error", text: `\u8BFB\u53D6 ST \u72B6\u6001\u5931\u8D25\uFF1A${explainError(e)}` });
       }
     } else {
-      lines.push("\u26AA ST \u9875\u9762\uFF1A\u672A\u8FDE\u63A5\uFF08\u53D1\u6761\u6D88\u606F\u4F1A\u81EA\u52A8\u542F\u52A8\uFF09");
+      conn.push({ label: "ST", mark: "off", value: "\u672A\u8FDE\u63A5\uFF0C\u53D1\u6D88\u606F\u65F6\u81EA\u52A8\u542F\u52A8" });
     }
-    if (chatId !== void 0) lines.push(`\u{1F504} \u53EF\u91CD\u65B0\u751F\u6210\u4E0A\u4E00\u6761\uFF1A${this.opts.store.lastReply(chatId) ? "\u662F" : "\u5426"}`);
-    const failed = status.hostChecks.filter((c) => !c.ok);
+    if (!status.chromium.path) {
+      run.push({ label: "\u6D4F\u89C8\u5668", mark: "bad", value: "\u672A\u627E\u5230 Chrome/Chromium" });
+      issues.push({ level: "error", text: "\u672A\u627E\u5230 Chrome/Chromium" });
+    } else if (browser.state === "running") {
+      const up = browser.startedAt ? `${Math.max(0, Math.round((this.now() - browser.startedAt) / 6e4))} \u5206\u949F` : "\u8FD0\u884C\u4E2D";
+      run.push({ label: "\u6D4F\u89C8\u5668", mark: "ok", value: `${up}${browser.pid ? ` \xB7 PID ${browser.pid}` : ""}` });
+    } else if (browser.state === "stopped") {
+      if (browser.lastError) {
+        run.push({ label: "\u6D4F\u89C8\u5668", mark: "bad", value: "\u542F\u52A8\u5931\u8D25" });
+        issues.push({ level: "error", text: `\u6D4F\u89C8\u5668\u542F\u52A8\u5931\u8D25\uFF1A${browser.lastError}` });
+      } else run.push({ label: "\u6D4F\u89C8\u5668", mark: "off", value: "\u5DF2\u5173\u95ED\uFF0C\u6536\u5230\u6D88\u606F\u65F6\u81EA\u52A8\u542F\u52A8" });
+    } else {
+      run.push({ label: "\u6D4F\u89C8\u5668", mark: "busy", value: browser.state === "starting" ? "\u542F\u52A8\u4E2D" : "\u6B63\u5728\u5173\u95ED" });
+    }
+    const heap = this.opts.heapStatus?.();
+    if (heap && (heap.usedMB !== void 0 || heap.recycled > 0 || heap.suspended)) {
+      const used = heap.usedMB === void 0 ? void 0 : Math.round(heap.usedMB);
+      const parts = [
+        used === void 0 ? heap.limitMB === void 0 ? "\u6682\u65E0\u6570\u636E" : `\u4E0A\u9650 ${heap.limitMB} MB` : heap.limitMB === void 0 ? `${used} MB` : `${meter(used, heap.limitMB)} ${used}/${heap.limitMB} MB`
+      ];
+      if (heap.recycled > 0) parts.push(`\u56DE\u6536 ${heap.recycled} \u6B21`);
+      run.push({ label: "\u5185\u5B58", value: parts.join(" \xB7 ") });
+      if (heap.suspended) issues.push({ level: "warn", text: "\u5185\u5B58\u56DE\u6536\u540E\u7528\u91CF\u7ACB\u5373\u56DE\u5347\uFF0C\u5DF2\u505C\u6B62\u81EA\u52A8\u56DE\u6536" });
+      else if (used !== void 0 && heap.limitMB !== void 0 && used >= heap.limitMB * 0.85) issues.push({ level: "warn", text: `\u5185\u5B58 ${used}/${heap.limitMB} MB\uFF0C\u63A5\u8FD1\u4E0A\u9650` });
+    }
+    const wd = this.opts.watchdogStatus?.();
+    if (wd) {
+      run.push({ label: "\u770B\u95E8\u72D7", value: wd });
+      if (!wd.startsWith("\u6B63\u5E38")) issues.push({ level: "warn", text: `\u770B\u95E8\u72D7\uFF1A${wd}` });
+    }
+    const idle = this.opts.idleShutdownMinutes ?? 0;
+    run.push({ label: "\u4F11\u7720", value: idle > 0 ? `\u7A7A\u95F2 ${idle} \u5206\u949F\u540E\u5173\u95ED` : "\u672A\u542F\u7528" });
     if (status.hostChecks.length > 0) {
-      lines.push(failed.length === 0 ? "\u2705 \u9875\u9762\u81EA\u68C0\uFF1A\u5168\u90E8\u901A\u8FC7" : "\u{1FA7A} \u9875\u9762\u81EA\u68C0\uFF1A");
-      for (const c of failed) lines.push(`  \u26A0\uFE0F ${c.name} \u672A\u901A\u8FC7\uFF1A${c.detail ?? ""}`);
+      const failed = status.hostChecks.filter((c) => !c.ok);
+      run.push({ label: "\u81EA\u68C0", mark: failed.length ? "bad" : "ok", value: failed.length ? failed.map((c) => c.name).join("\u3001") : "\u5168\u90E8\u901A\u8FC7" });
+      for (const c of failed) issues.push({ level: "warn", text: `\u81EA\u68C0 ${c.name} \u672A\u901A\u8FC7${c.detail ? `\uFF1A${c.detail}` : ""}` });
     }
-    if (status.lastHostError) lines.push(`\u{1F41E} \u6700\u8FD1\u9875\u9762\u9519\u8BEF\uFF1A${status.lastHostError.slice(0, 300)}`);
-    return lines.join("\n");
+    return {
+      issues,
+      sections: [
+        { title: "\u{1F3AD} \u804A\u5929", rows: chat },
+        { title: "\u{1F50C} \u8FDE\u63A5", rows: conn },
+        { title: "\u{1F5A5} \u8FD0\u884C", rows: run }
+      ],
+      lastError: status.lastHostError?.slice(0, 300)
+    };
   }
   // ───────────── 生成 ─────────────
   startTurn(chatId, request3) {

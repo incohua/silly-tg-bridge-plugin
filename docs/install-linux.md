@@ -19,7 +19,7 @@
 
 - SillyTavern 1.19 及以上，Node.js 20 及以上。Debian 13 的 apt 自带 Node 20.19，直接 `apt install nodejs npm` 就够；Debian 12、Ubuntu 的 apt 版本可能低于 20（先看 `apt-cache policy nodejs`），这时用 [nvm](https://github.com/nvm-sh/nvm) 或 NodeSource 安装。装完 `node -v` 确认。
 - 已有 Telegram bot 的 token 和你自己的数字 ID（见 [README 前提条件](../README.md#前提条件)）。
-- 约 1 GB 可用内存（2 GB 的机器建议保持 `lowMemory: true` 并设置 `idleShutdownMinutes`）。`lowMemory: true` 会把无头页面的 JS 内存限制在 `pageHeapLimitMB`（默认 256 MB），页面长时间运行会涨到上限，插件会在 bot 空闲时自动重载页面回收；内存充裕时可以调大它（例如 512）（见 [README 使用提醒](../README.md#使用提醒)第 5 条）。
+- 约 1 GB 可用内存（2 GB 的机器建议保持 `lowMemory: true` 并设置 `idleShutdownMinutes`）。`lowMemory: true` 会把无头页面的 JS 内存限制在 `pageHeapLimitMB`（默认 512 MB），页面长时间运行会涨到上限，插件会在 bot 空闲时自动重启浏览器回收；可用内存不到 1.5 GB 时建议调小（例如 256）（见 [README 使用提醒](../README.md#使用提醒)第 5 条）。
 
 没有 ST 的话先装一份，并**用普通用户而不是 root 运行**：
 
@@ -75,7 +75,7 @@ git clone https://github.com/incohua/silly-tg-bridge-plugin plugins/silly-tg-bri
 3. 填写配置，二选一：
    - 通过 SSH 隧道（见[首次配置 API](#首次配置-api用-ssh-隧道)）在电脑浏览器里打开 ST，在“扩展”设置栏的 Silly TG 里填 Bot Token 和允许的用户 ID，保存。**保存后自动连接，不需要重启 ST。**
    - 或者在第 2 步之前复制 `plugins/silly-tg-bridge-plugin/config.example.json` 为 `plugins/silly-tg-bridge-plugin/config.json`，至少填 `botToken` 和 `allowedUserIds`，启动时就直接连接。
-4. 日志里应出现 `Telegram 已连接，bot：@...`。给 bot 发 `/status`，应看到 Chromium、ST 页面都正常。再发 `/chars` 选角色。
+4. 日志里应出现 `Telegram 已连接，bot：@...`。给 bot 发 `/status`，应看到“运行”里的浏览器和“连接”里的 ST 都是 ●。再发 `/chars` 选角色。
 
 ST 默认只监听 `127.0.0.1`，无头 Chromium 也访问这个地址，不需要改任何网络设置。
 

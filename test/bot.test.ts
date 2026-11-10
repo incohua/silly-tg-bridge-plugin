@@ -268,15 +268,19 @@ describe('Bot 路由', () => {
       { name: 'mvu', ok: false, detail: '没有 MVU' },
     ];
     await bot.handleUpdate(text('/status'));
+    const [sent] = telegram.of('sendMessage');
+    expect(sent.params.parse_mode).toBe('HTML');
+    expect(sent.params.reply_markup).toEqual({ inline_keyboard: [[{ text: '🔄 刷新', callback_data: 's|refresh' }, { text: '📋 菜单', callback_data: 'm|menu' }]] });
     const out = telegram.texts()[0];
-    expect(out).toMatch(/Telegram：已连接 @testbot/);
-    expect(out).toMatch(/Chromium：运行中（PID 4242，已运行 \d+ 分钟）/);
-    expect(out).toMatch(/空闲关闭：未启用/);
-    expect(out).toMatch(/可重新生成上一条：否/);
-    expect(out).toMatch(/ST 页面：已连接（st 1\.19\.0，酒馆助手已加载）/);
-    expect(out).toMatch(/当前角色：Seraphina/);
-    expect(out).toMatch(/API：openai（已连接）/);
-    expect(out).toMatch(/mvu 未通过：没有 MVU/);
+    expect(out).toMatch(/^<b>📊 silly-tg {2}⚠️ 1<\/b>/);
+    expect(out).toMatch(/🟡 自检 mvu 未通过：没有 MVU/);
+    expect(out).toMatch(/<b>🎭 聊天<\/b>\n<pre>角色 {4}Seraphina\n聊天 {4}Seraphina - 2026\nAPI {5}● openai<\/pre>/);
+    expect(out).toMatch(/TG {6}● @testbot/);
+    expect(out).toMatch(/ST {6}● st 1\.19\.0 · 酒馆助手 ✓/);
+    expect(out).toMatch(/浏览器 {2}● \d+ 分钟 · PID 4242/);
+    expect(out).toMatch(/休眠 {4}未启用/);
+    expect(out).toMatch(/自检 {4}✗ mvu/);
+    expect(out).not.toMatch(/可重新生成/);
     expect(browser.ensureCalls).toBe(0);
   });
 
@@ -373,20 +377,25 @@ describe('Bot 路由', () => {
     let heap: { usedMB?: number; limitMB: number; recycled: number; suspended: boolean } | undefined;
     const ctx = setup({ heapStatus: () => heap });
     await ctx.bot.handleUpdate(text('/status'));
-    expect(ctx.telegram.texts()[0]).not.toMatch(/页面 JS 堆/);
+    expect(ctx.telegram.texts()[0]).not.toMatch(/内存/);
     heap = { usedMB: 180.4, limitMB: 256, recycled: 2, suspended: false };
     await ctx.bot.handleUpdate(text('/status'));
-    expect(ctx.telegram.texts()[1]).toMatch(/页面 JS 堆：180 \/ 256 MB；因堆回收重载 2 次/);
+    expect(ctx.telegram.texts()[1]).toMatch(/内存 {4}\[██████░░░\] 180\/256 MB · 回收 2 次/);
+    expect(ctx.telegram.texts()[1]).not.toMatch(/接近上限/);
+    heap = { usedMB: 240, limitMB: 256, recycled: 0, suspended: false };
+    await ctx.bot.handleUpdate(text('/status'));
+    expect(ctx.telegram.texts()[2]).toMatch(/🟡 内存 240\/256 MB，接近上限/);
     heap = { limitMB: 256, recycled: 1, suspended: true };
     await ctx.bot.handleUpdate(text('/status'));
-    expect(ctx.telegram.texts()[2]).toMatch(/页面 JS 堆：上限 256 MB；因堆回收重载 1 次.*已停止自动回收/);
+    expect(ctx.telegram.texts()[3]).toMatch(/内存 {4}上限 256 MB · 回收 1 次/);
+    expect(ctx.telegram.texts()[3]).toMatch(/🟡 内存回收后用量立即回升，已停止自动回收/);
   });
 
   it('/status：显示 Telegram 代理的来源（配置 / 环境变量 / 无），不含凭据', async () => {
     const cases: Array<[PluginStatus['proxy'], RegExp]> = [
-      [{ source: 'config', description: '配置 telegramProxy（10.0.0.1:7890）' }, /Telegram 代理：配置 telegramProxy（10\.0\.0\.1:7890）/],
-      [{ source: 'env', description: '环境变量 HTTPS_PROXY（10.0.0.2:8080）' }, /Telegram 代理：环境变量 HTTPS_PROXY（10\.0\.0\.2:8080）/],
-      [{ source: 'none', description: '无（直连）' }, /Telegram 代理：无（直连）/],
+      [{ source: 'config', description: '配置 telegramProxy（10.0.0.1:7890）' }, /代理 {4}配置 telegramProxy（10\.0\.0\.1:7890）/],
+      [{ source: 'env', description: '环境变量 HTTPS_PROXY（10.0.0.2:8080）' }, /代理 {4}环境变量 HTTPS_PROXY（10\.0\.0\.2:8080）/],
+      [{ source: 'none', description: '无（直连）' }, /代理 {4}无（直连）/],
     ];
     for (const [proxy, re] of cases) {
       const { bot, telegram } = setup();
@@ -402,8 +411,51 @@ describe('Bot 路由', () => {
     browser.state = 'stopped';
     host.connected = false;
     await bot.handleUpdate(text('/status'));
-    expect(telegram.texts()[0]).toMatch(/Chromium：已关闭（收到消息时自动启动）/);
-    expect(telegram.texts()[0]).toMatch(/ST 页面：未连接/);
+    const out = telegram.texts()[0];
+    expect(out).toMatch(/^<b>📊 silly-tg {2}✅<\/b>/);
+    expect(out).toMatch(/浏览器 {2}○ 已关闭，收到消息时自动启动/);
+    expect(out).toMatch(/ST {6}○ 未连接，发消息时自动启动/);
+    expect(out).not.toMatch(/🎭 聊天/);
+  });
+
+  it('/status：角色名、聊天名、页面错误做 HTML 转义；问题置顶', async () => {
+    const { bot, telegram, host } = setup();
+    host.onRequest = async () => ({ app: 'st', characterName: 'A<b>&', chatId: '<i>x', mainApi: 'openai', onlineStatus: 'no_connection', generating: true });
+    (bot as unknown as { opts: { status: PluginStatus } }).opts.status.lastHostError = 'Error: <script>';
+    await bot.handleUpdate(text('/status'));
+    const out = telegram.texts()[0];
+    expect(out).toMatch(/^<b>📊 silly-tg {2}⚠️ 1<\/b>\n\n🔴 API 未连接（openai），检查 ST 的 API 设置\n/);
+    expect(out).toMatch(/角色 {4}A&lt;b&gt;&amp;/);
+    expect(out).toMatch(/聊天 {4}&lt;i&gt;x/);
+    expect(out).toMatch(/API {5}✗ openai/);
+    expect(out).toMatch(/状态 {4}◐ 正在生成回复/);
+    expect(out).toMatch(/🐞 <code>Error: &lt;script&gt;<\/code>$/);
+  });
+
+  it('/status：HTML 发送失败时改发纯文本', async () => {
+    const { bot, telegram } = setup();
+    telegram.plainErrors.push(new Error("Bad Request: can't parse entities"));
+    await bot.handleUpdate(text('/status'));
+    const [html, plain] = telegram.of('sendMessage');
+    expect(html.params.parse_mode).toBe('HTML');
+    expect(plain.params.parse_mode).toBeUndefined();
+    expect(plain.params.text).toMatch(/^📊 silly-tg/);
+    expect(plain.params.text).not.toMatch(/<pre>|<b>/);
+    expect(plain.params.text).toMatch(/\n🔌 连接\n {2}TG {6}● @testbot/);
+    expect(plain.params.reply_markup).toBeDefined();
+  });
+
+  it('/status 的刷新按钮原地更新消息，菜单按钮打开主菜单', async () => {
+    const { bot, telegram } = setup();
+    const tapStatus = (data: string) =>
+      bot.handleUpdate({ update_id: 900 + data.length, callback_query: { id: 'q', from: { id: 1 }, data, message: { message_id: 55, chat: { id: 7, type: 'private' } } } });
+    await tapStatus('s|refresh');
+    const [edit] = telegram.of('editMessageText');
+    expect(edit.params).toMatchObject({ chat_id: 7, message_id: 55, parse_mode: 'HTML' });
+    expect(edit.params.text).toMatch(/^<b>📊 silly-tg/);
+    expect(telegram.of('sendMessage')).toHaveLength(0);
+    await tapStatus('m|menu');
+    expect(telegram.texts().at(-1)).toMatch(/^📋 主菜单/);
   });
 });
 
@@ -1193,7 +1245,7 @@ describe('/preset 与开场白', () => {
     const ctx = setup();
     ctx.host.onRequest = async () => ({ app: 'st', characterName: 'A', presetName: '破限 A', generating: false });
     await ctx.bot.handleUpdate(text('/status'));
-    expect(ctx.telegram.texts()[0]).toMatch(/预设：破限 A/);
+    expect(ctx.telegram.texts()[0]).toMatch(/预设 {4}破限 A/);
   });
 
   it('/new 后发送开场白，同一聊天只发一次', async () => {

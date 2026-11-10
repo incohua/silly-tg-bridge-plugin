@@ -74,7 +74,7 @@
 2. 打开 ST 根目录的 `config.yaml`，设置 `enableServerPlugins: true`。**必须开启：不开启时插件根本不会被加载，也不会有任何提示。** 如果文件里已经是 `true`（例如装过小白X 的后台），不用改。 不想改文件的话，也可以用环境变量启动：`SILLYTAVERN_ENABLESERVERPLUGINS=true node server.js`（ST 的配置项都能用 `SILLYTAVERN_<键名大写，点换下划线>` 覆盖；只对这次启动的进程有效，用 systemd 托管时写进 `Environment=`）。
 3. **重启 ST（整个流程只需要这一次）**，然后刷新页面。插件启动时会把 UI 扩展自动部署到 `public/scripts/extensions/third-party/silly-tg`；此时还没有 `config.json`，插件会在日志里写明“已待命”，不连接 Telegram。
 4. 在 ST 的“扩展”设置栏里找到“Silly TG”，填写 Bot Token 和允许的用户 ID，点保存。**保存后插件会立即连接 Telegram 并启动无头浏览器，不需要再重启 ST**，面板会显示连接结果；日志里应出现 `[silly-tg] Telegram 已连接，bot：@...`。（也可以在第 3 步重启之前，复制 `plugins/silly-tg-bridge-plugin/config.example.json` 为 `plugins/silly-tg-bridge-plugin/config.json` 并填好，启动时就直接连接。）
-5. 在 Telegram 里给你的 bot 发 `/status`，确认 Chromium、ST 页面和当前角色正常。
+5. 在 Telegram 里给你的 bot 发 `/status`，确认“连接”里的 ST 和“运行”里的浏览器都是 ●，“聊天”里是你要的角色。
 6. 首次使用先发 `/chars` 选择一个角色，再发文字。选过的角色和聊天会被记住，重启后自动恢复。
 
 部署 UI 扩展失败时日志会给出手动步骤：把 `plugins/silly-tg-bridge-plugin/dist/extension` 整个目录复制为 `public/scripts/extensions/third-party/silly-tg`，然后重启 ST。配置有误时，插件会在日志里说明要改哪个字段并保持待命，ST 本身照常启动；改好后在面板里保存即可恢复。
@@ -151,7 +151,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 | `basicAuth` | `null` | ST 开启了 basic auth 时填 `{"username": "...", "password": "..."}` |
 | `idleShutdownMinutes` | `0` | 空闲多少分钟后关闭 Chromium，收到消息时再自动启动。`0` 表示不关闭。生成进行中不会被关闭 |
 | `lowMemory` | `true` | 使用低内存 Chromium 参数，包括页面 JS 内存上限（空闲时会自动重载页面回收，见[使用提醒](#使用提醒)）；改动在下次启动 Chromium 时生效 |
-| `pageHeapLimitMB` | `256` | 低内存模式下无头页面的 JS 内存上限（MB），128–4096 的整数。空闲时用量达到它的 75% 就重载页面回收；内存充裕的机器可调大（例如 `512`）。面板里叫“页面内存上限”；改动在下次启动 Chromium 时生效 |
+| `pageHeapLimitMB` | `512` | 低内存模式下无头页面的 JS 内存上限（MB），128–4096 的整数。空闲时用量达到它的 75% 就重启无头浏览器回收；内存紧张的机器（不到 1.5 GB 可用）可调小（例如 `256`），前端很重的卡可调大。面板里叫“页面内存上限”；改动在下次启动 Chromium 时生效 |
 | `logLevel` | `info` | `debug` / `info` / `warn` / `error` |
 | `miniAppPort` | `8788` | Mini App 端口，当前版本未使用 |
 | `publicBaseUrl` | 空 | Mini App 的 HTTPS 地址，当前版本未使用 |
@@ -161,7 +161,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 国内等访问不了 Telegram 的网络，需要配置 `telegramProxy`，例如 `"http://127.0.0.1:7890"`。只支持 `http://` 和 `https://` 代理；代理软件如果只给了 socks 端口，请在软件里找它的 HTTP（混合）端口。
 
 `telegramProxy` 为空时，插件会读取环境变量 `HTTPS_PROXY`、`https_proxy`、`HTTP_PROXY`、`http_proxy`、`ALL_PROXY`、`all_proxy`（按此顺序取第一个非空值）和 `NO_PROXY`；两者都有时以 `telegramProxy` 为准。环境变量里写 socks 等协议会警告并直连。启动日志和 `/status` 会写明代理来源（配置 / 环境变量 / 无），不显示账号密码。注意无头 Chromium 也会继承这些环境变量，ST 地址不是本机时请用 `NO_PROXY` 排除。服务器上的写法见 [docs/install-linux.md](docs/install-linux.md#代理)。
-5. **低内存模式下无头页面的 JS 内存有上限（默认 256 MB），长时间运行会涨到上限。** `lowMemory: true`（默认）给无头浏览器加了 `--js-flags=--max-old-space-size=<pageHeapLimitMB>`，而无头页面的 JS 堆会随运行时间缓慢增长（有对话时更快，带酒馆助手 / MVU 的卡尤其明显）。插件每 15 秒读一次页面的 JS 堆用量，**在 bot 空闲时**（没有正在生成或切换）用量达到上限的 75% 后自动重启无头浏览器，并把角色和聊天恢复回来，所以一般不会撞上上限；正在生成时不会打断，两次回收至少间隔 5 分钟。回收期间发来的消息会先提示“正在重启无头浏览器”，等浏览器恢复（十几秒）后照常处理，不会丢。前端很重的卡一轮对话就可能让页面堆涨几十 MB，这种卡请把 `pageHeapLimitMB` 调到 512 或更大，否则回收会很频繁。内存充裕的机器可以在面板里（或 `config.json`）调大 `pageHeapLimitMB`（例如 512，下次启动浏览器时生效）：回收更少，但浏览器占用的内存更多；调大只是推迟、不能消除增长。如果刚回收完用量又立刻回到阈值以上（例如角色卡本身就很大），插件会停止自动回收并在日志里提示，这时请调大上限或把 `lowMemory` 改成 `false` 取消上限。`/status` 会显示页面 JS 堆用量和因回收重载的次数；日志里出现 `Page crashed!` 就是页面撞上了上限（看门狗会自动重启并通知你）。
+5. **低内存模式下无头页面的 JS 内存有上限（默认 512 MB），长时间运行会涨到上限。** `lowMemory: true`（默认）给无头浏览器加了 `--js-flags=--max-old-space-size=<pageHeapLimitMB>`，而无头页面的 JS 堆会随运行时间缓慢增长（有对话时更快，带酒馆助手 / MVU 的卡尤其明显）。插件每 15 秒读一次页面的 JS 堆用量，**在 bot 空闲时**（没有正在生成或切换）用量达到上限的 75% 后自动重启无头浏览器，并把角色和聊天恢复回来，所以一般不会撞上上限；正在生成时不会打断，两次回收至少间隔 5 分钟。回收期间发来的消息会先提示“正在重启无头浏览器”，等浏览器恢复（十几秒）后照常处理，不会丢。前端很重的卡一轮对话就可能让页面堆涨几十 MB，上限太小（256 MB 以下）时回收会很频繁，这也是默认值定为 512 的原因。可以在面板里（或 `config.json`）改 `pageHeapLimitMB`（下次启动浏览器时生效）：调大回收更少，但浏览器占用的内存更多，调大只是推迟、不能消除增长；可用内存不到 1.5 GB 的机器请调小（例如 256）。如果刚回收完用量又立刻回到阈值以上（例如角色卡本身就很大），插件会停止自动回收并在日志里提示，这时请调大上限或把 `lowMemory` 改成 `false` 取消上限。`/status` 的“内存”一行会显示页面 JS 堆用量和回收次数，接近上限时置顶提醒；日志里出现 `Page crashed!` 就是页面撞上了上限（看门狗会自动重启并通知你）。
 
 ## 已知限制
 
@@ -215,7 +215,7 @@ UI 扩展和服务端插件的版本应保持一致：版本不一致时服务�
 | 提示“请先发 /chars 选择角色” | 还没选过角色，发 `/chars` 选一个 |
 | bot 不回复 | 你的数字 ID 不在 `allowedUserIds` 里，或 token 不对 |
 | 第一次启动很久 | 全新的 ST 首次启动有欢迎弹窗，插件会自动点掉，需要等一会 |
-| 日志出现 `无头页面崩溃：Page crashed!` | 页面 JS 内存撞上了低内存模式的上限（默认 256 MB）。看门狗会自动重启并通知你；`/status` 里的“页面 JS 堆”能看到当前用量和已回收次数。正常情况下插件会在空闲时提前重载页面避免这种崩溃，仍然频繁出现时调大 `pageHeapLimitMB`（例如 512），或把 `lowMemory` 改成 `false`（需要更多内存），详见[使用提醒](#使用提醒)第 5 条 |
+| 日志出现 `无头页面崩溃：Page crashed!` | 页面 JS 内存撞上了低内存模式的上限（默认 512 MB）。看门狗会自动重启并通知你；`/status` 里的“内存”能看到当前用量和已回收次数。正常情况下插件会在空闲时提前重载页面避免这种崩溃，仍然频繁出现时调大 `pageHeapLimitMB`（例如 768），或把 `lowMemory` 改成 `false`（需要更多内存），详见[使用提醒](#使用提醒)第 5 条 |
 | 日志提示“回收后用量立即回到阈值，已停止自动回收” | 重载后页面内存马上又很高，多半是当前角色卡或聊天本身很大，重载解决不了。调大 `pageHeapLimitMB`，或把 `lowMemory` 改成 `false` 取消上限，或换更大内存的机器 |
 | 提示无头浏览器多次异常 | 看看日志里看门狗的原因，修复后再发一条消息即可重试 |
 
