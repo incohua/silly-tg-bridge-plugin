@@ -1209,10 +1209,12 @@
     };
     const hb = setInterval(() => report({ type: "heartbeat" }), HEARTBEAT_MS);
     cleanups.push(() => clearInterval(hb));
+    let checkSeq = 0;
     const runChecks = async () => {
+      const seq = ++checkSeq;
       const api = await queue.run(() => ensureApiConnected());
-      const mvu = await recheckUntilOk(mvuCheck, { retries: MVU_RECHECKS, delayMs: MVU_RECHECK_MS, keepGoing: () => alive });
-      if (alive) report({ type: "selfCheck", items: [csrf, tavernHelperCheck(), mvu, api] });
+      const mvu = await recheckUntilOk(mvuCheck, { retries: MVU_RECHECKS, delayMs: MVU_RECHECK_MS, keepGoing: () => alive && seq === checkSeq });
+      if (alive && seq === checkSeq) report({ type: "selfCheck", items: [csrf, tavernHelperCheck(), mvu, api] });
     };
     void runChecks();
     const c = ctx();

@@ -158,11 +158,14 @@ async function main(): Promise<void> {
   cleanups.push(() => clearInterval(hb));
 
   // 7. 自检：CSRF、酒馆助手、MVU、API 连接
+  // 复查要等几秒，期间可能又来一次（切换聊天）：只让最新一次上报，避免同一项重复、先后颠倒
+  let checkSeq = 0;
   const runChecks = async (): Promise<void> => {
+    const seq = ++checkSeq;
     const api = await queue.run(() => ensureApiConnected());
     // 页面刚打开时角色脚本还没跑完，Mvu 此刻未定义是常态：失败先复查几次（共约 12 秒），再决定报不报
-    const mvu = await recheckUntilOk(mvuCheck, { retries: MVU_RECHECKS, delayMs: MVU_RECHECK_MS, keepGoing: () => alive });
-    if (alive) report({ type: 'selfCheck', items: [csrf, tavernHelperCheck(), mvu, api] });
+    const mvu = await recheckUntilOk(mvuCheck, { retries: MVU_RECHECKS, delayMs: MVU_RECHECK_MS, keepGoing: () => alive && seq === checkSeq });
+    if (alive && seq === checkSeq) report({ type: 'selfCheck', items: [csrf, tavernHelperCheck(), mvu, api] });
   };
   void runChecks();
   // MVU 由角色脚本在聊天加载后异步初始化，切换聊天后稍等再查一次。
