@@ -175,7 +175,7 @@ export class BrowserManager {
     return this.stateValue === 'running' ? this.launchedHeapLimitMB : undefined;
   }
 
-  /** 当前页面 JS 堆已用字节数；浏览器没在运行、页面正在重载等取不到时返回 undefined。 */
+  /** 当前页面 JS 堆已用字节数；浏览器没在运行、页面正在加载等取不到时返回 undefined。 */
   async sampleHeapUsed(): Promise<number | undefined> {
     const page = this.pageRef;
     if (this.stateValue !== 'running' || !page) return undefined;
@@ -256,6 +256,7 @@ export class BrowserManager {
       // 打开页面（goto）可能还在进行：先把浏览器关掉，让启动立刻失败收尾
       const browser = this.browser;
       this.browser = null;
+      this.pageRef = null;
       const closing = browser ? this.closeBrowser(browser) : undefined;
       await this.starting.catch(() => {});
       await closing;
@@ -464,6 +465,7 @@ export class BrowserManager {
     if (this.browser !== browser || this.stopping || this.disposed) return;
     this.opts.log.error('无头浏览器意外退出');
     this.browser = null;
+    this.pageRef = null;
     this.stateValue = 'stopped';
     this.startedAt = undefined;
     // 连接断开（CDP 通道断了）不等于 Chromium 进程退出，进程可能还活着。
@@ -481,6 +483,7 @@ export class BrowserManager {
   private async doStop(reason: string, announce = true): Promise<void> {
     const browser = this.browser;
     this.browser = null;
+    this.pageRef = null;
     if (browser) {
       this.stateValue = 'stopping';
       await this.closeBrowser(browser);

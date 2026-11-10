@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { PROXY_ENV_KEYS } from './http';
 import type { LogLevel } from './logger';
+import { DEFAULT_PAGE_HEAP_LIMIT_MB, MAX_PAGE_HEAP_LIMIT_MB, MIN_PAGE_HEAP_LIMIT_MB } from '../shared/page-heap';
 
 export interface Config {
   botToken: string;
@@ -15,7 +16,7 @@ export interface Config {
   idleShutdownMinutes: number;
   /** 使用低内存 Chromium 参数。 */
   lowMemory: boolean;
-  /** 低内存模式下无头页面的 JS 内存上限（MB），范围 128–4096，默认 512。空闲时堆用量达到它的 75% 就重载页面回收。 */
+  /** 低内存模式下无头页面的 JS 内存上限（MB），范围 128–4096，默认 512。空闲时堆用量达到它的 75% 就重启无头浏览器回收。 */
   pageHeapLimitMB: number;
   /** 对话（带引号的内容）在 Telegram 里的样式：bold 加粗（默认）、italic 斜体、mark 高亮、plain 只保留引号。 */
   dialogueStyle: 'bold' | 'italic' | 'mark' | 'plain';
@@ -59,10 +60,7 @@ const KNOWN_KEYS = new Set([
   'telegramApiBase',
 ]);
 
-/** 低内存模式下无头页面 JS 老生代上限（MB）的默认值与范围。 */
-export const DEFAULT_PAGE_HEAP_LIMIT_MB = 512;
-export const MIN_PAGE_HEAP_LIMIT_MB = 128;
-export const MAX_PAGE_HEAP_LIMIT_MB = 4096;
+export { DEFAULT_PAGE_HEAP_LIMIT_MB, MAX_PAGE_HEAP_LIMIT_MB, MIN_PAGE_HEAP_LIMIT_MB };
 
 const TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
 const LOG_LEVELS: readonly string[] = ['debug', 'info', 'warn', 'error'];

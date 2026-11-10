@@ -1,6 +1,6 @@
 // 页面 JS 堆回收：低内存模式把 JS 老生代上限设成 pageHeapLimitMB（默认 256 MB），而页面堆会随时间缓慢增长，
 // 迟早撞上限、“Page crashed!”。这里定时经 CDP 读取页面 JS 堆用量（Runtime.getHeapUsage），在 bot 空闲时
-// 主动重载页面把堆清零，而不是等它在生成回复的中途崩溃。
+// 主动重启无头浏览器（Bot.recyclePage）把堆清零，而不是等它在生成回复的中途崩溃。
 //
 // 数据源为什么是 CDP 而不是页面里的 performance.memory：后者是分桶近似值，在带酒馆助手 / MVU 的真实页面上
 // 比 CDP 实测值高出 40 MB 以上（Luker 实测 185 对 141 MB），用它和 75% 阈值比较会一启动就贴着阈值，回收白做。
@@ -9,13 +9,13 @@ import type { Logger } from './logger';
 const MB = 1024 * 1024;
 
 export interface HeapGuardOptions {
-  /** 当前页面 JS 堆已用字节数；取不到（页面重载中、浏览器没在运行）返回 undefined。 */
+  /** 当前页面 JS 堆已用字节数；取不到（页面正在加载、浏览器没在运行）返回 undefined。 */
   sample(): Promise<number | undefined>;
   /** 当前运行的浏览器的 JS 堆上限（MB）；没有上限（非低内存模式）或没在运行时返回 undefined，此时不回收。 */
   limitMB(): number | undefined;
   /** bot 当前没有进行中的生成或操作。 */
   isIdle(): boolean;
-  /** 重载页面并恢复会话；失败请抛错。 */
+  /** 重启浏览器并恢复会话；失败请抛错。 */
   recycle(): Promise<void>;
   log: Logger;
   now?: () => number;
@@ -29,7 +29,7 @@ export interface HeapGuardOptions {
   relapseWindowMs?: number;
   /**
    * 回收完成后先不采样的沉降期，默认 30 秒。CDP 读的是整个渲染进程的堆，旧页面的垃圾要等 GC 才释放，
-   * 刚重载完的几秒到十几秒里读数会偏高（本机实测 110 MB 对稳定后的 19 MB），不等它沉降会把“回收有效”误判成“回收后立即回升”。
+   * 刚回收（重启浏览器）完的几秒到十几秒里读数会偏高（本机实测 110 MB 对稳定后的 19 MB），不等它沉降会把“回收有效”误判成“回收后立即回升”。
    */
   settleMs?: number;
 }
@@ -136,17 +136,17 @@ export class HeapGuard {
     const { log } = this.opts;
     const startedAt = this.now();
     this.lastAttemptAt = startedAt;
-    log.info(`页面 JS 堆 ${usedMB.toFixed(0)} MB / 上限 ${limitMB} MB，已达回收阈值且 bot 空闲，重载页面`);
+    log.info(`页面 JS 堆 ${usedMB.toFixed(0)} MB / 上限 ${limitMB} MB，已达回收阈值且 bot 空闲，重启无头浏览器`);
     try {
       await this.opts.recycle();
       const done = this.now();
       this.lastAttemptAt = done;
       this.lastSuccessAt = done;
       this.recycledCount++;
-      log.info(`堆回收重载完成：回收前 ${usedMB.toFixed(0)} MB / 上限 ${limitMB} MB，用时 ${Math.max(0, Math.round((done - startedAt) / 1000))} 秒`);
+      log.info(`堆回收完成（已重启浏览器）：回收前 ${usedMB.toFixed(0)} MB / 上限 ${limitMB} MB，用时 ${Math.max(0, Math.round((done - startedAt) / 1000))} 秒`);
     } catch (e) {
       this.lastAttemptAt = this.now();
-      log.warn(`堆回收重载失败：${(e as Error).message}`);
+      log.warn(`堆回收失败：${(e as Error).message}`);
     } finally {
       this.usedBytes = undefined;
       this.inFlight = null;

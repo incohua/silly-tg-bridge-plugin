@@ -1,6 +1,7 @@
 // 配置面板里不依赖 DOM 的部分：服务端响应的类型、表单值到提交内容的转换、运行状态的文案。可在 Node 中测试。
 
 import type { RuntimeStatus } from '../shared/runtime-status';
+import { DEFAULT_PAGE_HEAP_LIMIT_MB, MAX_PAGE_HEAP_LIMIT_MB, MIN_PAGE_HEAP_LIMIT_MB } from '../shared/page-heap';
 
 /** 保存后不影响正在运行的浏览器、下次启动 Chromium 才生效的字段。 */
 const NEXT_START_FIELDS: readonly string[] = ['lowMemory', 'pageHeapLimitMB'];
@@ -103,8 +104,10 @@ export function buildPatch(form: FormValues, original: SettingsValues | undefine
   else patch.idleShutdownMinutes = idle;
 
   patch.lowMemory = form.lowMemory;
-  const heap = form.pageHeapLimitMB.trim() === '' ? 512 : Number(form.pageHeapLimitMB);
-  if (!Number.isInteger(heap) || heap < 128 || heap > 4096) errors.push({ field: 'pageHeapLimitMB', message: '页面内存上限必须是 128–4096 之间的整数（MB），默认 512。' });
+  const heap = form.pageHeapLimitMB.trim() === '' ? DEFAULT_PAGE_HEAP_LIMIT_MB : Number(form.pageHeapLimitMB);
+  if (!Number.isInteger(heap) || heap < MIN_PAGE_HEAP_LIMIT_MB || heap > MAX_PAGE_HEAP_LIMIT_MB) {
+    errors.push({ field: 'pageHeapLimitMB', message: `页面内存上限必须是 ${MIN_PAGE_HEAP_LIMIT_MB}–${MAX_PAGE_HEAP_LIMIT_MB} 之间的整数（MB），默认 ${DEFAULT_PAGE_HEAP_LIMIT_MB}。` });
+  }
   else patch.pageHeapLimitMB = heap;
   patch.dialogueStyle = form.dialogueStyle;
   patch.logLevel = form.logLevel;

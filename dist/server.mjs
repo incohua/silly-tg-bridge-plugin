@@ -89166,7 +89166,7 @@ var Bot = class {
   defaultRules = compileRules(DEFAULT_RULES).rules;
   sessionKey;
   sessionPromise = Promise.resolve();
-  /** 堆回收（重载页面）进行中；期间到达的消息和命令等它结束再处理，不丢。 */
+  /** 堆回收（重启浏览器）进行中；期间到达的消息和命令等它结束再处理，不丢。 */
   recycling = null;
   now;
   /** 当前一轮生成结束（测试和退出时用）。 */
@@ -89365,19 +89365,18 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
       await host.request({ type: "refreshPage" }, 1e4);
     } catch (e) {
       log.warn(`\u5237\u65B0\u65E0\u5934\u9875\u9762\u5931\u8D25\uFF0C\u4F7F\u7528\u73B0\u6709\u7684\u9884\u8BBE\u5217\u8868\uFF1A${e.message}`);
-      return false;
+      return;
     }
     const limit = this.opts.hostReloadTimeoutMs ?? 6e4;
     for (let waited = 0; waited < limit; waited += 200) {
       if (host.connected && host.hello && host.hello !== before) {
         this.sessionKey = void 0;
         await this.ensureSession();
-        return true;
+        return;
       }
       await new Promise((r) => setTimeout(r, 200));
     }
     log.warn("\u5237\u65B0\u65E0\u5934\u9875\u9762\u540E\u6CA1\u6709\u5728\u9650\u5B9A\u65F6\u95F4\u5185\u91CD\u65B0\u8FDE\u4E0A");
-    return false;
   }
   /**
    * 堆回收：bot 空闲时重启无头浏览器，把 JS 堆和渲染进程的内存都清掉，并恢复角色和聊天（HeapGuard 调用）。
@@ -89389,21 +89388,25 @@ ${summary}` : "\u{1F4CB} \u4E3B\u83DC\u5355", { reply_markup: { inline_keyboard:
   recyclePage() {
     if (this.recycling) return this.recycling;
     if (this.busy) return Promise.reject(new Error("bot \u6B63\u5FD9\uFF0C\u4E0D\u80FD\u56DE\u6536\u9875\u9762"));
+    const { browser } = this.opts;
+    this.op = "recycle";
     const run = (async () => {
-      const { browser } = this.opts;
-      this.op = "recycle";
-      const release = browser.acquire();
+      let release;
       try {
+        release = browser.acquire();
         await browser.stop("\u5806\u56DE\u6536");
         await browser.ensureRunning();
         await this.ensureSession();
       } finally {
-        release();
+        release?.();
         this.op = null;
-        this.recycling = null;
       }
     })();
     this.recycling = run;
+    const clear = () => {
+      if (this.recycling === run) this.recycling = null;
+    };
+    run.then(clear, clear);
     return run;
   }
   /** 堆回收进行中就先告知用户并等它结束（有上限），而不是按“忙碌”丢掉这条消息。 */
@@ -90071,17 +90074,17 @@ var HeapGuard = class {
     const { log } = this.opts;
     const startedAt = this.now();
     this.lastAttemptAt = startedAt;
-    log.info(`\u9875\u9762 JS \u5806 ${usedMB.toFixed(0)} MB / \u4E0A\u9650 ${limitMB} MB\uFF0C\u5DF2\u8FBE\u56DE\u6536\u9608\u503C\u4E14 bot \u7A7A\u95F2\uFF0C\u91CD\u8F7D\u9875\u9762`);
+    log.info(`\u9875\u9762 JS \u5806 ${usedMB.toFixed(0)} MB / \u4E0A\u9650 ${limitMB} MB\uFF0C\u5DF2\u8FBE\u56DE\u6536\u9608\u503C\u4E14 bot \u7A7A\u95F2\uFF0C\u91CD\u542F\u65E0\u5934\u6D4F\u89C8\u5668`);
     try {
       await this.opts.recycle();
       const done = this.now();
       this.lastAttemptAt = done;
       this.lastSuccessAt = done;
       this.recycledCount++;
-      log.info(`\u5806\u56DE\u6536\u91CD\u8F7D\u5B8C\u6210\uFF1A\u56DE\u6536\u524D ${usedMB.toFixed(0)} MB / \u4E0A\u9650 ${limitMB} MB\uFF0C\u7528\u65F6 ${Math.max(0, Math.round((done - startedAt) / 1e3))} \u79D2`);
+      log.info(`\u5806\u56DE\u6536\u5B8C\u6210\uFF08\u5DF2\u91CD\u542F\u6D4F\u89C8\u5668\uFF09\uFF1A\u56DE\u6536\u524D ${usedMB.toFixed(0)} MB / \u4E0A\u9650 ${limitMB} MB\uFF0C\u7528\u65F6 ${Math.max(0, Math.round((done - startedAt) / 1e3))} \u79D2`);
     } catch (e) {
       this.lastAttemptAt = this.now();
-      log.warn(`\u5806\u56DE\u6536\u91CD\u8F7D\u5931\u8D25\uFF1A${e.message}`);
+      log.warn(`\u5806\u56DE\u6536\u5931\u8D25\uFF1A${e.message}`);
     } finally {
       this.usedBytes = void 0;
       this.inFlight = null;
@@ -90240,6 +90243,11 @@ function createFetch(proxy) {
   return (input2, init2) => (0, import_undici.fetch)(input2, { ...init2, dispatcher });
 }
 
+// src/shared/page-heap.ts
+var DEFAULT_PAGE_HEAP_LIMIT_MB = 512;
+var MIN_PAGE_HEAP_LIMIT_MB = 128;
+var MAX_PAGE_HEAP_LIMIT_MB = 4096;
+
 // src/server/config.ts
 var KNOWN_KEYS = /* @__PURE__ */ new Set([
   "botToken",
@@ -90260,9 +90268,6 @@ var KNOWN_KEYS = /* @__PURE__ */ new Set([
   "choiceLayout",
   "telegramApiBase"
 ]);
-var DEFAULT_PAGE_HEAP_LIMIT_MB = 512;
-var MIN_PAGE_HEAP_LIMIT_MB = 128;
-var MAX_PAGE_HEAP_LIMIT_MB = 4096;
 var TOKEN_RE = /^\d{5,}:[A-Za-z0-9_-]{30,}$/;
 var LOG_LEVELS = ["debug", "info", "warn", "error"];
 var isRecord2 = (v2) => typeof v2 === "object" && v2 !== null && !Array.isArray(v2);
@@ -90527,7 +90532,7 @@ var BrowserManager = class {
   get heapLimitMB() {
     return this.stateValue === "running" ? this.launchedHeapLimitMB : void 0;
   }
-  /** 当前页面 JS 堆已用字节数；浏览器没在运行、页面正在重载等取不到时返回 undefined。 */
+  /** 当前页面 JS 堆已用字节数；浏览器没在运行、页面正在加载等取不到时返回 undefined。 */
   async sampleHeapUsed() {
     const page = this.pageRef;
     if (this.stateValue !== "running" || !page) return void 0;
@@ -90599,6 +90604,7 @@ var BrowserManager = class {
       for (const wake of [...this.connectWaiters]) wake();
       const browser = this.browser;
       this.browser = null;
+      this.pageRef = null;
       const closing = browser ? this.closeBrowser(browser) : void 0;
       await this.starting.catch(() => {
       });
@@ -90791,6 +90797,7 @@ var BrowserManager = class {
     if (this.browser !== browser || this.stopping || this.disposed) return;
     this.opts.log.error("\u65E0\u5934\u6D4F\u89C8\u5668\u610F\u5916\u9000\u51FA");
     this.browser = null;
+    this.pageRef = null;
     this.stateValue = "stopped";
     this.startedAt = void 0;
     try {
@@ -90804,6 +90811,7 @@ var BrowserManager = class {
   async doStop(reason, announce = true) {
     const browser = this.browser;
     this.browser = null;
+    this.pageRef = null;
     if (browser) {
       this.stateValue = "stopping";
       await this.closeBrowser(browser);

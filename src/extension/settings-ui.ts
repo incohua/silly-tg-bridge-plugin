@@ -4,6 +4,7 @@
 // 保存后服务端当场生效（热字段直接改，连接类字段自动重新连接），面板轮询 /status 显示连接结果，不再提示重启 ST。
 
 import { ctx } from './adapter';
+import { DEFAULT_PAGE_HEAP_LIMIT_MB, MAX_PAGE_HEAP_LIMIT_MB, MIN_PAGE_HEAP_LIMIT_MB } from '../shared/page-heap';
 import type { RuntimeStatus } from '../shared/runtime-status';
 import {
   buildPatch,
@@ -145,7 +146,7 @@ function buildDrawer(container: HTMLElement): void {
     basicAuthPassword: input('password', ''),
     idleShutdownMinutes: input('number', '0'),
     lowMemory: el('input', { type: 'checkbox' }),
-    pageHeapLimitMB: input('number', '512'),
+    pageHeapLimitMB: input('number', String(DEFAULT_PAGE_HEAP_LIMIT_MB)),
     dialogueStyle: select([
       ['bold', '加粗'],
       ['italic', '斜体'],
@@ -180,7 +181,7 @@ function buildDrawer(container: HTMLElement): void {
       '页面内存上限（MB）',
       '下次启动浏览器时生效',
       f.pageHeapLimitMB,
-      '低内存模式下无头页面 JS 内存的上限，128–4096，默认 512。页面内存会随运行时间缓慢增长，空闲时用量达到上限的 75% 就会自动重启浏览器回收；调大回收更少但浏览器占用内存更多，可用内存紧张的机器（不到 1.5 GB 可用）请调小（例如 256）。',
+      `低内存模式下无头页面 JS 内存的上限，${MIN_PAGE_HEAP_LIMIT_MB}–${MAX_PAGE_HEAP_LIMIT_MB}，默认 ${DEFAULT_PAGE_HEAP_LIMIT_MB}。页面内存会随运行时间缓慢增长，空闲时用量达到上限的 75% 就会自动重启浏览器回收；调大回收更少但浏览器占用内存更多，可用内存紧张的机器（不到 1.5 GB 可用）请调小（例如 256）。`,
     ),
     dialogueStyle: row('对话样式', '立即生效', f.dialogueStyle),
     draftIntervalSeconds: row('草稿刷新间隔（秒）', '立即生效', f.draftIntervalSeconds, '生成时每隔这么久更新一次草稿，0.5–30。调大可减少聊天窗口上下滚动。'),

@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { HeapGuard, type HeapGuardOptions } from '../src/server/heap-guard';
 import { captureLogger } from './helpers';
 
@@ -76,7 +76,7 @@ describe('HeapGuard', () => {
     await t.at(200);
     expect(t.recycles).toBe(1);
     expect(t.guard.status().recycled).toBe(1);
-    expect(t.log.lines.some((l) => l.startsWith('info') && l.includes('200 MB') && l.includes('堆回收重载完成'))).toBe(true);
+    expect(t.log.lines.some((l) => l.startsWith('info') && l.includes('200 MB') && l.includes('堆回收完成'))).toBe(true);
   });
 
   it('busy 时不回收；busy 结束后的下一次采样回收', async () => {
@@ -184,7 +184,7 @@ describe('HeapGuard', () => {
   it('定时器：按间隔自动采样；dispose 后停止', async () => {
     const t = new Setup({ intervalMs: 10 });
     t.usedMB = 220;
-    await new Promise((r) => setTimeout(r, 60));
+    await vi.waitFor(() => expect(t.recycles).toBeGreaterThanOrEqual(1), { timeout: 4000, interval: 5 });
     await t.guard.settled();
     expect(t.recycles).toBeGreaterThanOrEqual(1);
     t.guard.dispose();

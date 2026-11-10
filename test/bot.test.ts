@@ -373,6 +373,20 @@ describe('Bot 路由', () => {
     expect(ctx.browser.leases).toBe(0);
   });
 
+  it('堆回收：acquire 抛错时不会让 bot 一直 busy；失败后可以再次回收', async () => {
+    const ctx = setup();
+    const realAcquire = ctx.browser.acquire.bind(ctx.browser);
+    ctx.browser.acquire = () => {
+      throw new Error('boom');
+    };
+    await expect(ctx.bot.recyclePage()).rejects.toThrow('boom');
+    expect(ctx.bot.busy).toBe(false);
+    ctx.browser.acquire = realAcquire;
+    await ctx.bot.recyclePage(); // 上一次失败不会残留“回收中”的状态
+    expect(ctx.browser.stops).toEqual(['堆回收']);
+    expect(ctx.bot.busy).toBe(false);
+  });
+
   it('/status：显示页面堆用量与回收次数；无数据时不显示', async () => {
     let heap: { usedMB?: number; limitMB: number; recycled: number; suspended: boolean } | undefined;
     const ctx = setup({ heapStatus: () => heap });

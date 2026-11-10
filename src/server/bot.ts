@@ -238,7 +238,7 @@ export class Bot {
   private readonly defaultRules = compileRules(DEFAULT_RULES).rules;
   private sessionKey: number | undefined;
   private sessionPromise: Promise<void> = Promise.resolve();
-  /** 堆回收（重载页面）进行中；期间到达的消息和命令等它结束再处理，不丢。 */
+  /** 堆回收（重启浏览器）进行中；期间到达的消息和命令等它结束再处理，不丢。 */
   private recycling: Promise<void> | null = null;
   private readonly now: () => number;
 
@@ -449,26 +449,25 @@ export class Bot {
    * 重载后页面是空白的，要按 bot 记着的会话把角色和聊天恢复回来，否则当前聊天会变。
    * 刷新失败不影响列表，用旧数据照常列出。
    */
-  private async refreshHostPage(): Promise<boolean> {
+  private async refreshHostPage(): Promise<void> {
     const { host, log } = this.opts;
     const before = host.hello;
     try {
       await host.request({ type: 'refreshPage' }, 10_000);
     } catch (e) {
       log.warn(`刷新无头页面失败，使用现有的预设列表：${(e as Error).message}`);
-      return false;
+      return;
     }
     const limit = this.opts.hostReloadTimeoutMs ?? 60_000;
     for (let waited = 0; waited < limit; waited += 200) {
       if (host.connected && host.hello && host.hello !== before) {
         this.sessionKey = undefined; // 强制再恢复一次
         await this.ensureSession();
-        return true;
+        return;
       }
       await new Promise((r) => setTimeout(r, 200));
     }
     log.warn('刷新无头页面后没有在限定时间内重新连上');
-    return false;
   }
 
   /**
@@ -481,21 +480,25 @@ export class Bot {
   recyclePage(): Promise<void> {
     if (this.recycling) return this.recycling;
     if (this.busy) return Promise.reject(new Error('bot 正忙，不能回收页面'));
+    const { browser } = this.opts;
+    this.op = 'recycle'; // 同步占位：HeapGuard 的 isIdle() 检查到这里之间没有 await，不会和 startTurn / withHost 交错
     const run = (async () => {
-      const { browser } = this.opts;
-      this.op = 'recycle';
-      const release = browser.acquire();
+      let release: (() => void) | undefined;
       try {
+        release = browser.acquire();
         await browser.stop('堆回收');
         await browser.ensureRunning();
         await this.ensureSession(); // 浏览器重启后 startedAt 变了，会自动把角色和聊天恢复回来
       } finally {
-        release();
+        release?.();
         this.op = null;
-        this.recycling = null;
       }
     })();
     this.recycling = run;
+    const clear = (): void => {
+      if (this.recycling === run) this.recycling = null;
+    };
+    run.then(clear, clear);
     return run;
   }
 

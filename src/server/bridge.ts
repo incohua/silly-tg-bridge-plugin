@@ -87,7 +87,7 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher; env
     heapStatus: () => heapGuard.status(),
     choiceRules: () => choiceRules.get(),
   });
-  // 页面 JS 堆接近低内存模式的上限时，空闲时重载页面（见 heap-guard.ts）。上限按当前这个 Chromium 启动时的参数判断
+  // 页面 JS 堆接近低内存模式的上限时，空闲时重启无头浏览器回收（见 heap-guard.ts）。上限按当前这个 Chromium 启动时的参数判断
   const heapGuard: HeapGuard = new HeapGuard({
     sample: () => browser.sampleHeapUsed(),
     limitMB: () => browser.heapLimitMB,
@@ -100,12 +100,12 @@ export function attachBridge(rt: PluginRuntime, opts: { launcher?: Launcher; env
   if (env.SILLY_TG_OFFLINE !== '1') {
     telegram.setMyCommands([...BOT_COMMANDS]).catch((e) => log.warn(`注册命令菜单失败（不影响使用）：${(e as Error).message}`));
   }
-  // 退出钩子按注册的相反顺序执行：先结束进行中的一轮，再停看门狗（避免把正在关闭的浏览器当成故障），最后关浏览器。
+  // 退出钩子按注册的相反顺序执行，所以实际顺序是下面从下往上：
+  // 先停堆回收（停止过程中不能再触发回收），再结束进行中的一轮并等提示发出（页面马上要关了，不等页面），
+  // 然后停看门狗（避免把正在关闭的浏览器当成故障），最后关浏览器。
   rt.onShutdown(() => browser.dispose());
   rt.onShutdown(() => watchdog.dispose());
-  // 最先执行：进行中的一轮立即收尾，不等页面（页面马上要关了）
   rt.onShutdown(() => bot.dispose());
-  // 同样最先执行：停止过程中不能再触发回收
   rt.onShutdown(() => heapGuard.dispose());
 
   // 启动后在后台打开 host 页面（ST 此时可能还没开始监听，BrowserManager 会等它）。
