@@ -85176,7 +85176,7 @@ import { existsSync as existsSync5 } from "node:fs";
 import { join as join9 } from "node:path";
 
 // src/shared/version.ts
-var VERSION = true ? "0.3.0" : "dev";
+var VERSION = true ? "0.4.0" : "dev";
 function versionMismatchWarning(serverVersion, extVersion) {
   if (extVersion === void 0 || extVersion === serverVersion) return null;
   if (serverVersion === "dev" || extVersion === "dev") return null;

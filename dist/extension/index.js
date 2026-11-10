@@ -35,7 +35,7 @@
   }
 
   // src/shared/version.ts
-  var VERSION = true ? "0.3.0" : "dev";
+  var VERSION = true ? "0.4.0" : "dev";
 
   // src/extension/adapter.ts
   var NOISE_RULES = [
